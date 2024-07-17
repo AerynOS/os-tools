@@ -39,6 +39,7 @@ impl<'a> Chain<'a> {
                 Box::new(handler::pkg_config),
                 Box::new(handler::python),
                 Box::new(handler::cmake),
+                Box::new(handler::compressman),
                 // Catch-all if not excluded
                 Box::new(handler::include_any),
             ],

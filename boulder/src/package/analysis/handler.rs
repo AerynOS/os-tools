@@ -1,5 +1,10 @@
+use filetime::FileTime;
+use itertools::Itertools;
 use std::{
-    path::PathBuf,
+    fs::File,
+    io::{BufReader, BufWriter, Write},
+    os::unix::fs::symlink,
+    path::{Component, PathBuf},
     process::{Command, Stdio},
 };
 
@@ -202,4 +207,98 @@ pub fn cmake(bucket: &mut BucketMut<'_>, info: &mut PathInfo) -> Result<Response
     });
 
     Ok(Decision::NextHandler.into())
+}
+
+pub fn compressman(bucket: &mut BucketMut<'_>, info: &mut PathInfo) -> Result<Response, BoxError> {
+    if !bucket.recipe.parsed.options.compressman {
+        return Ok(Decision::NextHandler.into());
+    }
+
+    let is_man_file = info.path.components().contains(&Component::Normal("man".as_ref()))
+        && info.file_name().ends_with(|c| ('1'..'9').contains(&c));
+    let is_info_file =
+        info.path.components().contains(&Component::Normal("info".as_ref())) && info.file_name().ends_with(".info");
+
+    if !(is_man_file || is_info_file) {
+        return Ok(Decision::NextHandler.into());
+    }
+
+    let mut generated_path = PathBuf::new();
+
+    let metadata = fs::metadata(&info.path)?;
+    let atime = metadata.accessed()?;
+    let mtime = metadata.modified()?;
+
+    // TODO: Replace usage with .with_added_extension() when it becomes stable #127292
+    fn add_extension(path: &mut PathBuf, extension: &str) -> PathBuf {
+        path.set_extension(extension);
+        path.to_path_buf()
+    }
+
+    /* If we have a man/info symlink update the link to the compressed file */
+    if info.path.is_symlink() {
+        let new_original = add_extension(&mut fs::canonicalize(&info.path)?, "zst");
+        // FIXME: replace with add_extension()
+        //        failed to canonicalize path {symlink} No such file or directory
+        let new_link = format!("{}.zst", &info.path.display());
+        //let new_link = add_extension(&mut info.path, "zst");
+
+        /*
+         * Depending on the order the files get analysed the new compressed file may not yet exist,
+         * compress it _now_ so the correct metadata src info is returned to the binary writer.
+         */
+        if !std::fs::exists(&new_original)? {
+            let compressed_file = compress_file_zstd(&mut fs::canonicalize(&info.path)?)?;
+            let _ = bucket.paths.install().guest.join(compressed_file);
+        }
+
+        symlink(add_extension(&mut fs::read_link(&info.path)?, "zst"), &new_link)?;
+
+        /* Restore the original {a,m}times for reproducibility */
+        filetime::set_symlink_file_times(
+            &new_link,
+            FileTime::from_system_time(atime),
+            FileTime::from_system_time(mtime),
+        )?;
+
+        generated_path.push(bucket.paths.install().guest.join(new_link));
+        return Ok(Decision::ReplaceFile {
+            newpath: generated_path,
+        }
+        .into());
+    }
+
+    let mut compressed_file = add_extension(&mut info.path, "zst");
+
+    /* We may have already compressed the file if we encountered a symlink to this file first */
+    if !&compressed_file.try_exists()? {
+        compressed_file = compress_file_zstd(&mut info.path)?;
+    }
+
+    /* Restore the original {a,m}times for reproducibility */
+    filetime::set_file_handle_times(
+        &File::open(&compressed_file)?,
+        Some(FileTime::from_system_time(atime)),
+        Some(FileTime::from_system_time(mtime)),
+    )?;
+
+    generated_path.push(bucket.paths.install().guest.join(compressed_file));
+
+    pub fn compress_file_zstd(path: &mut PathBuf) -> Result<PathBuf, BoxError> {
+        let output_path = add_extension(path, "zst");
+        let input = File::create(&output_path)?;
+        let mut reader = BufReader::new(File::open(&path)?);
+        let mut writer = BufWriter::new(input);
+
+        zstd::stream::copy_encode(&mut reader, &mut writer, 16)?;
+
+        writer.flush()?;
+
+        Ok(output_path)
+    }
+
+    Ok(Decision::ReplaceFile {
+        newpath: generated_path,
+    }
+    .into())
 }
