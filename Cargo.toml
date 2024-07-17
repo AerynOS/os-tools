@@ -33,6 +33,7 @@ dirs = "6.0.0"
 elf = "0.7.4"
 indicatif = "0.17.8"
 itertools = "0.14.0"
+filetime = "0.2.24"
 fs-err = { version = "3.0.0", features = ["tokio"] }
 futures-util = "0.3.31"
 glob = "0.3.1"
