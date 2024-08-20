@@ -50,6 +50,9 @@ pub enum Dependency {
 
     /// An emul32-compatible pkgconfig .pc dependency (lib32/*.pc)
     PkgConfig32,
+
+    /// A Perl module
+    Perl,
 }
 
 #[repr(u8)]
@@ -146,6 +149,7 @@ fn decode_dependency(i: u8) -> Result<Dependency, DecodeError> {
         6 => Dependency::Binary,
         7 => Dependency::SystemBinary,
         8 => Dependency::PkgConfig32,
+        9 => Dependency::Perl,
         _ => return Err(DecodeError::UnknownDependency(i)),
     };
     Ok(result)
