@@ -51,6 +51,9 @@ pub enum StonePayloadMetaDependency {
     /// An emul32-compatible pkgconfig .pc dependency (lib32*.pc)
     PkgConfig32 = 8,
 
+    /// A Perl module
+    Perl = 9,
+
     Unknown = 255,
 }
 
@@ -152,6 +155,7 @@ fn decode_dependency(i: u8) -> StonePayloadMetaDependency {
         6 => StonePayloadMetaDependency::Binary,
         7 => StonePayloadMetaDependency::SystemBinary,
         8 => StonePayloadMetaDependency::PkgConfig32,
+        9 => StonePayloadMetaDependency::Perl,
         _ => StonePayloadMetaDependency::Unknown,
     }
 }
