@@ -6,9 +6,9 @@ use clap::{ArgMatches, Command, arg};
 use fs_err::File;
 use std::io::{Read, Seek, sink};
 use std::path::PathBuf;
-use stone::payload::layout;
-use stone::payload::meta;
-use stone::read::PayloadKind;
+use stone::{
+    StoneDecodedPayload, StonePayloadLayoutFile, StonePayloadMetaPrimitive, StonePayloadMetaTag, StoneReadError,
+};
 use thiserror::Error;
 
 const COLUMN_WIDTH: usize = 20;
@@ -100,30 +100,34 @@ fn handle_detailed(paths: Vec<PathBuf>) -> Result<(), Error> {
             let mut cnfls = vec![];
 
             match payload {
-                PayloadKind::Layout(l) => layouts = l.body,
-                PayloadKind::Meta(meta) => {
+                StoneDecodedPayload::Layout(l) => layouts = l.body,
+                StoneDecodedPayload::Meta(meta) => {
                     println!();
 
                     for record in meta.body {
                         let name = format!("{:?}", record.tag);
 
-                        match &record.kind {
-                            meta::Kind::Provider(k, p) if record.tag == meta::Tag::Provides => {
+                        match &record.primitive {
+                            StonePayloadMetaPrimitive::Provider(k, p)
+                                if record.tag == StonePayloadMetaTag::Provides =>
+                            {
                                 provs.push(format!("{k}({p})"));
                             }
-                            meta::Kind::Provider(k, p) if record.tag == meta::Tag::Conflicts => {
+                            StonePayloadMetaPrimitive::Provider(k, p)
+                                if record.tag == StonePayloadMetaTag::Conflicts =>
+                            {
                                 cnfls.push(format!("{k}({p})"));
                             }
-                            meta::Kind::Dependency(k, d) => {
+                            StonePayloadMetaPrimitive::Dependency(k, d) => {
                                 deps.push(format!("{k}({d})"));
                             }
-                            meta::Kind::String(s) => {
+                            StonePayloadMetaPrimitive::String(s) => {
                                 println!("{name:COLUMN_WIDTH$} : {s}");
                             }
-                            meta::Kind::Int64(i) => {
+                            StonePayloadMetaPrimitive::Int64(i) => {
                                 println!("{name:COLUMN_WIDTH$} : {i}");
                             }
-                            meta::Kind::Uint64(i) => {
+                            StonePayloadMetaPrimitive::Uint64(i) => {
                                 println!("{name:COLUMN_WIDTH$} : {i}");
                             }
                             _ => {
@@ -157,14 +161,14 @@ fn handle_detailed(paths: Vec<PathBuf>) -> Result<(), Error> {
             if !layouts.is_empty() {
                 println!("\n{:COLUMN_WIDTH$} :", "Layout entries");
                 for layout in layouts {
-                    match layout.entry {
-                        layout::Entry::Regular(hash, target) => {
+                    match layout.file {
+                        StonePayloadLayoutFile::Regular(hash, target) => {
                             println!("    - /usr/{target} - [Regular] {hash:032x}");
                         }
-                        layout::Entry::Directory(target) => {
+                        StonePayloadLayoutFile::Directory(target) => {
                             println!("    - /usr/{target} [Directory]");
                         }
-                        layout::Entry::Symlink(source, target) => {
+                        StonePayloadLayoutFile::Symlink(source, target) => {
                             println!("    - /usr/{target} -> {source} [Symlink]");
                         }
                         _ => unreachable!(),
@@ -186,7 +190,7 @@ fn check_stone_integrity(mut source: impl Read + Seek) -> Result<Vec<String>, Er
     let payloads = reader.payloads()?.collect::<Result<Vec<_>, _>>()?;
 
     // Find the content payload, if it exists.
-    let content_payload = payloads.iter().find_map(PayloadKind::content);
+    let content_payload = payloads.iter().find_map(StoneDecodedPayload::content);
 
     // Explicitly unpack the content payload to a null sink to validate its checksum.
     if let Some(content) = content_payload {
@@ -207,7 +211,7 @@ pub enum Error {
     IO(#[from] std::io::Error),
 
     #[error("stone format")]
-    Format(#[from] stone::read::Error),
+    Format(#[from] StoneReadError),
 
     #[error("One or more files failed the integrity check")]
     ValidationFailed,
@@ -249,8 +253,8 @@ mod tests {
         // Any corruption should be detected - could be checksum mismatch or data corruption
         let err = result.unwrap_err();
         assert!(
-            matches!(err, Error::Format(stone::read::Error::PayloadChecksum { .. }))
-                || matches!(err, Error::Format(stone::read::Error::Io(_))),
+            matches!(err, Error::Format(StoneReadError::PayloadChecksum { .. }))
+                || matches!(err, Error::Format(StoneReadError::Io(_))),
             "Error should be corruption-related, got: {err:?}"
         );
     }
@@ -267,7 +271,7 @@ mod tests {
         // Check for a header decoding error.
         let err = result.unwrap_err();
         assert!(
-            matches!(err, Error::Format(stone::read::Error::HeaderDecode(_))),
+            matches!(err, Error::Format(StoneReadError::HeaderDecode(_))),
             "Error should be a header decode error"
         );
     }

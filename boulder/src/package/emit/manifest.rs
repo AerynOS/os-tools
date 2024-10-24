@@ -4,6 +4,7 @@
 
 use std::{collections::BTreeSet, io, path::PathBuf};
 
+use stone::StoneWriteError;
 use thiserror::Error;
 
 use crate::{Architecture, Paths, Recipe};
@@ -69,7 +70,7 @@ impl<'a> Manifest<'a> {
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("stone binary writer")]
-    StoneWriter(#[from] stone::write::Error),
+    StoneWriter(#[from] StoneWriteError),
     #[error("encode json")]
     Json(#[from] serde_json::Error),
     #[error("io")]

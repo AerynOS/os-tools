@@ -4,8 +4,8 @@
 
 use std::io::{Read, Write};
 
-use super::{DecodeError, EncodeError, Record};
-use crate::{ReadExt, WriteExt};
+use super::{Record, StonePayloadDecodeError, StonePayloadEncodeError};
+use crate::ext::{ReadExt, WriteExt};
 
 /// An IndexEntry (a series of sequential entries within the IndexPayload)
 /// record offsets to unique files within the ContentPayload when decompressed.
@@ -13,7 +13,7 @@ use crate::{ReadExt, WriteExt};
 /// This is used to split the file into the content store on disk before promoting
 /// to a transaction.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Index {
+pub struct StonePayloadIndexRecord {
     /// Start pf the entry within the ContentPayload
     pub start: u64,
 
@@ -24,8 +24,8 @@ pub struct Index {
     pub digest: u128,
 }
 
-impl Record for Index {
-    fn decode<R: Read>(mut reader: R) -> Result<Self, DecodeError> {
+impl Record for StonePayloadIndexRecord {
+    fn decode<R: Read>(mut reader: R) -> Result<Self, StonePayloadDecodeError> {
         let start = reader.read_u64()?;
         let end = reader.read_u64()?;
         let digest = reader.read_u128()?;
@@ -33,7 +33,7 @@ impl Record for Index {
         Ok(Self { start, end, digest })
     }
 
-    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), EncodeError> {
+    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), StonePayloadEncodeError> {
         writer.write_u64(self.start)?;
         writer.write_u64(self.end)?;
         writer.write_u128(self.digest)?;

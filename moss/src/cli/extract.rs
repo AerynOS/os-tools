@@ -11,7 +11,7 @@ use std::{
 use clap::{ArgMatches, Command, arg};
 use fs_err::{self as fs, File};
 use moss::package::{self, MissingMetaFieldError};
-use stone::{payload::layout, read::PayloadKind};
+use stone::{StoneDecodedPayload, StonePayloadLayoutFile, StoneReadError};
 use thiserror::{self, Error};
 use tui::{ProgressBar, ProgressStyle};
 
@@ -43,9 +43,12 @@ pub fn handle(args: &ArgMatches) -> Result<(), Error> {
         let mut reader = stone::read(rdr).map_err(Error::Format)?;
 
         let payloads = reader.payloads()?.collect::<Result<Vec<_>, _>>()?;
-        let content = payloads.iter().find_map(PayloadKind::content);
-        let layouts = payloads.iter().find_map(PayloadKind::layout);
-        let meta = payloads.iter().find_map(PayloadKind::meta).ok_or(Error::MissingMeta)?;
+        let content = payloads.iter().find_map(StoneDecodedPayload::content);
+        let layouts = payloads.iter().find_map(StoneDecodedPayload::layout);
+        let meta = payloads
+            .iter()
+            .find_map(StoneDecodedPayload::meta)
+            .ok_or(Error::MissingMeta)?;
 
         let pkg = package::Meta::from_stone_payload(&meta.body).map_err(Error::MalformedMeta)?;
         let extraction_root = PathBuf::from(pkg.id().to_string());
@@ -73,7 +76,7 @@ pub fn handle(args: &ArgMatches) -> Result<(), Error> {
             // Extract all indices from the `.stoneContent` into hash-indexed unique files
             payloads
                 .iter()
-                .filter_map(PayloadKind::index)
+                .filter_map(StoneDecodedPayload::index)
                 .flat_map(|p| &p.body)
                 .map(|idx| {
                     // Split file reader over index range
@@ -94,8 +97,8 @@ pub fn handle(args: &ArgMatches) -> Result<(), Error> {
 
         if let Some(layouts) = layouts {
             for layout in &layouts.body {
-                match &layout.entry {
-                    layout::Entry::Regular(id, target) => {
+                match &layout.file {
+                    StonePayloadLayoutFile::Regular(id, target) => {
                         let store_path = content_store.join(format!("{id:02x}"));
                         let target_disk = extraction_root.join("usr").join(target);
 
@@ -107,7 +110,7 @@ pub fn handle(args: &ArgMatches) -> Result<(), Error> {
                         // link from CA store
                         fs::hard_link(store_path, target_disk)?;
                     }
-                    layout::Entry::Symlink(source, target) => {
+                    StonePayloadLayoutFile::Symlink(source, target) => {
                         let target_disk = extraction_root.join("usr").join(target);
                         let directory_target = target_disk.parent().unwrap();
 
@@ -117,7 +120,7 @@ pub fn handle(args: &ArgMatches) -> Result<(), Error> {
                         // join the link path to the directory target for relative joinery
                         symlink(source, target_disk)?;
                     }
-                    layout::Entry::Directory(target) => {
+                    StonePayloadLayoutFile::Directory(target) => {
                         let target_disk = extraction_root.join("usr").join(target);
                         // TODO: Fix perms!
                         fs::create_dir_all(target_disk)?;
@@ -146,5 +149,5 @@ pub enum Error {
     IO(#[from] std::io::Error),
 
     #[error("stone format")]
-    Format(#[from] stone::read::Error),
+    Format(#[from] StoneReadError),
 }

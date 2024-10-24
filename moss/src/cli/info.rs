@@ -10,7 +10,7 @@ use moss::{
     environment,
     package::Flags,
 };
-use stone::payload::layout;
+use stone::StonePayloadLayoutFile;
 use thiserror::Error;
 use tui::{Styled, TermSize};
 use vfs::tree::BlitFile;
@@ -178,9 +178,9 @@ fn print_files(vfs: vfs::Tree<client::PendingFile>) {
             }
 
             let path = file.path();
-            let meta = match &file.layout.entry {
-                layout::Entry::Regular(hash, _) => Some(format!(" ({hash:2x})")),
-                layout::Entry::Symlink(source, _) => Some(format!(" -> {source}")),
+            let meta = match &file.layout.file {
+                StonePayloadLayoutFile::Regular(hash, _) => Some(format!(" ({hash:2x})")),
+                StonePayloadLayoutFile::Symlink(source, _) => Some(format!(" -> {source}")),
                 _ => None,
             };
 

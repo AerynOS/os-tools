@@ -7,8 +7,7 @@ use std::{collections::BTreeSet, path::Path};
 use fs_err::File;
 use moss::Dependency;
 use stone::{
-    header::v1::FileType,
-    payload::{self, meta},
+    StoneHeaderV1FileType, StonePayloadMetaPrimitive, StonePayloadMetaRecord, StonePayloadMetaTag, StoneWriter,
 };
 
 use super::Error;
@@ -17,7 +16,7 @@ use crate::package::emit::Package;
 pub fn write(path: &Path, packages: &BTreeSet<&Package<'_>>, build_deps: &BTreeSet<String>) -> Result<(), Error> {
     let mut output = File::create(path)?;
 
-    let mut writer = stone::Writer::new(&mut output, FileType::BuildManifest)?;
+    let mut writer = StoneWriter::new(&mut output, StoneHeaderV1FileType::BuildManifest)?;
 
     // Add each package
     for package in packages {
@@ -29,9 +28,9 @@ pub fn write(path: &Path, packages: &BTreeSet<&Package<'_>>, build_deps: &BTreeS
         // Add build deps
         for name in build_deps {
             if let Ok(dep) = Dependency::from_name(name) {
-                payload.push(payload::Meta {
-                    tag: meta::Tag::BuildDepends,
-                    kind: meta::Kind::Dependency(dep.kind.into(), dep.name),
+                payload.push(StonePayloadMetaRecord {
+                    tag: StonePayloadMetaTag::BuildDepends,
+                    primitive: StonePayloadMetaPrimitive::Dependency(dep.kind.into(), dep.name),
                 });
             }
         }

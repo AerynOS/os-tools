@@ -119,7 +119,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         if let Some(i) = installed.iter().find(|i| i.meta.name == p.meta.name)
             && !client.is_ephemeral()
         {
-            itertools::Either::Right(package::Update { old: i, new: *p })
+            itertools::Either::Right(package::Update { old: i, new: p })
         } else {
             itertools::Either::Left(*p)
         }

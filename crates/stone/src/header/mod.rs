@@ -6,17 +6,19 @@ use std::io::{self, Read, Write};
 
 use thiserror::Error;
 
-use crate::{ReadExt, WriteExt};
+use crate::ext::{ReadExt, WriteExt};
+
+pub use self::v1::{StoneHeaderV1, StoneHeaderV1DecodeError, StoneHeaderV1FileType};
 
 pub mod v1;
 
 /// Well defined magic field for a stone header
-pub const STONE_MAGIC: &[u8; 4] = b"\0mos";
+pub const STONE_HEADER_MAGIC: &[u8; 4] = b"\0mos";
 
 /// Format versions are defined as u32, to allow further mangling in future
-#[repr(u32)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Version {
+#[repr(u32)]
+pub enum StoneHeaderVersion {
     V1 = 1,
 }
 
@@ -28,7 +30,7 @@ pub enum Version {
 /// reader implementation, ensuring the container format is extensible well into
 /// the future
 #[repr(C)]
-pub struct AgnosticHeader {
+pub struct StoneAgnosticHeader {
     /// 4-bytes, BE (u32): Magic to quickly identify a stone file
     pub magic: [u8; 4],
 
@@ -39,7 +41,7 @@ pub struct AgnosticHeader {
     pub version: [u8; 4],
 }
 
-impl AgnosticHeader {
+impl StoneAgnosticHeader {
     fn decode<R: Read>(mut reader: R) -> io::Result<Self> {
         let magic = reader.read_array()?;
         let data = reader.read_array()?;
@@ -58,23 +60,23 @@ impl AgnosticHeader {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Header {
-    V1(v1::Header),
+pub enum StoneHeader {
+    V1(StoneHeaderV1),
 }
 
-impl Header {
+impl StoneHeader {
     /// Size of the encoded header in bytes
-    pub const SIZE: usize = size_of::<AgnosticHeader>();
+    pub const SIZE: usize = size_of::<StoneAgnosticHeader>();
 
-    pub fn version(&self) -> Version {
+    pub fn version(&self) -> StoneHeaderVersion {
         match self {
-            Header::V1(_) => Version::V1,
+            StoneHeader::V1(_) => StoneHeaderVersion::V1,
         }
     }
 
     pub fn num_payloads(&self) -> u16 {
         match self {
-            Header::V1(header) => header.num_payloads,
+            StoneHeader::V1(header) => header.num_payloads,
         }
     }
 
@@ -82,54 +84,54 @@ impl Header {
         let version = u32::to_be_bytes(self.version() as u32);
 
         let data = match self {
-            Header::V1(v1) => v1.encode(),
+            StoneHeader::V1(v1) => v1.encode(),
         };
 
-        AgnosticHeader {
-            magic: *STONE_MAGIC,
+        StoneAgnosticHeader {
+            magic: *STONE_HEADER_MAGIC,
             data,
             version,
         }
         .encode(writer)
     }
 
-    pub fn decode<R: Read>(reader: R) -> Result<Self, DecodeError> {
-        let header = AgnosticHeader::decode(reader)?;
+    pub fn decode<R: Read>(reader: R) -> Result<Self, StoneHeaderDecodeError> {
+        let header = StoneAgnosticHeader::decode(reader)?;
 
-        if *STONE_MAGIC != header.magic {
-            return Err(DecodeError::InvalidMagic);
+        if *STONE_HEADER_MAGIC != header.magic {
+            return Err(StoneHeaderDecodeError::InvalidMagic);
         }
 
         let version = match u32::from_be_bytes(header.version) {
-            1 => Version::V1,
-            v => return Err(DecodeError::UnknownVersion(v)),
+            1 => StoneHeaderVersion::V1,
+            v => return Err(StoneHeaderDecodeError::UnknownVersion(v)),
         };
 
         Ok(match version {
-            Version::V1 => Self::V1(v1::Header::decode(header.data)?),
+            StoneHeaderVersion::V1 => Self::V1(StoneHeaderV1::decode(header.data)?),
         })
     }
 }
 
 #[derive(Debug, Error)]
-pub enum DecodeError {
-    #[error("Header must be {} bytes long", size_of::<AgnosticHeader>())]
+pub enum StoneHeaderDecodeError {
+    #[error("Header must be {} bytes long", size_of::<StoneAgnosticHeader>())]
     NotEnoughBytes,
     #[error("Invalid magic")]
     InvalidMagic,
     #[error("Unknown version: {0}")]
     UnknownVersion(u32),
     #[error("v1 decode")]
-    V1(#[from] v1::DecodeError),
+    V1(#[from] StoneHeaderV1DecodeError),
     #[error("io")]
     Io(io::Error),
 }
 
-impl From<io::Error> for DecodeError {
+impl From<io::Error> for StoneHeaderDecodeError {
     fn from(error: io::Error) -> Self {
         match error.kind() {
-            io::ErrorKind::UnexpectedEof => DecodeError::NotEnoughBytes,
-            _ => DecodeError::Io(error),
+            io::ErrorKind::UnexpectedEof => StoneHeaderDecodeError::NotEnoughBytes,
+            _ => StoneHeaderDecodeError::Io(error),
         }
     }
 }

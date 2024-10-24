@@ -87,7 +87,7 @@ fn color_diff(a: &str, b: &str, red: bool) -> String {
 
     let mut s = String::with_capacity(b.len() * 2);
 
-    'outer: for a_section in to_segments(a).into_iter().filter_map(Segment::to_section) {
+    'outer: for a_section in to_segments(a).into_iter().filter_map(Segment::into_section) {
         loop {
             match b_segments.next() {
                 Some(Segment::Delim(c)) => s.push(c),
@@ -147,7 +147,7 @@ enum Segment {
 }
 
 impl Segment {
-    fn to_section(self) -> Option<String> {
+    fn into_section(self) -> Option<String> {
         if let Self::Section(section) = self {
             Some(section)
         } else {

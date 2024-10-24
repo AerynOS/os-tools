@@ -6,36 +6,39 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
 use thiserror::Error;
 
 use crate::{
-    Header, header,
-    payload::{self, Attribute, Index, Layout, Meta},
+    StoneHeader, StoneHeaderV1, StoneHeaderV1FileType, StonePayloadAttributeRecord, StonePayloadCompression,
+    StonePayloadEncodeError, StonePayloadHeader, StonePayloadIndexRecord, StonePayloadKind, StonePayloadLayoutRecord,
+    StonePayloadMetaRecord, payload,
 };
+
+pub use self::digest::{StoneDigestWriter, StoneDigestWriterHasher};
 
 pub mod digest;
 mod zstd;
 
-pub struct Writer<W, T = ()> {
+pub struct StoneWriter<W, T> {
     writer: W,
     content: T,
-    file_type: header::v1::FileType,
+    file_type: StoneHeaderV1FileType,
     payloads: Vec<EncodedPayload>,
-    payload_hasher: digest::Hasher,
+    payload_hasher: StoneDigestWriterHasher,
     // TODO: Allow plain encoding?
     encoder: zstd::Encoder,
 }
 
-impl<W: Write> Writer<W, ()> {
-    pub fn new(writer: W, file_type: header::v1::FileType) -> Result<Self, Error> {
+impl<W: Write> StoneWriter<W, ()> {
+    pub fn new(writer: W, file_type: StoneHeaderV1FileType) -> Result<Self, StoneWriteError> {
         Ok(Self {
             writer,
             content: (),
             file_type,
             payloads: vec![],
-            payload_hasher: digest::Hasher::new(),
+            payload_hasher: StoneDigestWriterHasher::new(),
             encoder: zstd::Encoder::new()?,
         })
     }
 
-    pub fn add_payload<'a>(&mut self, payload: impl Into<Payload<'a>>) -> Result<(), Error> {
+    pub fn add_payload<'a>(&mut self, payload: impl Into<StoneWritePayload<'a>>) -> Result<(), StoneWriteError> {
         self.payloads.push(encode_payload(
             payload.into().into(),
             &mut self.payload_hasher,
@@ -49,20 +52,20 @@ impl<W: Write> Writer<W, ()> {
         buffer: B,
         pledged_size: Option<u64>,
         num_workers: u32,
-    ) -> Result<Writer<W, Content<B>>, Error> {
+    ) -> Result<StoneWriter<W, StoneContentWriter<B>>, StoneWriteError> {
         let mut encoder = zstd::Encoder::new()?;
         encoder.set_pledged_size(pledged_size)?;
         encoder.set_num_workers(num_workers)?;
 
-        Ok(Writer {
+        Ok(StoneWriter {
             writer: self.writer,
-            content: Content {
+            content: StoneContentWriter {
                 buffer,
                 plain_size: 0,
                 stored_size: 0,
                 indices: vec![],
-                index_hasher: digest::Hasher::new(),
-                buffer_hasher: digest::Hasher::new(),
+                index_hasher: StoneDigestWriterHasher::new(),
+                buffer_hasher: StoneDigestWriterHasher::new(),
                 encoder,
             },
             file_type: self.file_type,
@@ -72,17 +75,17 @@ impl<W: Write> Writer<W, ()> {
         })
     }
 
-    pub fn finalize(mut self) -> Result<(), Error> {
+    pub fn finalize(mut self) -> Result<(), StoneWriteError> {
         finalize::<_, io::Empty>(&mut self.writer, self.file_type, self.payloads, None)
     }
 }
 
-impl<W, B> Writer<W, Content<B>>
+impl<W, B> StoneWriter<W, StoneContentWriter<B>>
 where
     W: Write,
     B: Read + Write + Seek,
 {
-    pub fn add_payload<'a>(&mut self, payload: impl Into<Payload<'a>>) -> Result<(), Error> {
+    pub fn add_payload<'a>(&mut self, payload: impl Into<StoneWritePayload<'a>>) -> Result<(), StoneWriteError> {
         self.payloads.push(encode_payload(
             payload.into().into(),
             &mut self.payload_hasher,
@@ -91,7 +94,7 @@ where
         Ok(())
     }
 
-    pub fn add_content<R: Read>(&mut self, content: &mut R) -> Result<(), Error> {
+    pub fn add_content<R: Read>(&mut self, content: &mut R) -> Result<(), StoneWriteError> {
         // Reset index hasher for this file
         self.content.index_hasher.reset();
 
@@ -105,9 +108,9 @@ where
         //
         // Bytes -> index digest -> compression -> buffer checksum -> buffer
         let mut payload_checksum_writer =
-            digest::Writer::new(&mut self.content.buffer, &mut self.content.buffer_hasher);
+            StoneDigestWriter::new(&mut self.content.buffer, &mut self.content.buffer_hasher);
         let mut zstd_writer = zstd::Writer::new(&mut payload_checksum_writer, &mut self.content.encoder);
-        let mut index_digest_writer = digest::Writer::new(&mut zstd_writer, &mut self.content.index_hasher);
+        let mut index_digest_writer = StoneDigestWriter::new(&mut zstd_writer, &mut self.content.index_hasher);
 
         io::copy(content, &mut index_digest_writer)?;
 
@@ -126,15 +129,17 @@ where
         let end = self.content.plain_size;
 
         // Add index data
-        self.content.indices.push(Index { start, end, digest });
+        self.content
+            .indices
+            .push(StonePayloadIndexRecord { start, end, digest });
 
         Ok(())
     }
 
-    pub fn finalize(mut self) -> Result<(), Error> {
+    pub fn finalize(mut self) -> Result<(), StoneWriteError> {
         // Finish frame & get content payload checksum
         let checksum = {
-            let mut writer = digest::Writer::new(&mut self.content.buffer, &mut self.content.buffer_hasher);
+            let mut writer = StoneDigestWriter::new(&mut self.content.buffer, &mut self.content.buffer_hasher);
             self.content.encoder.finish(&mut writer)?;
             writer.flush()?;
             self.content.stored_size += writer.bytes as u64;
@@ -157,37 +162,37 @@ where
     }
 }
 
-pub struct Content<B> {
+pub struct StoneContentWriter<B> {
     buffer: B,
     plain_size: u64,
     stored_size: u64,
-    indices: Vec<Index>,
+    indices: Vec<StonePayloadIndexRecord>,
     /// Used to generate un-compressed digest of file
     /// contents used for [`Index`]
-    index_hasher: digest::Hasher,
+    index_hasher: StoneDigestWriterHasher,
     /// Used to generate compressed digest of file
     /// contents used for content payload header
-    buffer_hasher: digest::Hasher,
+    buffer_hasher: StoneDigestWriterHasher,
     encoder: zstd::Encoder,
 }
 
 struct EncodedPayload {
-    header: payload::Header,
+    header: StonePayloadHeader,
     content: Vec<u8>,
 }
 
-pub enum Payload<'a> {
-    Meta(&'a [Meta]),
-    Attributes(&'a [Attribute]),
-    Layout(&'a [Layout]),
+pub enum StoneWritePayload<'a> {
+    Meta(&'a [StonePayloadMetaRecord]),
+    Attributes(&'a [StonePayloadAttributeRecord]),
+    Layout(&'a [StonePayloadLayoutRecord]),
 }
 
-impl<'a> From<Payload<'a>> for InnerPayload<'a> {
-    fn from(payload: Payload<'a>) -> Self {
+impl<'a> From<StoneWritePayload<'a>> for InnerPayload<'a> {
+    fn from(payload: StoneWritePayload<'a>) -> Self {
         match payload {
-            Payload::Meta(payload) => InnerPayload::Meta(payload),
-            Payload::Attributes(payload) => InnerPayload::Attributes(payload),
-            Payload::Layout(payload) => InnerPayload::Layout(payload),
+            StoneWritePayload::Meta(payload) => InnerPayload::Meta(payload),
+            StoneWritePayload::Attributes(payload) => InnerPayload::Attributes(payload),
+            StoneWritePayload::Layout(payload) => InnerPayload::Layout(payload),
         }
     }
 }
@@ -196,10 +201,10 @@ impl<'a> From<Payload<'a>> for InnerPayload<'a> {
 /// doesn't support passing in `Index` payloads
 /// since it's a side-effect of [`Writer::add_content`]
 enum InnerPayload<'a> {
-    Meta(&'a [Meta]),
-    Attributes(&'a [Attribute]),
-    Layout(&'a [Layout]),
-    Index(&'a [Index]),
+    Meta(&'a [StonePayloadMetaRecord]),
+    Attributes(&'a [StonePayloadAttributeRecord]),
+    Layout(&'a [StonePayloadLayoutRecord]),
+    Index(&'a [StonePayloadIndexRecord]),
 }
 
 impl InnerPayload<'_> {
@@ -221,7 +226,7 @@ impl InnerPayload<'_> {
         }
     }
 
-    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), Error> {
+    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), StoneWriteError> {
         match self {
             InnerPayload::Meta(records) => payload::encode_records(writer, records)?,
             InnerPayload::Attributes(records) => payload::encode_records(writer, records)?,
@@ -231,39 +236,39 @@ impl InnerPayload<'_> {
         Ok(())
     }
 
-    fn kind(&self) -> payload::Kind {
+    fn kind(&self) -> StonePayloadKind {
         match self {
-            InnerPayload::Meta(_) => payload::Kind::Meta,
-            InnerPayload::Attributes(_) => payload::Kind::Attributes,
-            InnerPayload::Layout(_) => payload::Kind::Layout,
-            InnerPayload::Index(_) => payload::Kind::Index,
+            InnerPayload::Meta(_) => StonePayloadKind::Meta,
+            InnerPayload::Attributes(_) => StonePayloadKind::Attributes,
+            InnerPayload::Layout(_) => StonePayloadKind::Layout,
+            InnerPayload::Index(_) => StonePayloadKind::Index,
         }
     }
 }
 
-impl<'a> From<&'a [Meta]> for Payload<'a> {
-    fn from(payload: &'a [Meta]) -> Self {
+impl<'a> From<&'a [StonePayloadMetaRecord]> for StoneWritePayload<'a> {
+    fn from(payload: &'a [StonePayloadMetaRecord]) -> Self {
         Self::Meta(payload)
     }
 }
 
-impl<'a> From<&'a [Attribute]> for Payload<'a> {
-    fn from(payload: &'a [Attribute]) -> Self {
+impl<'a> From<&'a [StonePayloadAttributeRecord]> for StoneWritePayload<'a> {
+    fn from(payload: &'a [StonePayloadAttributeRecord]) -> Self {
         Self::Attributes(payload)
     }
 }
 
-impl<'a> From<&'a [Layout]> for Payload<'a> {
-    fn from(payload: &'a [Layout]) -> Self {
+impl<'a> From<&'a [StonePayloadLayoutRecord]> for StoneWritePayload<'a> {
+    fn from(payload: &'a [StonePayloadLayoutRecord]) -> Self {
         Self::Layout(payload)
     }
 }
 
 fn encode_payload(
     payload: InnerPayload<'_>,
-    hasher: &mut digest::Hasher,
+    hasher: &mut StoneDigestWriterHasher,
     encoder: &mut zstd::Encoder,
-) -> Result<EncodedPayload, Error> {
+) -> Result<EncodedPayload, StoneWriteError> {
     // Reset hasher (it's used across all payloads)
     hasher.reset();
     // Set pledged size
@@ -272,7 +277,7 @@ fn encode_payload(
     let mut content = vec![];
 
     // Checksum is on compressed body so we wrap it inside zstd writer
-    let mut hashed_writer = digest::Writer::new(&mut content, hasher);
+    let mut hashed_writer = StoneDigestWriter::new(&mut content, hasher);
     let mut zstd_writer = zstd::Writer::new(&mut hashed_writer, encoder);
 
     payload.encode(&mut zstd_writer)?;
@@ -283,14 +288,14 @@ fn encode_payload(
 
     let stored_size = hashed_writer.bytes as u64;
 
-    let header = payload::Header {
+    let header = StonePayloadHeader {
         stored_size,
         plain_size,
         checksum: hasher.digest().to_be_bytes(),
         num_records: payload.num_records(),
         version: 1,
         kind: payload.kind(),
-        compression: payload::Compression::Zstd,
+        compression: StonePayloadCompression::Zstd,
     };
 
     Ok(EncodedPayload { header, content })
@@ -298,12 +303,12 @@ fn encode_payload(
 
 fn finalize<W: Write, B: Read + Seek>(
     writer: &mut W,
-    file_type: header::v1::FileType,
+    file_type: StoneHeaderV1FileType,
     payloads: Vec<EncodedPayload>,
-    content: Option<(Content<B>, u64)>,
-) -> Result<(), Error> {
+    content: Option<(StoneContentWriter<B>, u64)>,
+) -> Result<(), StoneWriteError> {
     // Write header
-    Header::V1(header::v1::Header {
+    StoneHeader::V1(StoneHeaderV1 {
         num_payloads: payloads.len() as u16 + if content.is_some() { 1 } else { 0 },
         file_type,
     })
@@ -317,14 +322,14 @@ fn finalize<W: Write, B: Read + Seek>(
 
     // Write content payload header + buffer
     if let Some((mut content, checksum)) = content {
-        payload::Header {
+        StonePayloadHeader {
             stored_size: content.stored_size,
             plain_size: content.plain_size,
             checksum: checksum.to_be_bytes(),
             num_records: 0,
             version: 1,
-            kind: payload::Kind::Content,
-            compression: payload::Compression::Zstd,
+            kind: StonePayloadKind::Content,
+            compression: StonePayloadCompression::Zstd,
         }
         .encode(writer)?;
         // Seek to beginning & copy content buffer
@@ -338,9 +343,9 @@ fn finalize<W: Write, B: Read + Seek>(
 }
 
 #[derive(Debug, Error)]
-pub enum Error {
+pub enum StoneWriteError {
     #[error("payload encode")]
-    PayloadEncode(#[from] payload::EncodeError),
+    PayloadEncode(#[from] StonePayloadEncodeError),
     #[error("io")]
     Io(#[from] io::Error),
 }

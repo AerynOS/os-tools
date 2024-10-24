@@ -7,9 +7,8 @@ use std::io;
 use std::path::PathBuf;
 
 use fs_err::File;
+use stone::{StoneDecodedPayload, StoneReadError};
 use thiserror::Error;
-
-use stone::read::PayloadKind;
 
 use crate::Provider;
 use crate::package::{self, Meta, MissingMetaFieldError, Package, meta};
@@ -32,7 +31,7 @@ impl Cobble {
         // Grab the metapayload
         let metadata = payloads
             .find_map(|result| {
-                if let Ok(PayloadKind::Meta(meta)) = result {
+                if let Ok(StoneDecodedPayload::Meta(meta)) = result {
                     Some(meta)
                 } else {
                     None
@@ -114,7 +113,7 @@ pub enum Error {
     MissingMetaPayload,
 
     #[error("stone read")]
-    StoneRead(#[from] stone::read::Error),
+    StoneRead(#[from] StoneReadError),
 
     #[error("io")]
     Io(#[from] io::Error),

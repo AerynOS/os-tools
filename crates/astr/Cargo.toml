@@ -4,10 +4,15 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
+[features]
+default = []
+diesel = ["dep:diesel"]
+
 [dependencies]
-diesel.workspace = true
 stable_deref_trait = "1.2.1"
 triomphe.workspace = true
+
+diesel = { workspace = true, optional = true }
 
 [lints]
 workspace = true

@@ -10,7 +10,7 @@ pub type Hasher = Xxh3;
 
 pub struct Reader<'a, R: Read> {
     inner: R,
-    hasher: &'a mut Hasher,
+    pub hasher: &'a mut Hasher,
 }
 
 impl<'a, R> Reader<'a, R>

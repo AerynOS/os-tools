@@ -12,11 +12,10 @@ use std::{
 };
 
 use futures_util::StreamExt;
+use stone::{StoneDecodedPayload, StonePayloadIndexRecord, StoneReadError};
 use thiserror::Error;
 use tokio::io::AsyncWriteExt;
 use url::Url;
-
-use stone::{payload, read::PayloadKind};
 
 use crate::{Installation, package, request};
 
@@ -147,7 +146,7 @@ pub struct Download {
 /// Upon fetch completion we have this unpacked asset bound with
 /// an open reader
 pub struct UnpackedAsset {
-    pub payloads: Vec<PayloadKind>,
+    pub payloads: Vec<StoneDecodedPayload>,
 }
 
 impl Download {
@@ -209,7 +208,7 @@ impl Download {
         let payloads = reader.payloads()?.collect::<Result<Vec<_>, _>>()?;
         let indices = payloads
             .iter()
-            .filter_map(PayloadKind::index)
+            .filter_map(StoneDecodedPayload::index)
             .flat_map(|p| &p.body)
             .collect::<Vec<_>>();
 
@@ -221,7 +220,7 @@ impl Download {
 
         let content = payloads
             .iter()
-            .find_map(PayloadKind::content)
+            .find_map(StoneDecodedPayload::content)
             .ok_or(Error::MissingContent)?;
 
         let content_file = File::options()
@@ -277,7 +276,7 @@ impl Download {
 }
 
 /// Returns true if all assets already exist in the installation
-fn check_assets_exist(indices: &[&payload::Index], installation: &Installation) -> bool {
+fn check_assets_exist(indices: &[&StonePayloadIndexRecord], installation: &Installation) -> bool {
     indices.iter().all(|index| {
         let path = asset_path(installation, &format!("{:02x}", index.digest));
         path.exists()
@@ -325,7 +324,7 @@ pub enum Error {
     #[error("Malformed download hash: {0}")]
     MalformedHash(String),
     #[error("stone format")]
-    Format(#[from] stone::read::Error),
+    Format(#[from] StoneReadError),
     #[error("invalid url")]
     InvalidUrl(#[from] url::ParseError),
     #[error("request")]

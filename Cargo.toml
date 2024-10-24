@@ -1,5 +1,5 @@
 [workspace]
-members = ["boulder", "moss", "crates/*"]
+members = ["boulder", "moss", "libstone", "crates/*"]
 default-members = ["moss"]
 resolver = "3"
 
@@ -95,6 +95,8 @@ zbus = { version = "5.1.1", default-features = false, features = ["tokio"] }
 infer = "0.19.0"
 tempfile = "3.20.0"
 kdl = "6.5.0"
+libc = "0.2.62"
+cbindgen = "0.29.2"
 
 [workspace.lints.rust]
 rust_2018_idioms = { level = "warn", priority = -1 }

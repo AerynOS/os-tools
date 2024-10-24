@@ -1,0 +1,32 @@
+[package]
+name = "libstone"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "stone"
+crate-type = ["cdylib", "staticlib"]
+
+[features]
+capi = []
+
+[dependencies]
+stone = { path = "../crates/stone", features = ["ffi"] }
+
+libc.workspace = true
+strum.workspace = true
+
+[build-dependencies]
+cbindgen.workspace = true
+
+[package.metadata.capi.header]
+name = "stone"
+subdirectory = false
+
+[package.metadata.capi.pkg_config]
+name = "libstone"
+filename = "libstone"
+
+[package.metadata.capi.library]
+name = "stone"

@@ -7,6 +7,7 @@ use clap::{Arg, ArgMatches, Command};
 
 use moss::client::{self};
 use moss::{Installation, client::Client, environment};
+use stone::StonePayloadLayoutFile;
 use tui::Styled;
 
 const ARG_KEYWORD: &str = "KEYWORD";
@@ -43,10 +44,10 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
 
     let layouts = client.layout_db.all()?;
 
-    layouts.into_iter().for_each(|(id, layout)| match layout.entry {
-        stone::payload::layout::Entry::Regular(_, file)
-        | stone::payload::layout::Entry::Symlink(_, file)
-        | stone::payload::layout::Entry::Directory(file) => {
+    layouts.into_iter().for_each(|(id, layout)| match layout.file {
+        StonePayloadLayoutFile::Regular(_, file)
+        | StonePayloadLayoutFile::Symlink(_, file)
+        | StonePayloadLayoutFile::Directory(file) => {
             if file.contains(&keyword) {
                 let resolved = client.registry.by_id(&id).next();
                 if let Some(pkg) = resolved {
