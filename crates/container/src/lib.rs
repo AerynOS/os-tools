@@ -19,7 +19,7 @@ use nix::sys::signalfd::SigSet;
 use nix::sys::stat::{Mode, umask};
 use nix::sys::wait::{WaitStatus, waitpid};
 use nix::unistd::{Pid, Uid, close, pipe, pivot_root, read, sethostname, tcsetpgrp, write};
-use thiserror::Error;
+use snafu::{ResultExt, Snafu};
 
 use self::idmap::idmap;
 
@@ -110,7 +110,7 @@ impl Container {
         let rootless = !Uid::effective().is_root();
 
         // Pipe to synchronize parent & child
-        let sync = pipe()?;
+        let sync = pipe().context(NixSnafu)?;
 
         let mut flags =
             CloneFlags::CLONE_NEWNS | CloneFlags::CLONE_NEWPID | CloneFlags::CLONE_NEWIPC | CloneFlags::CLONE_NEWUTS;
@@ -143,26 +143,26 @@ impl Container {
                 1
             }
         });
-        let pid = unsafe { clone(clone_cb, &mut *addr_of_mut!(STACK), flags, Some(SIGCHLD))? };
+        let pid = unsafe { clone(clone_cb, &mut *addr_of_mut!(STACK), flags, Some(SIGCHLD)) }.context(NixSnafu)?;
 
         // Update uid / gid map to map current user to root in container
         if rootless {
-            idmap(pid)?;
+            idmap(pid).context(IdmapSnafu)?;
         }
 
         // Allow child to continue
-        write(sync.1, &[Message::Continue as u8])?;
+        write(sync.1, &[Message::Continue as u8]).context(NixSnafu)?;
         // Write no longer needed
-        close(sync.1)?;
+        close(sync.1).context(NixSnafu)?;
 
         if self.ignore_host_sigint {
-            ignore_sigint()?;
+            ignore_sigint().context(NixSnafu)?;
         }
 
-        let status = waitpid(pid, None)?;
+        let status = waitpid(pid, None).context(NixSnafu)?;
 
         if self.ignore_host_sigint {
-            default_sigint()?;
+            default_sigint().context(NixSnafu)?;
         }
 
         match status {
@@ -172,7 +172,7 @@ impl Container {
                 let mut buffer = [0u8; 1024];
 
                 loop {
-                    let len = read(sync.0, &mut buffer)?;
+                    let len = read(sync.0, &mut buffer).context(NixSnafu)?;
 
                     if len == 0 {
                         break;
@@ -181,9 +181,9 @@ impl Container {
                     error.push_str(String::from_utf8_lossy(&buffer[..len]).as_ref());
                 }
 
-                Err(Error::Failure(error))
+                Err(Error::Failure { message: error })
             }
-            WaitStatus::Signaled(_, signal, _) => Err(Error::Signaled(signal)),
+            WaitStatus::Signaled(_, signal, _) => Err(Error::Signaled { signal }),
             WaitStatus::Stopped(_, _)
             | WaitStatus::PtraceEvent(_, _, _)
             | WaitStatus::PtraceSyscall(_)
@@ -199,19 +199,19 @@ where
     E: std::error::Error + Send + Sync + 'static,
 {
     // Ensure process is cleaned up if parent dies
-    set_pdeathsig(Signal::SIGKILL).map_err(ContainerError::SetPDeathSig)?;
+    set_pdeathsig(Signal::SIGKILL).context(SetPDeathSigSnafu)?;
 
     // Wait for continue message
     let mut message = [0u8; 1];
-    read(sync.0, &mut message).map_err(ContainerError::ReadContinueMsg)?;
+    read(sync.0, &mut message).context(ReadContinueMsgSnafu)?;
     assert_eq!(message[0], Message::Continue as u8);
 
     // Close unused read end
-    close(sync.0).map_err(ContainerError::CloseReadFd)?;
+    close(sync.0).context(CloseReadFdSnafu)?;
 
     setup(container)?;
 
-    f().map_err(|e| ContainerError::Run(Box::new(e)))
+    f().boxed().context(RunSnafu)
 }
 
 /// Setup the container
@@ -225,7 +225,7 @@ fn setup(container: &Container) -> Result<(), ContainerError> {
     pivot(&container.root, &container.binds)?;
 
     if let Some(hostname) = &container.hostname {
-        sethostname(hostname).map_err(ContainerError::SetHostname)?;
+        sethostname(hostname).context(SetHostnameSnafu)?;
     }
 
     if let Some(dir) = &container.work_dir {
@@ -245,7 +245,7 @@ fn pivot(root: &Path, binds: &[Bind]) -> Result<(), ContainerError> {
     add_mount(Some(root), root, None, MsFlags::MS_BIND)?;
 
     for bind in binds {
-        let source = bind.source.fs_err_canonicalize()?;
+        let source = bind.source.fs_err_canonicalize().context(FsErrSnafu)?;
         let target = root.join(bind.target.strip_prefix("/").unwrap_or(&bind.target));
 
         add_mount(Some(&source), &target, None, MsFlags::MS_BIND)?;
@@ -262,7 +262,7 @@ fn pivot(root: &Path, binds: &[Bind]) -> Result<(), ContainerError> {
     }
 
     ensure_directory(&old_root)?;
-    pivot_root(root, &old_root).map_err(ContainerError::PivotRoot)?;
+    pivot_root(root, &old_root).context(PivotRootSnafu)?;
 
     set_current_dir("/")?;
 
@@ -281,8 +281,8 @@ fn pivot(root: &Path, binds: &[Bind]) -> Result<(), ContainerError> {
         MsFlags::MS_BIND | MsFlags::MS_REC | MsFlags::MS_SLAVE,
     )?;
 
-    umount2(OLD_PATH, MntFlags::MNT_DETACH).map_err(ContainerError::UnmountOldRoot)?;
-    fs::remove_dir(OLD_PATH)?;
+    umount2(OLD_PATH, MntFlags::MNT_DETACH).context(UnmountOldRootSnafu)?;
+    fs::remove_dir(OLD_PATH).context(FsErrSnafu)?;
 
     umask(Mode::S_IWGRP | Mode::S_IWOTH);
 
@@ -291,7 +291,7 @@ fn pivot(root: &Path, binds: &[Bind]) -> Result<(), ContainerError> {
 
 fn setup_networking(root: &Path) -> Result<(), ContainerError> {
     ensure_directory(root.join("etc"))?;
-    fs::copy("/etc/resolv.conf", root.join("etc/resolv.conf"))?;
+    fs::copy("/etc/resolv.conf", root.join("etc/resolv.conf")).context(FsErrSnafu)?;
     Ok(())
 }
 
@@ -300,7 +300,8 @@ fn setup_localhost() -> Result<(), ContainerError> {
     if PathBuf::from("/usr/sbin/ip").exists() {
         Command::new("/usr/sbin/ip")
             .args(["link", "set", "lo", "up"])
-            .output()?;
+            .output()
+            .context(SetupLocalhostSnafu)?;
     }
     Ok(())
 }
@@ -308,7 +309,7 @@ fn setup_localhost() -> Result<(), ContainerError> {
 fn ensure_directory(path: impl AsRef<Path>) -> Result<(), ContainerError> {
     let path = path.as_ref();
     if !path.exists() {
-        fs::create_dir_all(path)?;
+        fs::create_dir_all(path).context(FsErrSnafu)?;
     }
     Ok(())
 }
@@ -328,31 +329,15 @@ fn add_mount<T: AsRef<Path>>(
         flags,
         Option::<&str>::None,
     )
-    .map_err(|err| ContainerError::Mount {
+    .with_context(|_| MountSnafu {
         target: target.to_owned(),
-        err,
     })?;
     Ok(())
 }
 
-fn set_current_dir(path: impl AsRef<Path>) -> io::Result<()> {
-    #[derive(Debug, Error)]
-    #[error("failed to set current directory to `{}`", path.display())]
-    struct SetCurrentDirError {
-        source: io::Error,
-        path: PathBuf,
-    }
-
+fn set_current_dir(path: impl AsRef<Path>) -> Result<(), ContainerError> {
     let path = path.as_ref();
-    std::env::set_current_dir(path).map_err(|source| {
-        io::Error::new(
-            source.kind(),
-            SetCurrentDirError {
-                source,
-                path: path.to_owned(),
-            },
-        )
-    })
+    std::env::set_current_dir(path).with_context(|_| SetCurrentDirSnafu { path: path.to_owned() })
 }
 
 fn ignore_sigint() -> Result<(), nix::Error> {
@@ -428,48 +413,47 @@ struct Bind {
     read_only: bool,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Snafu)]
 pub enum Error {
-    #[error("exited with failure: {0}")]
-    Failure(String),
-    #[error("stopped by signal: {}", .0.as_str())]
-    Signaled(Signal),
-    #[error("unknown exit reason")]
+    #[snafu(display("exited with failure: {message}"))]
+    Failure { message: String },
+    #[snafu(display("stopped by signal: {signal}"))]
+    Signaled { signal: Signal },
+    #[snafu(display("unknown exit reason"))]
     UnknownExit,
-    #[error("error setting up rootless id map")]
-    Idmap(#[from] idmap::Error),
-    #[error("nix")]
-    Nix(#[from] nix::Error),
-    #[error("io")]
-    Io(#[from] io::Error),
+    #[snafu(display("error setting up rootless id map"))]
+    Idmap { source: idmap::Error },
+    // FIXME: Replace with more fine-grained variants
+    #[snafu(display("nix"))]
+    Nix { source: nix::Error },
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Snafu)]
 enum ContainerError {
-    #[error(transparent)]
-    Run(Box<dyn std::error::Error + Send + Sync>),
-    #[error("io")]
-    Io(#[from] io::Error),
-
-    // Errors from linux system functions
-    #[error("set_pdeathsig")]
-    SetPDeathSig(#[source] nix::Error),
-    #[error("wait for continue message")]
-    ReadContinueMsg(#[source] nix::Error),
-    #[error("close read end of pipe")]
-    CloseReadFd(#[source] nix::Error),
-    #[error("sethostname")]
-    SetHostname(#[source] nix::Error),
-    #[error("pivot_root")]
-    PivotRoot(#[source] nix::Error),
-    #[error("unmount old root")]
-    UnmountOldRoot(#[source] nix::Error),
-    #[error("mount {}", target.display())]
-    Mount {
-        target: PathBuf,
-        #[source]
-        err: nix::Error,
+    #[snafu(display("run"))]
+    Run {
+        source: Box<dyn std::error::Error + Send + Sync>,
     },
+    #[snafu(display("set current dir"))]
+    SetCurrentDirError { path: PathBuf, source: io::Error },
+    #[snafu(display("setup localhost"))]
+    SetupLocalhost { source: io::Error },
+    #[snafu(display("set_pdeathsig"))]
+    SetPDeathSig { source: nix::Error },
+    #[snafu(display("wait for continue message"))]
+    ReadContinueMsg { source: nix::Error },
+    #[snafu(display("close read end of pipe"))]
+    CloseReadFd { source: nix::Error },
+    #[snafu(display("sethostname"))]
+    SetHostname { source: nix::Error },
+    #[snafu(display("pivot_root"))]
+    PivotRoot { source: nix::Error },
+    #[snafu(display("unmount old root"))]
+    UnmountOldRoot { source: nix::Error },
+    #[snafu(display("mount {}", target.display()))]
+    Mount { target: PathBuf, source: nix::Error },
+    #[snafu(display("filesystem"))]
+    FsErr { source: io::Error },
 }
 
 #[repr(u8)]

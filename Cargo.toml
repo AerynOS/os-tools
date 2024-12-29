@@ -74,6 +74,7 @@ serde = { version = "1.0.204", features = ["derive"] }
 serde_json = "1.0.120"
 serde_yaml = "0.9.34"
 sha2 = "0.10.8"
+snafu = "0.8.5"
 strum = { version = "0.27.1", features = ["derive"] }
 thiserror = "2.0.3"
 thread-priority = "1.1.0"
