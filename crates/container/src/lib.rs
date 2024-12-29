@@ -103,7 +103,7 @@ impl Container {
     /// Run `f` as a container process payload
     pub fn run<E>(self, mut f: impl FnMut() -> Result<(), E>) -> Result<(), Error>
     where
-        E: std::error::Error + 'static,
+        E: std::error::Error + Send + Sync + 'static,
     {
         static mut STACK: [u8; 4 * 1024 * 1024] = [0u8; 4 * 1024 * 1024];
 
@@ -196,7 +196,7 @@ impl Container {
 /// Reenter the container
 fn enter<E>(container: &Container, sync: (i32, i32), mut f: impl FnMut() -> Result<(), E>) -> Result<(), ContainerError>
 where
-    E: std::error::Error + 'static,
+    E: std::error::Error + Send + Sync + 'static,
 {
     // Ensure process is cleaned up if parent dies
     set_pdeathsig(Signal::SIGKILL).map_err(ContainerError::SetPDeathSig)?;
@@ -447,7 +447,7 @@ pub enum Error {
 #[derive(Debug, Error)]
 enum ContainerError {
     #[error(transparent)]
-    Run(Box<dyn std::error::Error>),
+    Run(Box<dyn std::error::Error + Send + Sync>),
     #[error("io")]
     Io(#[from] io::Error),
 
