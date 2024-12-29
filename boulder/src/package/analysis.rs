@@ -18,7 +18,7 @@ use super::collect::{Collector, PathInfo};
 
 mod handler;
 
-pub type BoxError = Box<dyn std::error::Error>;
+pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 pub struct Chain<'a> {
     handlers: Vec<Box<dyn Handler>>,
