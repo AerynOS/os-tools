@@ -6,12 +6,15 @@ use std::process::Command;
 
 use fs_err as fs;
 use nix::unistd::{Pid, User, getgid, getuid};
-use thiserror::Error;
+use snafu::{ResultExt, Snafu, ensure};
 
 pub fn idmap(pid: Pid) -> Result<(), Error> {
     let uid = getuid();
     let gid = getgid();
-    let username = User::from_uid(uid)?.map(|user| user.name).unwrap_or_default();
+    let username = User::from_uid(uid)
+        .context(GetUserByUidSnafu)?
+        .map(|user| user.name)
+        .unwrap_or_default();
 
     let subuid_mappings = load_sub_mappings(Kind::User, uid.as_raw(), &username)?;
     let subgid_mappings = load_sub_mappings(Kind::Group, gid.as_raw(), &username)?;
@@ -64,12 +67,8 @@ fn load_sub_mappings(kind: Kind, id: u32, username: &str) -> Result<Vec<Submap>,
 
 fn ensure_sub_count(kind: Kind, id: u32, mappings: &[Submap]) -> Result<(), Error> {
     let count = mappings.iter().map(|map| map.count).sum::<u32>();
-
-    if count < 1000 {
-        Err(Error::SubMappingCount(id, kind, count))
-    } else {
-        Ok(())
-    }
+    ensure!(count >= 1000, SubMappingCountSnafu { id, kind, count });
+    Ok(())
 }
 
 fn format_id_mappings(sub_mappings: &[Submap]) -> Vec<Idmap> {
@@ -111,10 +110,14 @@ fn add_id_mappings(pid: Pid, kind: Kind, id: u32, mappings: &[Idmap]) -> Result<
             ]
         }))
         .output()
-        .map_err(|e| Error::Command(e.to_string(), kind))?;
+        .boxed()
+        .context(CommandSnafu { kind })?;
 
     if !out.status.success() {
-        return Err(Error::Command(format!("{}", out.status), kind));
+        return Err(Error::Command {
+            kind,
+            source: out.status.to_string().into(),
+        });
     }
 
     Ok(())
@@ -133,14 +136,17 @@ struct Idmap {
     count: u32,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Snafu)]
 pub enum Error {
-    #[error(
-        "\n\nAt least 1,000 sub{1} mappings are required for {1} {0}, found {2}\n\nMappings can be added to /etc/sub{1}"
-    )]
-    SubMappingCount(u32, Kind, u32),
-    #[error("new{1}map command failed: {0}")]
-    Command(String, Kind),
-    #[error("nix")]
-    Nix(#[from] nix::Error),
+    #[snafu(display(
+        "\n\nAt least 1,000 sub{kind} mappings are required for {kind} {id}, found {count}\n\nMappings can be added to /etc/sub{kind}"
+    ))]
+    SubMappingCount { id: u32, kind: Kind, count: u32 },
+    #[snafu(display("new{kind}map command failed"))]
+    Command {
+        kind: Kind,
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
+    #[snafu(display("get user by UID"))]
+    GetUserByUid { source: nix::Error },
 }
