@@ -19,7 +19,7 @@ use std::str::FromStr;
 
 use regex::Regex;
 use serde::{Deserialize, de};
-use thiserror::Error;
+use snafu::{ResultExt as _, Snafu};
 
 #[derive(Debug)]
 enum Fragment {
@@ -143,16 +143,15 @@ impl Pattern {
     }
 }
 
-/// [thiserror] compatible Error
-#[derive(Error, Debug)]
+#[derive(Debug, Snafu)]
 pub enum Error {
     /// Illegal group syntax
-    #[error("malformed group")]
+    #[snafu(display("malformed group"))]
     Group,
 
     /// Illegal regex
-    #[error("invalid regex: {0}")]
-    Regex(#[from] regex::Error),
+    #[snafu(display("invalid regex"))]
+    Regex { source: regex::Error },
 }
 
 fn fragments_from_string(s: &str) -> Result<Vec<Fragment>, Error> {
@@ -251,7 +250,7 @@ impl FromStr for Pattern {
 
         Ok(Self {
             pattern: s.into(),
-            regex: Regex::new(&format!("^{compiled}$"))?,
+            regex: Regex::new(&format!("^{compiled}$")).context(RegexSnafu)?,
             groups: groups.into_iter().collect(),
         })
     }
