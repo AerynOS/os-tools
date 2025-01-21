@@ -15,11 +15,13 @@ pub fn ignore(signals: impl IntoIterator<Item = Signal>) -> Result<Guard, Error>
     Ok(Guard(
         signals
             .into_iter()
-            .map(|signal| unsafe {
-                let action = sigaction(
-                    signal,
-                    &SigAction::new(SigHandler::SigIgn, SaFlags::empty(), SigSet::empty()),
-                )
+            .map(|signal| {
+                let action = unsafe {
+                    sigaction(
+                        signal,
+                        &SigAction::new(SigHandler::SigIgn, SaFlags::empty(), SigSet::empty()),
+                    )
+                }
                 .map_err(Error::Ignore)?;
 
                 Ok(PrevHandler { signal, action })
