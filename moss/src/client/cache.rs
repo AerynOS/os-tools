@@ -135,7 +135,7 @@ impl Download {
         unpacking_in_progress: UnpackingInProgress,
         on_progress: impl Fn(Progress) + Send + 'static,
     ) -> Result<UnpackedAsset, Error> {
-        use fs_err::{self as fs, File, OpenOptions};
+        use fs_err::{self as fs, File};
         use std::io::{self, Read, Seek, SeekFrom, Write};
 
         struct ProgressWriter<'a, W> {
@@ -201,7 +201,7 @@ impl Download {
             .find_map(PayloadKind::content)
             .ok_or(Error::MissingContent)?;
 
-        let content_file = OpenOptions::new()
+        let content_file = File::options()
             .read(true)
             .write(true)
             .create(true)
