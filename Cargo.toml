@@ -80,7 +80,6 @@ strum = { version = "0.27.1", features = ["derive"] }
 thiserror = "2.0.3"
 thread-priority = "2.1.0"
 tokio = { version = "1.38.0", features = ["full"] }
-tokio-stream = { version = "0.1.15", features = ["time"] }
 tokio-util = { version = "0.7.11", features = ["io"] }
 tracing = { version = "0.1.41", features = ["attributes"] }
 tracing-subscriber = { version = "0.3.19", default-features = false, features = ["ansi", "fmt", "json"] }

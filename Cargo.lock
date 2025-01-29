@@ -395,6 +395,8 @@ dependencies = [
  "mailparse",
  "moss",
  "nix 0.27.1",
+ "rapidfuzz",
+ "rayon",
  "regex",
  "reqwest",
  "serde",
@@ -411,6 +413,7 @@ dependencies = [
  "tools_buildinfo",
  "tui",
  "url",
+ "walkdir",
  "yaml",
  "zstd",
 ]
@@ -2361,6 +2364,12 @@ checksum = "99d9a13982dcf210057a8a78572b2217b667c3beacbf3a0d8b454f6f82837d38"
 dependencies = [
  "getrandom 0.3.3",
 ]
+
+[[package]]
+name = "rapidfuzz"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "270e04e5ea61d40841942bb15e451c29ee1618637bcf97fc7ede5dd4a9b1601b"
 
 [[package]]
 name = "rayon"
