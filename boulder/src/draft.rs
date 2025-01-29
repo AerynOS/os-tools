@@ -7,6 +7,7 @@ use std::{io, path::PathBuf};
 
 use fs_err as fs;
 use itertools::Itertools;
+use licenses::match_licences;
 use moss::Dependency;
 use thiserror::Error;
 use tui::Styled;
@@ -19,12 +20,14 @@ use self::monitoring::Monitoring;
 use self::upstream::Upstream;
 
 mod build;
+mod licenses;
 mod metadata;
 mod monitoring;
 mod upstream;
 
 pub struct Drafter {
     upstreams: Vec<Url>,
+    datadir: PathBuf,
 }
 
 pub struct Draft {
@@ -33,8 +36,8 @@ pub struct Draft {
 }
 
 impl Drafter {
-    pub fn new(upstreams: Vec<Url>) -> Self {
-        Self { upstreams }
+    pub fn new(upstreams: Vec<Url>, datadir: PathBuf) -> Self {
+        Self { upstreams, datadir }
     }
 
     pub fn run(&self) -> Result<Draft, Error> {
@@ -61,6 +64,10 @@ impl Drafter {
 
         // Analyze files to determine build system / collect deps
         let build = build::analyze(&files).map_err(Error::AnalyzeBuildSystem)?;
+
+        let licences_dir = &self.datadir.join("licenses");
+
+        let licenses = format_licenses(match_licences(&extract_root, licences_dir).unwrap_or_default());
 
         // Remove temp extract dir
         fs::remove_dir_all(extract_root)?;
@@ -97,9 +104,8 @@ upstreams   :
 summary     : UPDATE SUMMARY
 description : |
     UPDATE DESCRIPTION
-license     : UPDATE LICENSE
-{options}{builddeps}{environment}{phases}
-",
+license     : {licenses}
+{options}{builddeps}{environment}{phases}",
             metadata.source.name,
             metadata.source.version,
             metadata.source.homepage,
@@ -120,6 +126,30 @@ fn builddeps(deps: impl IntoIterator<Item = Dependency>) -> String {
         String::default()
     } else {
         format!("builddeps   :\n{deps}\n")
+    }
+}
+
+fn format_licenses(licenses: Vec<String>) -> String {
+    let formatted = licenses
+        .into_iter()
+        .map(|license| format!("    - {license}"))
+        .sorted_by(|a, b| {
+            // HACK: Ensure -or-later for GNU licenses comes before -only
+            //       to match 90% of cases. We need to read the standard license
+            //       header to figure out the actual variant.
+            if a.contains("-only") {
+                std::cmp::Ordering::Greater
+            } else if b.contains("-only") {
+                std::cmp::Ordering::Less
+            } else {
+                a.cmp(b)
+            }
+        })
+        .join("\n");
+    if formatted.is_empty() {
+        "UPDATE LICENSE".to_owned()
+    } else {
+        format!("\n{formatted}")
     }
 }
 
@@ -150,8 +180,12 @@ pub enum Error {
     Upstream(#[from] upstream::Error),
     #[error("monitoring")]
     Monitoring(#[from] monitoring::Error),
+    #[error("licensing")]
+    Licenses(#[from] licenses::Error),
     #[error("io")]
     Io(#[from] io::Error),
+    #[error("walkdir")]
+    WalkDir(#[from] jwalk::Error),
 }
 
 #[cfg(test)]
