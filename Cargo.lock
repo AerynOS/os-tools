@@ -361,7 +361,7 @@ dependencies = [
 [[package]]
 name = "blsforme"
 version = "0.1.0"
-source = "git+https://github.com/serpent-os/blsforme.git?rev=3cb315d6e9b4f2168927bded8b326b55c92f0e84#3cb315d6e9b4f2168927bded8b326b55c92f0e84"
+source = "git+https://github.com/AerynOS/blsforme.git?rev=3cb315d6e9b4f2168927bded8b326b55c92f0e84#3cb315d6e9b4f2168927bded8b326b55c92f0e84"
 dependencies = [
  "blake3",
  "gpt",
@@ -391,6 +391,7 @@ dependencies = [
  "futures-util",
  "glob",
  "hex",
+ "infer",
  "itertools 0.13.0",
  "mailparse",
  "moss",
@@ -467,6 +468,17 @@ dependencies = [
  "jobserver",
  "libc",
  "shlex",
+]
+
+[[package]]
+name = "cfb"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d38f2da7a0a2c4ccf0065be06397cc26a81f4e528be095826eee9d4adbb8c60f"
+dependencies = [
+ "byteorder",
+ "fnv",
+ "uuid",
 ]
 
 [[package]]
@@ -1613,6 +1625,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "infer"
+version = "0.19.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a588916bfdfd92e71cacef98a63d9b1f0d74d6599980d11894290e7ddefffcf7"
+dependencies = [
+ "cfb",
+]
+
+[[package]]
 name = "ipnet"
 version = "2.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2689,7 +2710,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "superblock"
 version = "0.1.0"
-source = "git+https://github.com/serpent-os/blsforme.git?rev=3cb315d6e9b4f2168927bded8b326b55c92f0e84#3cb315d6e9b4f2168927bded8b326b55c92f0e84"
+source = "git+https://github.com/AerynOS/blsforme.git?rev=3cb315d6e9b4f2168927bded8b326b55c92f0e84#3cb315d6e9b4f2168927bded8b326b55c92f0e84"
 dependencies = [
  "log",
  "thiserror 2.0.3",
@@ -2862,9 +2883,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.41.1"
+version = "1.42.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22cfb5bee7a6a52939ca9224d6ac897bb669134078daa8735560897f69de4d33"
+checksum = "5cec9b21b0450273377fc97bd4c33a8acffc8c996c987a7c5b319a0083707551"
 dependencies = [
  "backtrace",
  "bytes",
@@ -2950,7 +2971,7 @@ dependencies = [
 [[package]]
 name = "topology"
 version = "0.1.0"
-source = "git+https://github.com/serpent-os/blsforme.git?rev=3cb315d6e9b4f2168927bded8b326b55c92f0e84#3cb315d6e9b4f2168927bded8b326b55c92f0e84"
+source = "git+https://github.com/AerynOS/blsforme.git?rev=3cb315d6e9b4f2168927bded8b326b55c92f0e84#3cb315d6e9b4f2168927bded8b326b55c92f0e84"
 dependencies = [
  "gpt",
  "log",

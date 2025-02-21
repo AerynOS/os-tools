@@ -81,37 +81,37 @@ async fn fetch(url: &Url, output: &Path) -> Result<String, Error> {
 }
 
 async fn extract(archive: &Path, destination: &Path) -> Result<(), Error> {
-    let extension = archive
-        .extension()
-        .map(|e| e.to_string_lossy().to_string())
-        .unwrap_or_else(|| "tar".to_owned());
-
-    // If we can't specialise (.zip, etc) assume its a tar
-    let result = match extension.as_str() {
-        "zip" => {
-            Command::new("unzip")
-                .arg(archive)
-                .arg("-d")
-                .arg(destination)
-                .output()
-                .await?
+    if let Some(kind) = infer::get_from_path(archive)? {
+        println!("Detected type: {} ({})", kind.mime_type(), kind.extension());
+        // If we can't specialise (.zip, etc) assume its a tar
+        let result = match kind.extension() {
+            "zip" => {
+                Command::new("unzip")
+                    .arg(archive)
+                    .arg("-d")
+                    .arg(destination)
+                    .output()
+                    .await?
+            }
+            _ => {
+                Command::new("tar")
+                    .arg("xf")
+                    .arg(archive)
+                    .arg("-C")
+                    .arg(destination)
+                    .output()
+                    .await?
+            }
+        };
+        if result.status.success() {
+            Ok(())
+        } else {
+            eprintln!("Command exited with: {}", String::from_utf8_lossy(&result.stderr));
+            Err(Error::Extract(result.status))
         }
-        _ => {
-            Command::new("tar")
-                .arg("xf")
-                .arg(archive)
-                .arg("-C")
-                .arg(destination)
-                .output()
-                .await?
-        }
-    };
-
-    if result.status.success() {
-        Ok(())
     } else {
-        eprintln!("Command exited with: {}", String::from_utf8_lossy(&result.stderr));
-        Err(Error::Extract(result.status))
+        println!("Unknown file type");
+        Ok(())
     }
 }
 
