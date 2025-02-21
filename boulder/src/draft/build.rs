@@ -13,6 +13,7 @@ mod cargo;
 mod cmake;
 mod meson;
 mod python;
+mod ruby;
 
 pub type Error = Box<dyn std::error::Error>;
 
@@ -26,6 +27,8 @@ pub enum System {
     Meson,
     PythonPep517,
     PythonSetupTools,
+    RubyGem,
+    RubyTarball,
 }
 
 impl System {
@@ -36,6 +39,8 @@ impl System {
         Self::Meson,
         Self::PythonPep517,
         Self::PythonSetupTools,
+        Self::RubyGem,
+        Self::RubyTarball,
     ];
 
     pub fn environment(&self) -> Option<&'static str> {
@@ -46,6 +51,8 @@ impl System {
             System::Meson => None,
             System::PythonPep517 => None,
             System::PythonSetupTools => None,
+            System::RubyGem => None,
+            System::RubyTarball => None,
         }
     }
 
@@ -57,6 +64,8 @@ impl System {
             System::Meson => meson::phases(),
             System::PythonPep517 => python::pep517::phases(),
             System::PythonSetupTools => python::setup_tools::phases(),
+            System::RubyGem => ruby::gemfile::phases(),
+            System::RubyTarball => ruby::tarball::phases(),
         }
     }
 
@@ -76,6 +85,8 @@ impl System {
             System::Meson => meson::process(state, file),
             System::PythonPep517 => python::pep517::process(state, file),
             System::PythonSetupTools => python::setup_tools::process(state, file),
+            System::RubyGem => ruby::gemfile::process(state, file),
+            System::RubyTarball => ruby::tarball::process(state, file),
         }
     }
 }
