@@ -4,7 +4,10 @@
 
 use std::{env, fs, io, path::Path, path::PathBuf};
 
-use clap::{Arg, ArgAction, Command};
+use clap::{
+    builder::{IntoResettable, OsStr},
+    Arg, ArgAction, Command,
+};
 use clap_complete::{
     generate_to,
     shells::{Bash, Fish, Zsh},
@@ -46,7 +49,7 @@ fn command() -> Command {
                 .global(true)
                 .help("Root directory")
                 .action(ArgAction::Set)
-                .default_value("/")
+                .default_value(default_root_directory_arg())
                 .value_parser(clap::value_parser!(PathBuf)),
         )
         .arg(
@@ -95,6 +98,17 @@ fn command() -> Command {
         .subcommand(state::command())
         .subcommand(sync::command())
         .subcommand(version::command())
+}
+
+/// only provide a default directory argument if the host system can be identified as a Serpent OS system
+fn default_root_directory_arg() -> impl IntoResettable<OsStr> {
+    // serpent os is identified by `MACHTYPE` contains `serpent`
+    let is_host_serpent_os = env::var("MACHTYPE")
+        .ok()
+        .map(|machtype| machtype.contains("serpent"))
+        .unwrap_or(false);
+
+    is_host_serpent_os.then(|| "/".into())
 }
 
 /// Generate manpages for all commands recursively
@@ -159,7 +173,11 @@ pub fn process() -> Result<(), Error> {
         }
     }
 
-    let root = matches.get_one::<PathBuf>("root").unwrap();
+    let root = match matches.get_one::<PathBuf>("root") {
+        Some(root) => root,
+        None => return Err(Error::Args("Root directory is required, but not provided".to_owned())),
+    };
+
     let cache = matches.get_one::<PathBuf>("cache");
 
     // Make async runtime available to all of moss
@@ -268,4 +286,7 @@ pub enum Error {
 
     #[error("I/O error: {0}")]
     Io(#[from] io::Error),
+
+    #[error("args: {0}")]
+    Args(String),
 }
