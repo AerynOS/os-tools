@@ -10,11 +10,11 @@ rust-version = "1.80"
 
 [workspace.dependencies]
 blsforme = { git = "https://github.com/AerynOS/blsforme.git", rev = "3cb315d6e9b4f2168927bded8b326b55c92f0e84" }
-bytes = "1.6.0"
-chrono = "0.4.38"
-clap = { version = "4.5.8", features = ["derive", "string"] }
-clap_complete = "4.5.37"
-clap_mangen = "0.2.24"
+bytes = "1.10.0"
+chrono = "0.4.39"
+clap = { version = "4.5.30", features = ["derive", "string"] }
+clap_complete = "4.5.45"
+clap_mangen = "0.2.26"
 criterion = { version = "0.5.1", features = ["html_reports"] }
 crossterm = "0.28.1"
 derive_more = { version = "1.0.0", features = [
@@ -24,24 +24,24 @@ derive_more = { version = "1.0.0", features = [
     "into",
 ] }
 dialoguer = "0.11.0"
-diesel = { version = "2.2.1", features = [
+diesel = { version = "2.2.7", features = [
     "sqlite",
     "returning_clauses_for_sqlite_3_35",
 ] }
 diesel_migrations = "2.2.0"
 dirs = "5.0.1"
 elf = "0.7.4"
-indicatif = "0.17.8"
+indicatif = "0.17.11"
 itertools = "0.13.0"
-fs-err = { version = "3.0.0", features = ["tokio"] }
+fs-err = { version = "3.1.0", features = ["tokio"] }
 futures-util = "0.3.31"
-glob = "0.3.1"
+glob = "0.3.2"
 hex = "0.4.3"
 indextree = "4.6.1"
 libsqlite3-sys = { version = "0.30.1", features = ["bundled"] }
-log = "0.4.22"
+log = "0.4.26"
 nom = "7.1.3"
-nix = { version = "0.27.1", features = [
+nix = { version = "0.29.0", features = [
     "user",
     "fs",
     "sched",
@@ -54,7 +54,7 @@ nix = { version = "0.27.1", features = [
 petgraph = "0.6.5"
 rayon = "1.10.0"
 regex = "1.10.5"
-reqwest = { version = "0.12.5", default-features = false, features = [
+reqwest = { version = "0.12.12", default-features = false, features = [
     "brotli",
     "charset",
     "deflate",
@@ -66,21 +66,21 @@ reqwest = { version = "0.12.5", default-features = false, features = [
     "blocking",
     "json",
 ] }
-serde = { version = "1.0.204", features = ["derive"] }
-serde_json = "1.0.120"
+serde = { version = "1.0.218", features = ["derive"] }
+serde_json = "1.0.139"
 serde_yaml = "0.9.34"
 sha2 = "0.10.8"
 strum = { version = "0.26.3", features = ["derive"] }
-thiserror = "2.0.3"
+thiserror = "2.0.11"
 thread-priority = "1.1.0"
 tokio = { version = "1.38.0", features = ["full"] }
 tokio-stream = { version = "0.1.15", features = ["time"] }
-tokio-util = { version = "0.7.11", features = ["io"] }
+tokio-util = { version = "0.7.13", features = ["io"] }
 url = { version = "2.5.2", features = ["serde"] }
-xxhash-rust = { version = "0.8.11", features = ["xxh3"] }
-zstd = { version = "0.13.2", features = ["zstdmt"] }
+xxhash-rust = { version = "0.8.15", features = ["xxh3"] }
+zstd = { version = "0.13.3", features = ["zstdmt"] }
 mailparse = "0.15.0"
-zbus = "5.1.1"
+zbus = "5.5.0"
 infer = "0.19.0"
 
 [workspace.lints.rust]
