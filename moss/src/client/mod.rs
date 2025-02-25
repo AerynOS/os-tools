@@ -14,7 +14,6 @@ use std::{
     fmt, io,
     os::{fd::RawFd, unix::fs::symlink},
     path::{Path, PathBuf},
-    sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
 
@@ -28,7 +27,7 @@ use nix::{
     unistd::{close, linkat, mkdir, symlinkat},
 };
 use postblit::TriggerScope;
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use stone::{payload::layout, read::PayloadKind};
 use thiserror::Error;
 use tui::{MultiProgress, ProgressBar, ProgressStyle, Styled};
@@ -628,7 +627,7 @@ impl Client {
         progress.tick();
 
         let now = Instant::now();
-        let stats = Arc::new(RwLock::new(BlitStats::default()));
+        let mut stats = BlitStats::default();
 
         let tree = self.vfs(packages)?;
 
@@ -651,9 +650,12 @@ impl Client {
             let root_dir = fcntl::open(&blit_target, OFlag::O_DIRECTORY | OFlag::O_RDONLY, Mode::empty())?;
 
             if let Element::Directory(_, _, children) = root {
-                children
-                    .par_iter()
-                    .try_for_each(|child| self.blit_element(root_dir, cache_fd, child, &progress, &stats))?;
+                stats = stats.merge(
+                    children
+                        .into_par_iter()
+                        .map(|child| self.blit_element(root_dir, cache_fd, child, &progress))
+                        .try_reduce(BlitStats::default, |a, b| Ok(a.merge(b)))?,
+                );
             }
 
             close(root_dir)?;
@@ -662,8 +664,7 @@ impl Client {
         progress.finish_and_clear();
 
         let elapsed = now.elapsed();
-        let stats_raw = stats.write().unwrap();
-        let num_entries = stats_raw.num_entries();
+        let num_entries = stats.num_entries();
 
         println!(
             "\n{} entries blitted in {} {}",
@@ -682,32 +683,35 @@ impl Client {
         &self,
         parent: RawFd,
         cache: RawFd,
-        element: &Element<'_, PendingFile>,
+        element: Element<'_, PendingFile>,
         progress: &ProgressBar,
-        stats: &Arc<RwLock<BlitStats>>,
-    ) -> Result<(), Error> {
+    ) -> Result<BlitStats, Error> {
+        let mut stats = BlitStats::default();
+
         progress.inc(1);
         match element {
             Element::Directory(name, item, children) => {
                 // Construct within the parent
-                self.blit_element_item(parent, cache, name, item, stats)?;
+                self.blit_element_item(parent, cache, name, item, &mut stats)?;
 
                 // open the new dir
-                let newdir = fcntl::openat(
-                    parent,
-                    name.to_owned(),
-                    OFlag::O_RDONLY | OFlag::O_DIRECTORY,
-                    Mode::empty(),
-                )?;
-                children
-                    .par_iter()
-                    .try_for_each(|child| self.blit_element(newdir, cache, child, progress, stats))?;
+                let newdir = fcntl::openat(parent, name, OFlag::O_RDONLY | OFlag::O_DIRECTORY, Mode::empty())?;
+
+                stats = stats.merge(
+                    children
+                        .into_par_iter()
+                        .map(|child| self.blit_element(newdir, cache, child, progress))
+                        .try_reduce(BlitStats::default, |a, b| Ok(a.merge(b)))?,
+                );
+
                 close(newdir)?;
-                Ok(())
+
+                Ok(stats)
             }
             Element::Child(name, item) => {
-                self.blit_element_item(parent, cache, name, item, stats)?;
-                Ok(())
+                self.blit_element_item(parent, cache, name, item, &mut stats)?;
+
+                Ok(stats)
             }
         }
     }
@@ -726,7 +730,7 @@ impl Client {
         cache: RawFd,
         subpath: &str,
         item: &PendingFile,
-        stats: &Arc<RwLock<BlitStats>>,
+        stats: &mut BlitStats,
     ) -> Result<(), Error> {
         match &item.layout.entry {
             layout::Entry::Regular(id, _) => {
@@ -772,24 +776,15 @@ impl Client {
                     }
                 }
 
-                let mut stats_raw = stats.write().unwrap();
-                {
-                    stats_raw.num_files += 1;
-                }
+                stats.num_files += 1;
             }
             layout::Entry::Symlink(source, _) => {
                 symlinkat(source.as_str(), Some(parent), subpath)?;
-                let mut stats_raw = stats.write().unwrap();
-                {
-                    stats_raw.num_symlinks += 1;
-                }
+                stats.num_symlinks += 1;
             }
             layout::Entry::Directory(_) => {
                 mkdirat(parent, subpath, Mode::from_bits_truncate(item.layout.mode))?;
-                let mut stats_raw = stats.write().unwrap();
-                {
-                    stats_raw.num_dirs += 1;
-                }
+                stats.num_dirs += 1;
             }
 
             // unimplemented
@@ -998,7 +993,7 @@ fn build_registry(
     Ok(registry)
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Copy, Default)]
 struct BlitStats {
     num_files: u64,
     num_symlinks: u64,
@@ -1006,6 +1001,14 @@ struct BlitStats {
 }
 
 impl BlitStats {
+    fn merge(self, other: Self) -> Self {
+        Self {
+            num_files: self.num_files + other.num_files,
+            num_symlinks: self.num_symlinks + other.num_symlinks,
+            num_dirs: self.num_dirs + other.num_dirs,
+        }
+    }
+
     fn num_entries(&self) -> u64 {
         self.num_files + self.num_symlinks + self.num_dirs
     }
