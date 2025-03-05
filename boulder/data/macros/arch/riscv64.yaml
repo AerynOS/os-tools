@@ -1,0 +1,24 @@
+# Provides -m64 builds for riscv64 build-hosts
+
+definitions:
+
+    - libsuffix      : ""
+    - build_platform : riscv64-%(vendorID)
+    - host_platform  : riscv64-%(vendorID)
+    - cc             : "%(compiler_c)"
+    - cxx            : "%(compiler_cxx)"
+    - cpp            : "%(compiler_cpp)"
+    - march          : rv64gc
+    - mtune          : generic-ooo
+    - target_triple  : "riscv64-unknown-linux-gnu"
+
+flags:
+
+    # Set architecture flags
+    - architecture:
+        llvm:
+            c         : "-march=rv64gc -mtune=generic-ooo"
+            cxx       : "-march=rv64gc -mtune=generic-ooo"
+        gcc:
+            c         : "-march=rv64gc -mtune=generic-ooo"
+            cxx       : "-march=rv64gc -mtune=generic-ooo"

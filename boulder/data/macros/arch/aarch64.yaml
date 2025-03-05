@@ -1,24 +1,22 @@
 # Provides -m64 builds for aarch64 build-hosts
 
 definitions:
-
-    - libsuffix      : ""
-    - build_platform : aarch64-%(vendorID)
-    - host_platform  : aarch64-%(vendorID)
-    - cc             : "%(compiler_c) -m64"
-    - cxx            : "%(compiler_cxx) -m64"
-    - cpp            : "%(compiler_cpp) -m64"
-    - march          : armv8-a+simd+fp+crypto
-    - mtune          : cortex-a72.cortex-a53
-    - target_triple  : "aarch64-unknown-linux-gnu"
+  - libsuffix: ""
+  - build_platform: aarch64-%(vendorID)
+  - host_platform: aarch64-%(vendorID)
+  - cc: "%(compiler_c)"
+  - cxx: "%(compiler_cxx)"
+  - cpp: "%(compiler_cpp)"
+  - march: armv8-a+simd+fp+crypto
+  - mtune: cortex-a72.cortex-a53
+  - target_triple: "aarch64-unknown-linux-gnu"
 
 flags:
-
-    # Set architecture flags
-    - architecture:
-        llvm:
-            c         : "-march=armv8-a+simd+fp+crypto -mtune=cortex-a72"
-            cxx       : "-march=armv8-a+simd+fp+crypto -mtune=cortex-a72"
-        gcc:
-            c         : "-march=armv8-a+simd+fp+crypto -mtune=cortex-a72.cortex-a53"
-            cxx       : "-march=armv8-a+simd+fp+crypto -mtune=cortex-a72.cortex-a53"
+  # Set architecture flags
+  - architecture:
+      llvm:
+        c: "-march=armv8-a+simd+fp+crypto -mtune=cortex-a72"
+        cxx: "-march=armv8-a+simd+fp+crypto -mtune=cortex-a72"
+      gcc:
+        c: "-march=armv8-a+simd+fp+crypto -mtune=cortex-a72.cortex-a53"
+        cxx: "-march=armv8-a+simd+fp+crypto -mtune=cortex-a72.cortex-a53"
