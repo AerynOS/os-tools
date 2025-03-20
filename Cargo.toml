@@ -41,7 +41,7 @@ indextree = "4.6.1"
 libsqlite3-sys = { version = "0.30.1", features = ["bundled"] }
 log = "0.4.22"
 nom = "7.1.3"
-nix = { version = "0.27.1", features = [
+nix = { version = "0.29.0", features = [
     "user",
     "fs",
     "sched",
