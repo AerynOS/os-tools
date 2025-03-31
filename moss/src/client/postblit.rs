@@ -202,12 +202,12 @@ fn execute_trigger_directly(trigger: &CompiledHandler) -> Result<(), Error> {
                     let stdout = String::from_utf8_lossy(&cmd.stdout);
                     let stderr = String::from_utf8_lossy(&cmd.stderr);
 
-                    eprintln!("Trigger exited with non-zero status code: {run} {args:?}");
-                    eprintln!("   Stdout: {stdout}");
-                    eprintln!("   Stderr: {stderr}");
+                    tracing::warn!("Trigger exited with non-zero status code: {run} {args:?}");
+                    tracing::warn!("   Stdout: {stdout}");
+                    tracing::warn!("   Stderr: {stderr}");
                 }
             } else {
-                eprintln!("Failed to execute trigger: {run} {args:?}");
+                tracing::warn!("Failed to execute trigger: {run} {args:?}");
             }
         }
         Handler::Delete { .. } => todo!(),

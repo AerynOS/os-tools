@@ -104,7 +104,7 @@ pub fn activate(args: &ArgMatches, installation: Installation) -> Result<(), Err
     let client = Client::new(environment::NAME, installation)?;
     let old_id = client.activate_state(new_id.into(), skip_triggers)?;
 
-    println!(
+    tracing::info!(
         "State {} activated {}",
         new_id.to_string().bold(),
         format!("({old_id} archived)").dim()
@@ -149,16 +149,16 @@ fn print_state(state: state::State) {
     let local_time = state.created.with_timezone(&Local);
     let formatted_time = local_time.format("%Y-%m-%d %H:%M:%S %Z");
 
-    println!(
+    tracing::info!(
         "State #{} - {}",
         state.id.to_string().bold(),
         state.summary.unwrap_or_else(|| String::from("system transaction"))
     );
-    println!("{} {formatted_time}", "Created:".bold());
+    tracing::info!("{} {formatted_time}", "Created:".bold());
     if let Some(desc) = &state.description {
-        println!("{} {desc}", "Description:".bold());
+        tracing::info!("{} {desc}", "Description:".bold());
     }
-    println!("{} {}", "Packages:".bold(), state.selections.len());
+    tracing::info!("{} {}", "Packages:".bold(), state.selections.len());
     println!();
 }
 

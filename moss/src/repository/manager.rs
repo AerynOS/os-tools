@@ -156,7 +156,7 @@ impl Manager {
 
                 self.refresh(id).await?;
 
-                pb.suspend(|| println!("{} {}", "Refreshed".green(), *id));
+                pb.suspend(|| tracing::info!("{} {}", "Refreshed".green(), *id));
 
                 Ok(())
             })
@@ -210,7 +210,7 @@ impl Manager {
 
                 self.refresh(id).await?;
 
-                pb.suspend(|| println!("{} {}", "Refreshed".green(), *id));
+                pb.suspend(|| tracing::info!("{} {}", "Refreshed".green(), *id));
 
                 Ok(()) as Result<_, Error>
             })

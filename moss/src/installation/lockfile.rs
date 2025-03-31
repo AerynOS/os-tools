@@ -40,7 +40,7 @@ pub fn acquire(path: impl Into<PathBuf>, block_msg: impl fmt::Display) -> Result
     match flock(file.as_raw_fd(), FlockArg::LockExclusiveNonblock) {
         Ok(_) => {}
         Err(nix::errno::Errno::EWOULDBLOCK) => {
-            println!("{block_msg}");
+            tracing::error!("{block_msg}");
             flock(file.as_raw_fd(), FlockArg::LockExclusive)?;
         }
         Err(e) => Err(e)?,

@@ -59,6 +59,14 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         return Ok(());
     }
 
+    tracing::trace!("search for {}", keyword);
+    for package in output.iter() {
+        tracing::trace!(
+            package_type = "synced",
+            name = %package.name,
+            summary = %package.summary
+        );
+    }
     print_columns(&output, 1);
 
     Ok(())

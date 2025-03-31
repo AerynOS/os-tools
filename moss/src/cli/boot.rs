@@ -32,21 +32,21 @@ pub fn handle(_args: &ArgMatches, installation: Installation) -> Result<(), Erro
     let manager = blsforme::Manager::new(&config)?;
     match manager.boot_environment().firmware {
         blsforme::Firmware::UEFI => {
-            println!("ESP            : {:?}", manager.boot_environment().esp());
-            println!("XBOOTLDR       : {:?}", manager.boot_environment().xbootldr());
+            tracing::info!("ESP            : {:?}", manager.boot_environment().esp());
+            tracing::info!("XBOOTLDR       : {:?}", manager.boot_environment().xbootldr());
             if is_native {
                 if let Ok(bootloader) = systemd_boot::interface::BootLoaderInterface::new(&config.vfs) {
                     let v = bootloader.get_ucs2_string(systemd_boot::interface::VariableName::Info)?;
-                    println!("Bootloader     : {v}");
+                    tracing::info!("Bootloader     : {v}");
                 }
             }
         }
         blsforme::Firmware::BIOS => {
-            println!("BOOT           : {:?}", manager.boot_environment().boot_partition());
+            tracing::info!("BOOT           : {:?}", manager.boot_environment().boot_partition());
         }
     }
 
-    println!("Global cmdline : {:?}", manager.cmdline());
+    tracing::info!("Global cmdline : {:?}", manager.cmdline());
 
     Ok(())
 }

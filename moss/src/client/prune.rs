@@ -139,7 +139,16 @@ pub fn prune(
         .collect::<Vec<_>>();
 
     // Print out the states to be removed to the user
-    println!("The following state(s) will be removed:");
+    tracing::info!("The following state(s) will be removed:");
+    for package in removals.iter() {
+        tracing::trace!(
+            type = "state",
+            action = "remove",
+            id = %package.id,
+            kind = %package.kind,
+            created = %package.created
+        );
+    }
     println!();
     autoprint_columns(&removals.iter().map(state::ColumnDisplay).collect::<Vec<_>>());
     println!();
