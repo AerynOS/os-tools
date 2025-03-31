@@ -530,7 +530,7 @@ impl Client {
 
                     // Write installed line
                     multi_progress
-                        .suspend(|| println!("{} {}{cached_tag}", "Installed".green(), package_name.clone().bold()));
+                        .suspend(|| tracing::warn!("{} {}{cached_tag}", "Installed".green(), package_name.clone().bold()));
 
                     // Inc total progress by 1
                     total_progress.inc(1);
@@ -662,7 +662,7 @@ impl Client {
         let elapsed = now.elapsed();
         let num_entries = stats.num_entries();
 
-        println!(
+        tracing::info!(
             "\n{} entries blitted in {} {}",
             num_entries.to_string().bold(),
             format!("{:.2}s", elapsed.as_secs_f32()).bold(),
