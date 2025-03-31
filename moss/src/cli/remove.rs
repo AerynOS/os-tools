@@ -26,7 +26,7 @@ pub fn command() -> Command {
         .visible_alias("rm")
         .about("Remove packages")
         .long_about("Remove packages by name")
-        .arg(arg!(<NAME> ... "packages to install").value_parser(clap::value_parser!(String)))
+        .arg(arg!(<NAME> ... "packages to remove").value_parser(clap::value_parser!(String)))
 }
 
 /// Handle execution of `moss remove`

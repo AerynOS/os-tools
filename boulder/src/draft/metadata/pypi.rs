@@ -19,17 +19,19 @@ pub fn source(upstream: &Url) -> Option<Source> {
 
     let captures = regex.captures(upstream.as_str())?;
 
-    let mut name = captures.get(1)?.as_str().to_owned();
+    let name = captures.get(1)?.as_str().to_owned();
     let version = captures.get(2)?.as_str().to_owned();
 
     let first_char = &name.chars().next().unwrap_or_default();
 
-    if !name.starts_with("python-") {
-        name = format!("python-{name}");
-    }
+    let pkg_name = if !name.starts_with("python-") {
+        format!("python-{name}")
+    } else {
+        name.to_string()
+    };
 
     Some(Source {
-        name: name.to_owned(),
+        name: pkg_name,
         version,
         homepage: format!("https://pypi.org/project/{name}"),
         uri: format!("https://files.pythonhosted.org/packages/source/{first_char}/{name}/{filename}"),

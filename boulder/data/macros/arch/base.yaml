@@ -516,8 +516,8 @@ flags               :
     # Enable LLVM polly optimisations (OFF)
     - polly:
         llvm:
-            c     : "-Xclang -mllvm -Xclang -polly -Xclang -mllvm -Xclang -polly-vectorizer=stripmine"
-            cxx   : "-Xclang -mllvm -Xclang -polly -Xclang -mllvm -Xclang -polly-vectorizer=stripmine"
+            c     : "-fplugin=LLVMPolly.so -fpass-plugin=LLVMPolly.so -Xclang -mllvm -Xclang -polly -Xclang -mllvm -Xclang -polly-vectorizer=stripmine"
+            cxx   : "-fplugin=LLVMPolly.so -fpass-plugin=LLVMPolly.so -Xclang -mllvm -Xclang -polly -Xclang -mllvm -Xclang -polly-vectorizer=stripmine"
             d     : "-polly -polly-vectorizer=stripmine"
 
     # Toggle options you want to use with llvm-bolt (OFF)
