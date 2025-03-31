@@ -27,6 +27,7 @@ use nix::{
     unistd::{close, linkat, mkdir, symlinkat},
 };
 use postblit::TriggerScope;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use stone::{payload::layout, read::PayloadKind};
 use thiserror::Error;
 use tui::{MultiProgress, ProgressBar, ProgressStyle, Styled};
@@ -649,9 +650,12 @@ impl Client {
             let root_dir = fcntl::open(&blit_target, OFlag::O_DIRECTORY | OFlag::O_RDONLY, Mode::empty())?;
 
             if let Element::Directory(_, _, children) = root {
-                for child in children {
-                    self.blit_element(root_dir, cache_fd, child, &progress, &mut stats)?;
-                }
+                stats = stats.merge(
+                    children
+                        .into_par_iter()
+                        .map(|child| self.blit_element(root_dir, cache_fd, child, &progress))
+                        .try_reduce(BlitStats::default, |a, b| Ok(a.merge(b)))?,
+                );
             }
 
             close(root_dir)?;
@@ -681,25 +685,33 @@ impl Client {
         cache: RawFd,
         element: Element<'_, PendingFile>,
         progress: &ProgressBar,
-        stats: &mut BlitStats,
-    ) -> Result<(), Error> {
+    ) -> Result<BlitStats, Error> {
+        let mut stats = BlitStats::default();
+
         progress.inc(1);
         match element {
             Element::Directory(name, item, children) => {
                 // Construct within the parent
-                self.blit_element_item(parent, cache, name, item, stats)?;
+                self.blit_element_item(parent, cache, name, item, &mut stats)?;
 
                 // open the new dir
                 let newdir = fcntl::openat(parent, name, OFlag::O_RDONLY | OFlag::O_DIRECTORY, Mode::empty())?;
-                for child in children.into_iter() {
-                    self.blit_element(newdir, cache, child, progress, stats)?;
-                }
+
+                stats = stats.merge(
+                    children
+                        .into_par_iter()
+                        .map(|child| self.blit_element(newdir, cache, child, progress))
+                        .try_reduce(BlitStats::default, |a, b| Ok(a.merge(b)))?,
+                );
+
                 close(newdir)?;
-                Ok(())
+
+                Ok(stats)
             }
             Element::Child(name, item) => {
-                self.blit_element_item(parent, cache, name, item, stats)?;
-                Ok(())
+                self.blit_element_item(parent, cache, name, item, &mut stats)?;
+
+                Ok(stats)
             }
         }
     }
@@ -981,7 +993,7 @@ fn build_registry(
     Ok(registry)
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Copy, Default)]
 struct BlitStats {
     num_files: u64,
     num_symlinks: u64,
@@ -989,6 +1001,14 @@ struct BlitStats {
 }
 
 impl BlitStats {
+    fn merge(self, other: Self) -> Self {
+        Self {
+            num_files: self.num_files + other.num_files,
+            num_symlinks: self.num_symlinks + other.num_symlinks,
+            num_dirs: self.num_dirs + other.num_dirs,
+        }
+    }
+
     fn num_entries(&self) -> u64 {
         self.num_files + self.num_symlinks + self.num_dirs
     }
