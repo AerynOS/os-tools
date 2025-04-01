@@ -367,7 +367,7 @@ dependencies = [
  "blake3",
  "gpt",
  "log",
- "nix 0.29.0",
+ "nix",
  "os-info",
  "serde",
  "serde_json",
@@ -397,7 +397,7 @@ dependencies = [
  "itertools 0.13.0",
  "mailparse",
  "moss",
- "nix 0.27.1",
+ "nix",
  "regex",
  "reqwest",
  "serde",
@@ -549,9 +549,9 @@ dependencies = [
 
 [[package]]
 name = "clap"
-version = "4.5.32"
+version = "4.5.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6088f3ae8c3608d19260cd7445411865a485688711b78b5be70d78cd96136f83"
+checksum = "e958897981290da2a852763fe9cdb89cd36977a5d729023127095fa94d95e2ff"
 dependencies = [
  "clap_builder",
  "clap_derive",
@@ -559,9 +559,9 @@ dependencies = [
 
 [[package]]
 name = "clap_builder"
-version = "4.5.32"
+version = "4.5.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22a7ef7f676155edfb82daa97f99441f3ebf4a58d5e32f295a56259f1b6facc8"
+checksum = "83b0f35019843db2160b5bb19ae09b4e6411ac33fc6a712003c33e03090e2489"
 dependencies = [
  "anstream",
  "anstyle",
@@ -656,7 +656,7 @@ name = "container"
 version = "0.25.1"
 dependencies = [
  "fs-err",
- "nix 0.27.1",
+ "nix",
  "strum",
  "thiserror 2.0.12",
 ]
@@ -1798,9 +1798,9 @@ dependencies = [
 
 [[package]]
 name = "log"
-version = "0.4.26"
+version = "0.4.27"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "30bde2b3dc3671ae49d8e2e9f044c7c005836e7a023ee57cffa25ab82764bb9e"
+checksum = "13dc2df351e3202783a1fe0d44375f7295ffb4049267b0f3018346dc122a1d94"
 
 [[package]]
 name = "mailparse"
@@ -1914,7 +1914,7 @@ dependencies = [
  "itertools 0.13.0",
  "libsqlite3-sys",
  "log",
- "nix 0.27.1",
+ "nix",
  "os-info",
  "rayon",
  "reqwest",
@@ -1932,17 +1932,6 @@ dependencies = [
  "vfs",
  "xxhash-rust",
  "zbus",
-]
-
-[[package]]
-name = "nix"
-version = "0.27.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2eb04e9c688eff1c89d72b407f168cf79bb9e867a9d3323ed6c01519eb9cc053"
-dependencies = [
- "bitflags",
- "cfg-if",
- "libc",
 ]
 
 [[package]]
@@ -3076,7 +3065,7 @@ source = "git+https://github.com/AerynOS/blsforme.git?rev=5d9aa879be140dc32d952f
 dependencies = [
  "gpt",
  "log",
- "nix 0.29.0",
+ "nix",
  "superblock",
  "thiserror 2.0.12",
 ]
@@ -3800,7 +3789,7 @@ dependencies = [
  "futures-core",
  "futures-lite",
  "hex",
- "nix 0.29.0",
+ "nix",
  "ordered-stream",
  "serde",
  "serde_repr",
