@@ -49,7 +49,7 @@ The `.stone` format is a structured binary package format designed for modern, r
  - [x] Transactions
  - [x] Installation support
  - [x] Removal support
- - [x] `sync` support (See: https://github.com/serpent-os/moss-rs/pull/73#issuecomment-1802672634)
+ - [x] `sync` support
  - [x] Triggers
  - [x] GC / cleanups of latent states
  - [ ] System model
@@ -59,10 +59,10 @@ The `.stone` format is a structured binary package format designed for modern, r
 ## 🚀 Onboarding
 
 ```bash
-# clone the serpent-os moss repo somewhere reasonable
-mkdir -pv ~/repos/serpent-os/
-cd ~/repos/serpent-os/
-git clone https://github.com/serpent-os/tools.git
+# clone the AerynOS os-tools repo somewhere reasonable
+mkdir -pv ~/repos/aeryn-os/
+cd ~/repos/aeryn-os/
+git clone https://github.com/aerynos/os-tools.git
 cd tools/
 
 # Install a few prerequisites (this how you'd do it on AerynOS)
@@ -83,7 +83,7 @@ sudo usermod --add-subuids 1000000-1065535 --add-subgids 1000000-1065535 root
 sudo usermod --add-subuids 1065536-1131071 --add-subgids 1065536-1131071 ${USER}
 ```
 
-**NB:** If you want to build .stones with boulder on your _non-serpent_ host system, you will need to specify the
+**NB:** If you want to build .stones with boulder on your _non-aeryn_ host system, you will need to specify the
 location of the boulder data files (which live in ${HOME}/.local/share/boulder if you used `just get-started` like above):
 
 ```bash
@@ -93,7 +93,7 @@ alias boulder="${HOME}/.local/bin/boulder --data-dir=${HOME}/.local/share/boulde
 
 ## 📚 Documentation
 
-See [docs.serpentos.com](https://docs.serpentos.com/).
+See [aerynos.dev](https://aerynos.dev/).
 
 
 ## 🧪 Experiment
@@ -118,7 +118,7 @@ moss -D sosroot/ list available
 moss -D sosroot/ install systemd bash libx11-32bit
 ```
 
-If you want to create systemd-nspawn roots or bootable VMs, please check out the [img-tests](https://github.com/serpent-os/img-tests) repository.
+If you want to create systemd-nspawn roots or bootable VMs, please check out the [img-tests](https://github.com/aeryn-os/img-tests) repository.
 
 
 ## 🤝 Contributing changes

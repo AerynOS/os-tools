@@ -47,7 +47,7 @@ get-started: (build "boulder") (build "moss")
   @echo ""
   @echo "Done."
   @echo ""
-  @echo "The Serpent OS documentation lives at https://docs.serpentos.com"
+  @echo "The Aeryn OS documentation lives at https://aerynos.dev"
   @echo ""
 
 # Fix code issues
@@ -74,9 +74,9 @@ test: lint
   cargo test --all
 
 # Run all DB migrations
-migrate: (diesel "meta" "migration run") (diesel "layout" "migration run") (diesel "state" "migration run")  
+migrate: (diesel "meta" "migration run") (diesel "layout" "migration run") (diesel "state" "migration run")
 # Rerun all DB migrations
-migrate-redo: (diesel "meta" "migration redo") (diesel "layout" "migration redo") (diesel "state" "migration redo")  
+migrate-redo: (diesel "meta" "migration redo") (diesel "layout" "migration redo") (diesel "state" "migration redo")
 
 [private]
 diesel db +ARGS:
