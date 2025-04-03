@@ -24,11 +24,11 @@ definitions:
     - sysconfdir     : "/etc"
     - libdir         : "%(prefix)/lib%(libsuffix)"
     - libexecdir     : "%(libdir)/%(name)"
-    - builddir       : "serpent_builddir"
+    - builddir       : "aerynos_builddir"
 
     # The vendorID is encoded into the triplet, toolchain, builds, etc.
     # It must match the triplet from bootstrap-scripts.
-    - vendorID       : "serpent-linux"
+    - vendorID       : "aerynos-linux"
 
     # Must be set for CC/CXX/CPP to work
     - cc             : "%(compiler_c)"
