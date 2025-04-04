@@ -4,7 +4,7 @@ actions:
         description: Run meson with the default options in a subdirectory
         command: |
             test -e ./meson.build || ( echo "%%meson: The ./meson.build script could not be found" ; exit 1 )
-            CFLAGS="${CFLAGS}" CXXFLAGS="${CXXFLAGS}" LDFLAGS="${LDFLAGS}" meson setup %(options_meson)
+            meson setup %(options_meson) "%(builddir)"
         dependencies:
             - binary(cmake)
             - binary(meson)
@@ -14,7 +14,7 @@ actions:
         description: Run meson with unity build enabled
         command: |
             test -e ./meson.build || ( echo "%%meson: The ./meson.build script could not be found" ; exit 1 )
-            CFLAGS="${CFLAGS}" CXXFLAGS="${CXXFLAGS}" LDFLAGS="${LDFLAGS}" meson setup --unity on %(options_meson)
+            meson setup --unity on %(options_meson) "%(builddir)"
         dependencies:
             - binary(cmake)
             - binary(meson)
@@ -23,7 +23,7 @@ actions:
     - meson_build:
         description: Build the meson project
         command: |
-            meson compile -v -j "%(jobs)" -C "%(builddir)"
+            meson compile --verbose -j "%(jobs)" -C "%(builddir)"
         dependencies:
             - binary(meson)
 
@@ -37,7 +37,7 @@ actions:
     - meson_test:
         description: Run meson test
         command: |
-            meson test --no-rebuild --print-errorlogs -j "%(jobs)" -C "%(builddir)"
+            meson test --no-rebuild --print-errorlogs --verbose -j "%(jobs)" -C "%(builddir)"
         dependencies:
             - binary(meson)
 
@@ -45,10 +45,17 @@ definitions:
 
     # Default meson options as passed to meson
     - options_meson: |
-        --prefix="%(prefix)" \
         --buildtype="plain" \
+        --prefix="%(prefix)" \
         --libdir="lib%(libsuffix)" \
+        --bindir="%(bindir)" \
+        --sbindir="%(sbindir)" \
         --libexecdir="lib%(libsuffix)/%(name)" \
+        --includedir="%(includedir)" \
+        --datadir="%(datadir)" \
+        --mandir="%(mandir)" \
+        --infodir="%(infodir)" \
+        --localedir="%(localedir)" \
         --sysconfdir="%(sysconfdir)" \
         --localstatedir="%(localstatedir)" \
-        "%(builddir)"
+        --wrap-mode="nodownload"

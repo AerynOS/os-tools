@@ -96,7 +96,7 @@ definitions:
 
     # Default options for Qt6 builds
     - options_cmake_qt6: |
-        %(options_cmake) \
+        %(options_cmake_ninja) \
         -DCMAKE_INTERPROCEDURAL_OPTIMIZATION=ON \
         -DCMAKE_MESSAGE_LOG_LEVEL=STATUS \
         -DINSTALL_ARCHDATADIR=%(libdir)/qt6 \
@@ -114,7 +114,7 @@ definitions:
 
     # Default options for KF6/Qt6 builds
     - options_cmake_kf6: |
-        %(options_cmake) \
+        %(options_cmake_ninja) \
         -DCMAKE_INSTALL_LIBEXECDIR_kf6:PATH=%(libdir)/kf6 \
         -DKDE_INSTALL_LIBEXECDIR:PATH=%(libdir)/kf6 \
         -DKDE_INSTALL_USE_QT_SYS_PATHS:BOOL=ON \
