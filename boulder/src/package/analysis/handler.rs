@@ -149,6 +149,14 @@ pub fn python(bucket: &mut BucketMut<'_>, info: &mut PathInfo) -> Result<Respons
         name: python_name.to_string(),
     });
 
+    if python_name.contains("_") {
+        /* Insert normalized generic provider */
+        bucket.providers.insert(Provider {
+            kind: dependency::Kind::Python,
+            name: python_name.replace("_", "-"),
+        });
+    }
+
     let output = Command::new("/usr/bin/python3")
         .arg("-c")
         .arg("import platform; print(f'{platform.python_version_tuple()[0]}.{platform.python_version_tuple()[1]}')")
@@ -161,6 +169,18 @@ pub fn python(bucket: &mut BucketMut<'_>, info: &mut PathInfo) -> Result<Respons
         kind: dependency::Kind::Python,
         name: format!("{python_name}({})", &python_version.to_string().trim_end()),
     });
+
+    if python_name.contains("_") {
+        /* Insert normalized versioned provider */
+        bucket.providers.insert(Provider {
+            kind: dependency::Kind::Python,
+            name: format!(
+                "{}({})",
+                python_name.replace("_", "-"),
+                &python_version.to_string().trim_end()
+            ),
+        });
+    }
 
     /* Now parse dependencies */
     let dist_path = info
