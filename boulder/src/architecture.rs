@@ -17,6 +17,10 @@ pub const fn host() -> Architecture {
     {
         Architecture::Aarch64
     }
+    #[cfg(target_arch = "riscv64")]
+    {
+        Architecture::Riscv64
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, strum::Display)]
@@ -25,6 +29,7 @@ pub enum Architecture {
     X86_64,
     X86,
     Aarch64,
+    Riscv64,
 }
 
 impl Architecture {
@@ -33,6 +38,7 @@ impl Architecture {
             Architecture::X86_64 => true,
             Architecture::X86 => false,
             Architecture::Aarch64 => true,
+            Architecture::Riscv64 => true,
         }
     }
 }
