@@ -20,70 +20,31 @@ use crate::environment;
 /// Shared client for tcp socket reuse and connection limit
 static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
 
-fn get_https_proxy() -> Option<reqwest::Proxy> {
-    let lower_case = var_os("https_proxy");
-    let upper_case = var_os("HTTPS_PROXY");
-    Some(
-        reqwest::Proxy::https(
-            (match (upper_case, lower_case) {
-                (Some(upper), Some(_)) => upper,
-                (Some(upper), None) => upper,
-                (None, Some(lower)) => lower,
-                (None, None) => return None,
-            })
-            .to_str()
-            .unwrap(),
-        )
-        .unwrap(),
-    )
-}
-
-fn get_http_proxy() -> Option<reqwest::Proxy> {
-    let lower_case = var_os("http_proxy");
-    let upper_case = var_os("HTTP_PROXY");
-    Some(
-        reqwest::Proxy::http(
-            (match (upper_case, lower_case) {
-                (Some(upper), Some(_)) => upper,
-                (Some(upper), None) => upper,
-                (None, Some(lower)) => lower,
-                (None, None) => return None,
-            })
-            .to_str()
-            .unwrap(),
-        )
-        .unwrap(),
-    )
+fn get_proxy() -> Option<reqwest::Proxy> {
+    if let Some(proxy_os_string) = ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy"]
+        .iter()
+        .find_map(var_os)
+    {
+        Some(reqwest::Proxy::all(proxy_os_string.to_str().expect("proxy_os_string to str")).expect("proxy intoUrl"))
+    } else {
+        None
+    }
 }
 
 fn get_client() -> &'static reqwest::Client {
-    let https_proxy = get_https_proxy();
-    let http_proxy = get_http_proxy();
-    CLIENT.get_or_init(|| match (https_proxy, http_proxy) {
-        (Some(https_proxy), Some(http_proxy)) => reqwest::ClientBuilder::new()
-            .referer(false)
-            .user_agent(concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")))
-            .proxy(https_proxy)
-            .proxy(http_proxy)
-            .build()
-            .expect("build reqwest client"),
-        (Some(https_proxy), None) => reqwest::ClientBuilder::new()
-            .referer(false)
-            .user_agent(concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")))
-            .proxy(https_proxy)
-            .build()
-            .expect("build reqwest client"),
-        (None, Some(http_proxy)) => reqwest::ClientBuilder::new()
-            .referer(false)
-            .user_agent(concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")))
-            .proxy(http_proxy)
-            .build()
-            .expect("build reqwest client"),
-        (None, None) => reqwest::ClientBuilder::new()
-            .referer(false)
-            .user_agent(concat!(env!("CARGO_PKG_NAME"), "/", env!("CARGO_PKG_VERSION")))
-            .build()
-            .expect("build reqwest client"),
+    CLIENT.get_or_init(|| {
+        let client_builder = reqwest::ClientBuilder::new().referer(false).user_agent(concat!(
+            env!("CARGO_PKG_NAME"),
+            "/",
+            env!("CARGO_PKG_VERSION")
+        ));
+
+        match get_proxy() {
+            Some(proxy) => client_builder.proxy(proxy),
+            None => client_builder,
+        }
+        .build()
+        .expect("build reqwest client")
     })
 }
 
