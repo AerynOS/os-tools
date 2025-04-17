@@ -1,0 +1,25 @@
+actions:
+    - ninja:
+        description: Use ninja, without any additional arguments this will run the default target (likely the build)
+        command: |
+            %(ninja_common)
+        dependencies:
+            - binary(ninja)
+
+    - ninja_install:
+        description: Use ninja to install the build results to the installroot
+        command: |
+            DESTDIR="%(installroot)" %(ninja_common) install
+        dependencies:
+            - binary(ninja)
+
+    - ninja_test:
+        description: Use ninja to run the test suite
+        command: |
+            %(ninja_common) test
+        dependencies:
+            - binary(ninja)
+
+definitions:
+    - ninja_common: |
+        ninja --verbose -j "%(jobs)" -C "%(builddir)"
