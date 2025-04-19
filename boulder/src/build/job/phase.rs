@@ -361,6 +361,11 @@ fn add_tuning(
             .iter()
             .filter_map(|flag| flag.get(tuning::CompilerFlag::Cxx, toolchain)),
     );
+    let fflags = fmt_flags(
+        flags
+            .iter()
+            .filter_map(|flag| flag.get(tuning::CompilerFlag::F, toolchain)),
+    );
     let ldflags = fmt_flags(
         flags
             .iter()
@@ -385,6 +390,7 @@ fn add_tuning(
 
     parser.add_definition("cflags", cflags);
     parser.add_definition("cxxflags", cxxflags);
+    parser.add_definition("fflags", fflags);
     parser.add_definition("ldflags", ldflags);
     parser.add_definition("dflags", dflags);
     parser.add_definition("rustflags", rustflags);
