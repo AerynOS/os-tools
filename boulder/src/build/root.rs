@@ -196,9 +196,12 @@ const BASE_PACKAGES: &[&str] = &[
     "util-linux",
     // Needed for chroot
     "binary(git)",
+    "binary(hx)",
+    "binary(less)",
     "binary(nano)",
-    "binary(vim)",
     "binary(ps)",
+    "binary(rg)",
+    "binary(vim)",
 ];
 const BASE32_PACKAGES: &[&str] = &["glibc-32bit-devel"];
 
