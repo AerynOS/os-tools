@@ -29,7 +29,7 @@ diesel = { version = "2.2.1", features = [
     "returning_clauses_for_sqlite_3_35",
 ] }
 diesel_migrations = "2.2.0"
-dirs = "5.0.1"
+dirs = "6.0.0"
 elf = "0.7.4"
 indicatif = "0.17.8"
 itertools = "0.13.0"
