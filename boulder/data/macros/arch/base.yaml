@@ -55,7 +55,7 @@ actions              :
     - scriptBase     :
         description: scriptBase is merged to the top of all newly generated build scripts.
         command: |
-            #!/bin/sh
+            #!/usr/bin/bash
             set -e
             set -x
             TERM="dumb"; export TERM
