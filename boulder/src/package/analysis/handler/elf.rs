@@ -44,7 +44,13 @@ pub fn elf(bucket: &mut BucketMut<'_>, info: &mut PathInfo) -> Result<Response, 
     };
 
     let machine_isa = to_str::e_machine_to_str(elf.ehdr.e_machine)
-        .and_then(|s| s.strip_prefix("EM_"))
+        .and_then(|s| {
+            if s.starts_with("EM_") {
+                s.strip_prefix("EM_")
+            } else {
+                Some(s)
+            }
+        })
         .unwrap_or_default()
         .to_lowercase();
     let bit_size = elf.ehdr.class;
