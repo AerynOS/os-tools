@@ -32,7 +32,7 @@ diesel_migrations = "2.2.0"
 dirs = "6.0.0"
 elf = "0.7.4"
 indicatif = "0.17.8"
-itertools = "0.13.0"
+itertools = "0.14.0"
 fs-err = { version = "3.0.0", features = ["tokio"] }
 futures-util = "0.3.31"
 glob = "0.3.1"
@@ -71,7 +71,7 @@ serde = { version = "1.0.204", features = ["derive"] }
 serde_json = "1.0.120"
 serde_yaml = "0.9.34"
 sha2 = "0.10.8"
-strum = { version = "0.26.3", features = ["derive"] }
+strum = { version = "0.27.1", features = ["derive"] }
 thiserror = "2.0.3"
 thread-priority = "1.1.0"
 tokio = { version = "1.38.0", features = ["full"] }
