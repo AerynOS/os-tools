@@ -3,28 +3,31 @@
 definitions:
 
     # Basic variables required for packages to build correctly
-    - libsuffix      : ""
-    - prefix         : "/usr"
-    - bindir         : "%(prefix)/bin"
-    - sbindir        : "%(prefix)/sbin"
-    - includedir     : "%(prefix)/include"
-    - datadir        : "%(prefix)/share"
-    - localedir      : "%(datadir)/locale"
-    - infodir        : "%(datadir)/info"
-    - mandir         : "%(datadir)/man"
-    - docdir         : "%(datadir)/doc"
-    - vendordir      : "%(datadir)/defaults"
-    - completionsdir : "%(datadir)/bash-completion/completions"
-    - tmpfilesdir    : "%(prefix)/lib/tmpfiles.d"
-    - sysusersdir    : "%(prefix)/lib/sysusers.d"
-    - udevrulesdir   : "%(prefix)/lib/udev/rules.d"
-    - localstatedir  : "/var"
-    - sharedstatedir : "%(localstatedir)/lib"
-    - runstatedir    : "/run"
-    - sysconfdir     : "/etc"
-    - libdir         : "%(prefix)/lib%(libsuffix)"
-    - libexecdir     : "%(libdir)/%(name)"
-    - builddir       : "serpent_builddir"
+    - libsuffix          : ""
+    - prefix             : "/usr"
+    - bindir             : "%(prefix)/bin"
+    - sbindir            : "%(prefix)/sbin"
+    - includedir         : "%(prefix)/include"
+    - datadir            : "%(prefix)/share"
+    - localedir          : "%(datadir)/locale"
+    - infodir            : "%(datadir)/info"
+    - mandir             : "%(datadir)/man"
+    - docdir             : "%(datadir)/doc"
+    - vendordir          : "%(datadir)/defaults"
+    - completionsdir     : "%(datadir)/bash-completion/completions"
+    - zshcompletionsdir  : "%(datadir)/zsh/site-functions"
+    - fishcompletionsdir : "%(datadir)/fish/vendor_completions.d"
+    - elvishcompletions  : "%(datadir)/elvish/lib"
+    - tmpfilesdir        : "%(prefix)/lib/tmpfiles.d"
+    - sysusersdir        : "%(prefix)/lib/sysusers.d"
+    - udevrulesdir       : "%(prefix)/lib/udev/rules.d"
+    - localstatedir      : "/var"
+    - sharedstatedir     : "%(localstatedir)/lib"
+    - runstatedir        : "/run"
+    - sysconfdir         : "/etc"
+    - libdir             : "%(prefix)/lib%(libsuffix)"
+    - libexecdir         : "%(libdir)/%(name)"
+    - builddir           : "serpent_builddir"
 
     # The vendorID is encoded into the triplet, toolchain, builds, etc.
     # It must match the triplet from bootstrap-scripts.
@@ -95,6 +98,7 @@ actions              :
             LC_ALL="en_US.UTF-8"; export LC_ALL
             test -d "%(workdir)" || (echo "The work directory %(workdir) does not exist"; exit 1)
             cd "%(workdir)" && echo "The work directory %%(workdir) is ${PWD}"
+            CCACHE_BASEDIR="%(workdir)"; export CCACHE_BASEDIR
 
 defaultTuningGroups :
     - asneeded
