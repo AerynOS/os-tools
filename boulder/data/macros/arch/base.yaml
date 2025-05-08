@@ -479,22 +479,16 @@ flags               :
 
     # Compress debug symbols with Zstd (ON)
     - compress-debug-zstd:
-        c         : "-Wa,--compress-debug-sections=zstd"
-        cxx       : "-Wa,--compress-debug-sections=zstd"
         ld        : "-Wl,--compress-debug-sections=zstd"
         rust      : "-C link-args=-Wl,--compress-debug-sections=zstd"
 
     # Compress debug symbols with zlib (OFF)
     - compress-debug-zlib:
-        c         : "-Wa,--compress-debug-sections=zlib"
-        cxx       : "-Wa,--compress-debug-sections=zlib"
         ld        : "-Wl,--compress-debug-sections=zlib"
         rust      : "-C link-args=-Wl,--compress-debug-sections=zlib"
 
     # Don't compress debug symbols (OFF)
     - compress-debug-none:
-        c         : "-Wa,--compress-debug-sections=none"
-        cxx       : "-Wa,--compress-debug-sections=none"
         ld        : "-Wl,--compress-debug-sections=none"
         rust      : "-C link-args=-Wl,--compress-debug-sections=none"
 
