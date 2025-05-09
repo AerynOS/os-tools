@@ -10,6 +10,9 @@ container = { path = "../crates/container" }
 dag = { path = "../crates/dag" }
 tools_buildinfo = { path = "../crates/tools_buildinfo" }
 stone = { path = "../crates/stone" }
+tracing = "0.1.41"
+tracing-appender = "0.2.3"
+tracing-subscriber = { version = "0.3.19", features = ["json", "serde", "env-filter"] }
 triggers = { path = "../crates/triggers" }
 tui = { path = "../crates/tui" }
 vfs = { path = "../crates/vfs" }
