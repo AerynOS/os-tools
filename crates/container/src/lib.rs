@@ -123,33 +123,27 @@ impl Container {
             flags |= CloneFlags::CLONE_NEWNET;
         }
 
-        let pid = unsafe {
-            clone(
-                Box::new(|| match enter(&self, sync, &mut f) {
-                    Ok(_) => 0,
-                    // Write error back to parent process
-                    Err(error) => {
-                        let error = format_error(error);
-                        let mut pos = 0;
+        let clone_cb = Box::new(|| match enter(&self, sync, &mut f) {
+            Ok(_) => 0,
+            // Write error back to parent process
+            Err(error) => {
+                let error = format_error(error);
+                let mut pos = 0;
 
-                        while pos < error.len() {
-                            let Ok(len) = write(sync.1, &error.as_bytes()[pos..]) else {
-                                break;
-                            };
+                while pos < error.len() {
+                    let Ok(len) = write(sync.1, &error.as_bytes()[pos..]) else {
+                        break;
+                    };
 
-                            pos += len;
-                        }
+                    pos += len;
+                }
 
-                        let _ = close(sync.1);
+                let _ = close(sync.1);
 
-                        1
-                    }
-                }),
-                &mut *addr_of_mut!(STACK),
-                flags,
-                Some(SIGCHLD),
-            )?
-        };
+                1
+            }
+        });
+        let pid = unsafe { clone(clone_cb, &mut *addr_of_mut!(STACK), flags, Some(SIGCHLD))? };
 
         // Update uid / gid map to map current user to root in container
         if rootless {

@@ -10,7 +10,7 @@ use std::{
     sync::Arc,
 };
 
-use fs_err::{self as fs, File};
+use fs_err::File;
 use nix::fcntl::{flock, FlockArg};
 use thiserror::Error;
 
@@ -31,11 +31,7 @@ pub struct Lock(Arc<File>);
 pub fn acquire(path: impl Into<PathBuf>, block_msg: impl fmt::Display) -> Result<Lock, Error> {
     let path = path.into();
 
-    let file = fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(false)
-        .open(path)?;
+    let file = File::options().create(true).write(true).truncate(false).open(path)?;
 
     match flock(file.as_raw_fd(), FlockArg::LockExclusiveNonblock) {
         Ok(_) => {}

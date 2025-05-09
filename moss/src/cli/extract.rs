@@ -56,7 +56,7 @@ pub fn handle(args: &ArgMatches) -> Result<(), Error> {
         }
 
         if let Some(content) = content {
-            let content_file = fs::OpenOptions::new()
+            let content_file = File::options()
                 .read(true)
                 .write(true)
                 .create(true)
