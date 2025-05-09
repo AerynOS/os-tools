@@ -387,7 +387,7 @@ dependencies = [
  "itertools 0.14.0",
  "mailparse",
  "moss",
- "nix 0.27.1",
+ "nix 0.30.1",
  "regex",
  "reqwest",
  "serde",
@@ -646,7 +646,7 @@ name = "container"
 version = "0.25.1"
 dependencies = [
  "fs-err",
- "nix 0.27.1",
+ "nix 0.30.1",
  "strum",
  "thiserror 2.0.12",
 ]
@@ -1888,7 +1888,7 @@ dependencies = [
  "itertools 0.14.0",
  "libsqlite3-sys",
  "log",
- "nix 0.27.1",
+ "nix 0.30.1",
  "os-info",
  "rayon",
  "reqwest",
@@ -1906,17 +1906,6 @@ dependencies = [
  "vfs",
  "xxhash-rust",
  "zbus",
-]
-
-[[package]]
-name = "nix"
-version = "0.27.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2eb04e9c688eff1c89d72b407f168cf79bb9e867a9d3323ed6c01519eb9cc053"
-dependencies = [
- "bitflags",
- "cfg-if",
- "libc",
 ]
 
 [[package]]
