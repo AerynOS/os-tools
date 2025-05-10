@@ -1,49 +1,112 @@
 actions:
 
-    - configure:
-        description: Perform ./configure with the default options
-        command: |
-            test -x ./configure || ( echo "%%configure: The ./configure script could not be found" ; exit 1 )
-            ./configure %(options_configure)
-        dependencies:
-            - binary(autoconf)
-            - binary(automake)
+    # We default to using CONFIG_SHELL==SHELL=/usr/bin/dash because our tests show that it is around
+    # +20% faster than bash on startup, which matters on large configure runs with hundreds of tests.
+    #
+    # To use bash instead of dash, use the bash-specific *_with_bash version of the relevant macro action.
 
-    # TIP: Add V=1 VERBOSE=1 after '%make' in the recipe if you need a more verbose build
-    - make:
-        description: Perform a make
+    - autogen:
+        description: Run autogen.sh script with dash, attempting to only run ./configure once
         command: |
-            make -j "%(jobs)"
-        dependencies:
-            - binary(make)
-
-    - make_install:
-        description: Install results of build to the destination directory
-        command: |
-            %make install DESTDIR="%(installroot)"
-        dependencies:
-            - binary(make)
-
-    - reconfigure:
-        description: Re autotools-configure a project without an autogen.sh script
-        command: |
-            autoreconf -vfi || ( echo "%%reconfigure: Failed to run autoreconf"; exit 1 )
+            NOCONFIGURE="noconfigure"; export NOCONFIGURE
+            # Often defaults to /bin/sh
+            CONFIG_SHELL=/usr/bin/dash; export CONFIG_SHELL
+            SHELL=/usr/bin/dash; export SHELL
+            /usr/bin/dash ./autogen.sh %(options_configure)
+            echo "Configured to use '$(head -n1 ./configure)' to execute ./configure"
             %configure
         dependencies:
             - binary(autoconf)
             - binary(automake)
             - binary(autopoint)
 
-    - autogen:
-        description: Run autogen.sh script, attempting to only configure once
+    - autogen_with_bash:
+        description: Run autogen.sh script with GNU Bash, attempting to only run ./configure once
         command: |
             NOCONFIGURE="noconfigure"; export NOCONFIGURE
-            sh ./autogen.sh %(options_configure)
-            ./configure %(options_configure)
+            CONFIG_SHELL=/usr/bin/bash; export CONFIG_SHELL
+            SHELL=/usr/bin/bash; export SHELL
+            /usr/bin/bash ./autogen.sh %(options_configure)
+            echo "Configured to use '$(head -n1 ./configure)' to execute ./configure"
+            %configure_with_bash
         dependencies:
             - binary(autoconf)
             - binary(automake)
             - binary(autopoint)
+
+    - configure:
+        description: |
+            Perform ./configure with the default options using the dash shell.
+            In our testing, dash has been shown to be +20% faster to start up than bash on average.
+        command: |
+            test -x ./configure || ( echo "%%configure: The ./configure script could not be found" ; exit 1 )
+            # Rewrite any '#!*/bin/sh' shebang to '#!/usr/bin/dash' instead
+            # '-E' means "Use Extended Regular Expressions" (easier to write and read)
+            CONFIG_SHELL=/usr/bin/dash; export CONFIG_SHELL
+            SHELL=/usr/bin/dash; export SHELL
+            echo "Explicitly using dash to execute ./configure"
+            /usr/bin/dash ./configure %(options_configure)
+        dependencies:
+            - binary(autoconf)
+            - binary(automake)
+
+    - configure_with_bash:
+        description: Perform ./configure with default options using the GNU Bash shell.
+        command: |
+            test -x ./configure || ( echo "%%configure: The ./configure script could not be found" ; exit 1 )
+            CONFIG_SHELL=/usr/bin/dash; export CONFIG_SHELL
+            SHELL=/usr/bin/dash; export SHELL
+            echo "Explicitly using GNU Bash to execute ./configure"
+            /usr/bin/bash ./configure %(options_configure)
+        dependencies:
+            - binary(autoconf)
+            - binary(automake)
+
+    - make:
+        description: |
+            Perform a `make` to build the current Makefile.
+            Tip: Add V=1 VERBOSE=1 after `%%make` in the recipe if you need a more verbose build.
+        command: |
+            make -j "%(jobs)"
+        dependencies:
+            - binary(make)
+
+    - make_install:
+        description: Use make to install the results of a build to the destination directory
+        Tip: If a make install operation falls over with parallel builds, try `%%make_install -j1` instead.
+        command: |
+            %make install DESTDIR="%(installroot)"
+        dependencies:
+            - binary(make)
+
+    - reconfigure:
+        description: Re autotools-configure a project without an autogen.sh script using dash
+        command: |
+            # The autoreconf perl script defaults to /bin/sh if SHELL is not set
+            CONFIG_SHELL=/usr/bin/dash; export CONFIG_SHELL
+            SHELL=/usr/bin/dash; export SHELL
+            autoreconf -vfi || ( echo "%%reconfigure: Failed to run autoreconf" ; exit 1 )
+            echo "Configured to use '$(head -n1 ./configure)' to execute ./configure"
+            %configure
+        dependencies:
+            - binary(autoconf)
+            - binary(automake)
+            - binary(autopoint)
+
+    - reconfigure_with_bash:
+        description: Re autotools-configure a project without an autogen.sh script using GNU Bash
+        command: |
+            # The autoreconf perl script defaults to /bin/sh if SHELL is not set
+            CONFIG_SHELL=/usr/bin/bash; export CONFIG_SHELL
+            SHELL=/usr/bin/bash; export SHELL
+            autoreconf -vfi || ( echo "%%reconfigure: Failed to run autoreconf" ; exit 1 )
+            echo "Configured to use '$(head -n1 ./configure)' to execute ./configure"
+            %configure_with_bash
+        dependencies:
+            - binary(autoconf)
+            - binary(automake)
+            - binary(autopoint)
+
 
 definitions:
 

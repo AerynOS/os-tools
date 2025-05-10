@@ -205,7 +205,7 @@ impl Builder {
                                 // Write env to $HOME/.profile
                                 fs::write(build_dir.join(".profile"), format_profile(script))?;
 
-                                let mut command = process::Command::new("/bin/bash")
+                                let mut command = process::Command::new("/usr/bin/bash")
                                     .arg("--login")
                                     .env_clear()
                                     .env("HOME", build_dir)
@@ -228,7 +228,7 @@ impl Builder {
                                 let script_path = "/tmp/script";
                                 fs::write(script_path, content).unwrap();
 
-                                let result = logged(*phase, is_pgo, "/bin/sh", |command| {
+                                let result = logged(*phase, is_pgo, "/usr/bin/bash", |command| {
                                     command
                                         .arg(script_path)
                                         .env_clear()
