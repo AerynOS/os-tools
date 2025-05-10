@@ -234,7 +234,7 @@ pub fn synchronize(client: &Client, state: &State) -> Result<(), Error> {
 
     for entry in entries.iter_mut() {
         if let Err(e) = entry.load_cmdline_snippets(&config) {
-            log::warn!("Failed to load cmdline snippets: {}", e);
+            log::warn!("Failed to load cmdline snippets: {e}");
         }
     }
     // no usable entries, lets get out of here.
