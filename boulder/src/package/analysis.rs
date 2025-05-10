@@ -39,6 +39,7 @@ impl<'a> Chain<'a> {
                 Box::new(handler::pkg_config),
                 Box::new(handler::python),
                 Box::new(handler::cmake),
+                Box::new(handler::compressman),
                 // Catch-all if not excluded
                 Box::new(handler::include_any),
             ],
@@ -51,7 +52,7 @@ impl<'a> Chain<'a> {
     }
 
     pub fn process(&mut self, paths: impl IntoIterator<Item = PathInfo>) -> Result<(), BoxError> {
-        println!("│Analyzing artefacts (» = Include, × = Ignore)");
+        println!("│Analyzing artefacts (» = Include, × = Ignore, ^ = Replace)");
 
         let mut queue = paths.into_iter().collect::<VecDeque<_>>();
 
@@ -110,6 +111,18 @@ impl<'a> Chain<'a> {
                         bucket.paths.push(path);
                         continue 'paths;
                     }
+                    Decision::ReplaceFile { newpath } => {
+                        let newpathinfo = self.collector.path(&newpath, self.hasher)?;
+                        pb.println(format!(
+                            "│A{} {} » {}",
+                            "│ ^".dark_magenta(),
+                            format!("{}", path.target_path.display()).dim(),
+                            newpathinfo.target_path.display()
+                        ));
+                        pb.inc(1);
+                        bucket.paths.push(newpathinfo);
+                        continue 'paths;
+                    }
                 }
             }
         }
@@ -158,6 +171,7 @@ pub enum Decision {
     NextHandler,
     IgnoreFile { reason: String },
     IncludeFile,
+    ReplaceFile { newpath: PathBuf },
 }
 
 impl From<Decision> for Response {
