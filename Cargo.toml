@@ -75,7 +75,6 @@ strum = { version = "0.27.1", features = ["derive"] }
 thiserror = "2.0.3"
 thread-priority = "1.1.0"
 tokio = { version = "1.38.0", features = ["full"] }
-tokio-stream = { version = "0.1.15", features = ["time"] }
 tokio-util = { version = "0.7.11", features = ["io"] }
 url = { version = "2.5.2", features = ["serde"] }
 xxhash-rust = { version = "0.8.11", features = ["xxh3"] }
