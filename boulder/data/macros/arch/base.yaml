@@ -3,32 +3,35 @@
 definitions:
 
     # Basic variables required for packages to build correctly
-    - libsuffix      : ""
-    - prefix         : "/usr"
-    - bindir         : "%(prefix)/bin"
-    - sbindir        : "%(prefix)/sbin"
-    - includedir     : "%(prefix)/include"
-    - datadir        : "%(prefix)/share"
-    - localedir      : "%(datadir)/locale"
-    - infodir        : "%(datadir)/info"
-    - mandir         : "%(datadir)/man"
-    - docdir         : "%(datadir)/doc"
-    - vendordir      : "%(datadir)/defaults"
-    - completionsdir : "%(datadir)/bash-completion/completions"
-    - tmpfilesdir    : "%(prefix)/lib/tmpfiles.d"
-    - sysusersdir    : "%(prefix)/lib/sysusers.d"
-    - udevrulesdir   : "%(prefix)/lib/udev/rules.d"
-    - localstatedir  : "/var"
-    - sharedstatedir : "%(localstatedir)/lib"
-    - runstatedir    : "/run"
-    - sysconfdir     : "/etc"
-    - libdir         : "%(prefix)/lib%(libsuffix)"
-    - libexecdir     : "%(libdir)/%(name)"
-    - builddir       : "serpent_builddir"
+    - libsuffix            : ""
+    - prefix               : "/usr"
+    - bindir               : "%(prefix)/bin"
+    - includedir           : "%(prefix)/include"
+    - sysusersdir          : "%(prefix)/lib/sysusers.d"
+    - tmpfilesdir          : "%(prefix)/lib/tmpfiles.d"
+    - udevrulesdir         : "%(prefix)/lib/udev/rules.d"
+    - sbindir              : "%(prefix)/sbin"
+    - datadir              : "%(prefix)/share"
+    - vendordir            : "%(datadir)/defaults"
+    - docdir               : "%(datadir)/doc"
+    - infodir              : "%(datadir)/info"
+    - localedir            : "%(datadir)/locale"
+    - mandir               : "%(datadir)/man"
+    - bashcompletionsdir   : "%(datadir)/bash-completion/completions"
+    - fishcompletionsdir   : "%(datadir)/fish/vendor_completions.d"
+    - elvishcompletionsdir : "%(datadir)/elvish/lib"
+    - zshcompletionsdir    : "%(datadir)/zsh/site-functions"
+    - libdir               : "%(prefix)/lib%(libsuffix)"
+    - libexecdir           : "%(libdir)/%(name)"
+    - localstatedir        : "/var"
+    - sharedstatedir       : "%(localstatedir)/lib"
+    - runstatedir          : "/run"
+    - sysconfdir           : "/etc"
+    - builddir             : "aerynos-builddir"
 
     # The vendorID is encoded into the triplet, toolchain, builds, etc.
     # It must match the triplet from bootstrap-scripts.
-    - vendorID       : "serpent-linux"
+    - vendorID       : "aerynos-linux"
 
     # Must be set for CC/CXX/CPP to work
     - cc             : "%(compiler_c)"
@@ -55,7 +58,7 @@ actions              :
     - scriptBase     :
         description: scriptBase is merged to the top of all newly generated build scripts.
         command: |
-            #!/bin/sh
+            #!/usr/bin/bash
             set -e
             set -x
             TERM="dumb"; export TERM
@@ -66,6 +69,7 @@ actions              :
             CGO_CFLAGS="%(cflags)"; export CGO_CFLAGS
             CXXFLAGS="%(cxxflags)"; export CXXFLAGS
             CGO_CXXFLAGS="%(cxxflags)"; export CGO_CXXFLAGS
+            FFLAGS="%(fflags)"; export FFLAGS
             LDFLAGS="%(ldflags)"; export LDFLAGS
             CGO_LDFLAGS="%(ldflags) -Wl,--no-gc-sections"; export CGO_LDFLAGS
             DFLAGS="%(dflags)"; export DFLAGS
@@ -85,6 +89,7 @@ actions              :
             STRIP="%(strip)"; export STRIP
             PATH="%(path)"; export PATH
             CCACHE_DIR="%(ccachedir)"; export CCACHE_DIR;
+            CCACHE_BASEDIR="%(workdir)"; export CCACHE_BASEDIR
             test -z "$CCACHE_DIR" && unset CCACHE_DIR;
             %cargo_set_environment
             RUSTC_WRAPPER="%(rustc_wrapper)"; export RUSTC_WRAPPER;
@@ -325,6 +330,7 @@ flags               :
     - base:
         c         : "-pipe -Wformat -Wformat-security -Wno-error -fPIC"
         cxx       : "-pipe -Wformat -Wformat-security -Wno-error -fPIC"
+        f         : ""
         ld        : "-Wl,-O2,--gc-sections"
         d         : "-release -Hkeep-all-bodies -relocation-model=pic -wi"
         rust      : "-C strip=none"
@@ -332,12 +338,14 @@ flags               :
     - omit-frame-pointer:
         c         : "-fomit-frame-pointer -momit-leaf-frame-pointer"
         cxx       : "-fomit-frame-pointer -momit-leaf-frame-pointer"
+        f         : "-fomit-frame-pointer"
         d         : "-frame-pointer=none"
         rust      : ""
 
     - no-omit-frame-pointer:
         c         : "-fno-omit-frame-pointer -mno-omit-leaf-frame-pointer"
         cxx       : "-fno-omit-frame-pointer -mno-omit-leaf-frame-pointer"
+        f         : "-fno-omit-frame-pointer"
         d         : "-frame-pointer=all"
         rust      : "-C force-frame-pointers"
 
@@ -360,6 +368,7 @@ flags               :
     - fortify:
         c         : "-D_FORTIFY_SOURCE=2"
         cxx       : "-D_FORTIFY_SOURCE=2"
+        f         : "-D_FORTIFY_SOURCE=2"
 
     # No hardening!
     - harden-none:
@@ -388,11 +397,13 @@ flags               :
     - optimize-fast:
         c         : "-Ofast"
         cxx       : "-Ofast"
+        f         : "-Ofast"
 
     # Generic optimisation case (ON)
     - optimize-generic:
         c         : "-O2"
         cxx       : "-O2"
+        f         : "-O2"
         d         : "-O2"
         # opt-level=3 is common in the rust world so let that
         # be our generic opt case.
@@ -404,11 +415,14 @@ flags               :
         cxx   : "-Os"
         d     : "-Os"
         rust  : "-C opt-level=s -C codegen-units=16"
+        gnu:
+            f : "-Os"
 
     # Optimize for speed (OFF)
     - optimize-speed:
         c         : "-O3"
         cxx       : "-O3"
+        f         : "-O3"
         d         : "-O3"
         rust      : "-C opt-level=3 -C codegen-units=16"
 
@@ -418,10 +432,12 @@ flags               :
         gnu:
             c         : "-flto=%(jobs) -flto-partition=one"
             cxx       : "-flto=%(jobs) -flto-partition=one"
+            f         : "-flto=%(jobs) -flto-partition=one"
             ld        : "-flto=%(jobs) -flto-partition=one"
         llvm:
             c         : "-flto=full"
             cxx       : "-flto=full"
+            f         : "-flto=full"
             d         : "-flto=full"
             ld        : "-flto=full"
 
@@ -431,10 +447,12 @@ flags               :
         gnu:
             c         : "-flto=%(jobs)"
             cxx       : "-flto=%(jobs)"
+            f         : "-flto=%(jobs)"
             ld        : "-flto=%(jobs)"
         llvm:
             c         : "-flto=thin"
             cxx       : "-flto=thin"
+            f         : "-flto=thin"
             d         : "-flto=thin"
             ld        : "-flto=thin"
 
@@ -457,11 +475,15 @@ flags               :
     - fat-lto:
         c         : "-ffat-lto-objects"
         cxx       : "-ffat-lto-objects"
+        gnu       :
+            f     : "-ffat-lto-objects"
 
     # Disable Fat LTO Objects (OFF)
     - fat-lto-none:
         c         : "-fno-fat-lto-objects"
         cxx       : "-fno-fat-lto-objects"
+        gnu       :
+            f     : "-fno-fat-lto-objects"
 
     # Toggle LTO warning errors. If these throw an error it is likely that there will be runtime problems with LTO (ON)
     - lto-errors:
@@ -512,6 +534,7 @@ flags               :
         llvm:
             c     : "-fplugin=LLVMPolly.so -fpass-plugin=LLVMPolly.so -Xclang -mllvm -Xclang -polly -Xclang -mllvm -Xclang -polly-vectorizer=stripmine"
             cxx   : "-fplugin=LLVMPolly.so -fpass-plugin=LLVMPolly.so -Xclang -mllvm -Xclang -polly -Xclang -mllvm -Xclang -polly-vectorizer=stripmine"
+            f     : "-fpass-plugin=LLVMPolly.so" # TODO: I don't think this does anything, but at least it doesn't fail
             d     : "-polly -polly-vectorizer=stripmine"
 
     # Toggle options you want to use with llvm-bolt (OFF)
@@ -529,6 +552,8 @@ flags               :
     - common:
         c         : "-fcommon"
         cxx       : "-fcommon"
+        gnu       :
+            f     : "-fcommon"
 
     # Toggle debug-lines optimisations
     - debug-lines:
@@ -540,6 +565,7 @@ flags               :
 
     # Toggle debug-std optimisations (ON)
     - debug-std:
+        f         : "-g"
         d         : "-g -gc -d-debug"
         rust      : "-C debuginfo=2 -C split-debuginfo=off"
         gnu:
@@ -551,6 +577,7 @@ flags               :
 
     # Toggle fast math (OFF)
     - math:
+        f         : "-ffast-math"
         d         : "-ffast-math -fp-contract=fast"
         gnu:
             c         : "-fno-math-errno -fno-trapping-math"
@@ -564,6 +591,8 @@ flags               :
         c         : "-fno-plt"
         cxx       : "-fno-plt"
         d         : "-fno-plt"
+        gnu:
+            f     : "-fno-plt"
 
     # Toggle -fno-semantic-interposition (OFF)
     - nosemantic:
@@ -580,6 +609,8 @@ flags               :
     - avxwidth-128:
         c         : "-mprefer-vector-width=128"
         cxx       : "-mprefer-vector-width=128"
+        gnu:
+            f     : "-mprefer-vector-width=128"
 
     # Toggle -fpch-instantiate-templates (OFF)
     - pch-instantiate:
@@ -600,12 +631,15 @@ flags               :
         gnu:
             c         : "-msse2avx"
             cxx       : "-msse2avx"
+            f         : "-msse2avx"
 
     # Toggle visibility hidden (OFF)
     - visibility-hidden:
         c          : "-fvisibility=hidden"
         cxx        : "-fvisibility-inlines-hidden -fvisibility=hidden"
         d          : "-fvisibility=hidden"
+        gnu:
+            f      : "-fvisibility=hidden"
 
     # Toggle visibility inlines hidden (OFF)
     - visibility-inline:
