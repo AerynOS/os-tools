@@ -4,7 +4,7 @@ default-members = ["moss"]
 resolver = "2"
 
 [workspace.package]
-version = "0.25.1"
+version = "0.25.5"
 edition = "2021"
 rust-version = "1.81"
 
@@ -131,6 +131,5 @@ debug = true
 [profile.onboarding]
 inherits = "dev"
 opt-level = 1
-lto = "thin"
 debug = true
 strip = "none"
