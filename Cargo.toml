@@ -6,7 +6,7 @@ resolver = "2"
 [workspace.package]
 version = "0.25.1"
 edition = "2021"
-rust-version = "1.80"
+rust-version = "1.81"
 
 [workspace.dependencies]
 blsforme = { git = "https://github.com/AerynOS/blsforme.git", rev = "6e7ffc5e228f072b50c87dc4eac81e4cd2164d03" }
@@ -30,7 +30,7 @@ diesel = { version = "2.2.1", features = [
 ] }
 diesel_migrations = "2.2.0"
 dirs = "6.0.0"
-elf = "0.7.4"
+elf = "0.8.0"
 indicatif = "0.17.8"
 itertools = "0.14.0"
 fs-err = { version = "3.0.0", features = ["tokio"] }
