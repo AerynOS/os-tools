@@ -64,7 +64,16 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
             .collect::<Vec<_>>();
 
         if !installed.is_empty() {
-            println!("The following package(s) are already installed:");
+            tracing::info!("The following package(s) are already installed:");
+            for package in installed.iter() {
+                tracing::trace!(
+                    type = "package",
+                    action = "none",
+                    name = %package.meta.name,
+                    version = %format!("{}-{}", package.meta.version_identifier, package.meta.source_release),
+                    "Package update event"
+                );
+            }
             println!();
             autoprint_columns(&installed);
         }
@@ -75,7 +84,16 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
     // Testing panic for hyperfine benchmarking purposes (build flag tuning)
     // panic!();
 
-    println!("The following package(s) will be installed:");
+    tracing::info!("The following package(s) will be installed:");
+    for package in missing.iter() {
+        tracing::trace!(
+            type = "package",
+            action = "install",
+            name = %package.meta.name,
+            version = %format!("{}-{}", package.meta.version_identifier, package.meta.source_release),
+            "Package update event"
+        );
+    }
     println!();
     autoprint_columns(&missing);
     println!();

@@ -22,10 +22,10 @@ pub fn handle(args: &ArgMatches) {
 
 /// Print program version
 pub fn print() {
-    println!("moss {}", tools_buildinfo::get_simple_version());
+    tracing::info!("moss {}", tools_buildinfo::get_simple_version());
 }
 
 /// Print additional build information
 pub fn print_full() {
-    println!("moss {}", tools_buildinfo::get_full_version());
+    tracing::info!("moss {}", tools_buildinfo::get_full_version());
 }

@@ -57,7 +57,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     // Bail if there's packages not installed
     // TODO: Add error hookups
     if !not_installed.is_empty() {
-        println!("Missing packages in lookup: {not_installed:?}");
+        tracing::info!("Missing packages in lookup: {not_installed:?}");
         return Err(Error::NoSuchPackage);
     }
 
@@ -75,7 +75,16 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     // Resolve all removed packages, where removed is (installed - finalized)
     let removed = client.resolve_packages(installed_ids.difference(&finalized))?;
 
-    println!("The following package(s) will be removed:");
+    tracing::info!("The following package(s) will be removed:");
+    for package in removed.iter() {
+        tracing::trace!(
+            type = "package",
+            action = "remove",
+            name = %package.meta.name,
+            version = %format!("{}-{}", package.meta.version_identifier, package.meta.source_release),
+            "Package update event"
+        );
+    }
     println!();
     autoprint_columns(&removed);
     println!();
@@ -94,7 +103,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
 
     // Print each package to stdout
     for package in removed {
-        println!("{} {}", "Removed".red(), package.meta.name.to_string().bold());
+        tracing::info!("{} {}", "Removed".red(), package.meta.name.to_string().bold());
     }
 
     // Map finalized state to a [`Selection`] by referencing
@@ -115,7 +124,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
                     // Should be unreachable since new state from removal
                     // is always a subset of the previous state
                     .unwrap_or_else(|| {
-                        eprintln!("Unreachable: previous selection not found during removal for package {id:?}, marking as not explicit");
+                        tracing::warn!("Unreachable: previous selection not found during removal for package {id:?}, marking as not explicit");
 
                         Selection {
                             package: id,
