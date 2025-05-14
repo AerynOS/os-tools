@@ -86,6 +86,7 @@ actions              :
             STRIP="%(strip)"; export STRIP
             PATH="%(path)"; export PATH
             CCACHE_DIR="%(ccachedir)"; export CCACHE_DIR;
+            CCACHE_BASEDIR="%(workdir)"; export CCACHE_BASEDIR
             test -z "$CCACHE_DIR" && unset CCACHE_DIR;
             %cargo_set_environment
             RUSTC_WRAPPER="%(rustc_wrapper)"; export RUSTC_WRAPPER;
