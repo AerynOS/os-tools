@@ -197,7 +197,7 @@ fn emit_package(paths: &Paths, package: &Package<'_>) -> Result<(), Error> {
     if !files.is_empty() {
         // Temp file for building content payload
         let temp_content_path = format!("/tmp/{}.tmp", &filename);
-        let mut temp_content = fs::OpenOptions::new()
+        let mut temp_content = File::options()
             .read(true)
             .append(true)
             .create(true)
