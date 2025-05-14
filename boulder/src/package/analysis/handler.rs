@@ -230,9 +230,15 @@ pub fn compressman(bucket: &mut BucketMut<'_>, info: &mut PathInfo) -> Result<Re
     let mtime = metadata.modified()?;
 
     // TODO: Replace usage with .with_added_extension() when it becomes stable #127292
-    fn add_extension(path: &mut PathBuf, extension: &str) -> PathBuf {
-        path.set_extension(extension);
-        path.to_path_buf()
+    fn with_added_extension(path: &Path, extension: &str) -> PathBuf {
+        match path.file_name() {
+            Some(file_name) => {
+                let mut file_name = file_name.to_owned();
+                file_name.push(extension);
+                path.with_file_name(file_name)
+            }
+            None => path.to_owned(),
+        }
     }
 
     /* If we have a man/info symlink update the link to the compressed file */
