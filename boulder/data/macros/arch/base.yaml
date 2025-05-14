@@ -18,6 +18,8 @@ definitions:
     - localedir            : "%(datadir)/locale"
     - mandir               : "%(datadir)/man"
     - bashcompletionsdir   : "%(datadir)/bash-completion/completions"
+    # TODO: Remove completionsdir once rebuilds are done and we are on Rust infra
+    - completionsdir       : "%(bashcompletionsdir)"
     - fishcompletionsdir   : "%(datadir)/fish/vendor_completions.d"
     - elvishcompletionsdir : "%(datadir)/elvish/lib"
     - zshcompletionsdir    : "%(datadir)/zsh/site-functions"
