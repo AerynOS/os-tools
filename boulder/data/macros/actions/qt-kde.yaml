@@ -24,6 +24,7 @@ actions:
             cmake %(options_cmake_qt6) ${_ccache_arg}
         dependencies:
             - binary(cmake)
+            - binary(ninja)
 
     - cmake_kf6:
         description: Perform cmake with the default options for KF6/Qt6 builds. This includes KDE Frameworks, Plasma, and KDE Gear
@@ -33,6 +34,7 @@ actions:
             cmake %(options_cmake_kf6)
         dependencies:
             - binary(cmake)
+            - binary(ninja)
             - cmake(ECM)
 
     - qt_user_facing_links:
