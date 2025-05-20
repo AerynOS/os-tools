@@ -54,8 +54,8 @@ actions:
         description: Perform ./configure with default options using the GNU Bash shell.
         command: |
             test -x ./configure || ( echo "%%configure: The ./configure script could not be found" ; exit 1 )
-            CONFIG_SHELL=/usr/bin/dash; export CONFIG_SHELL
-            SHELL=/usr/bin/dash; export SHELL
+            CONFIG_SHELL=/usr/bin/bash; export CONFIG_SHELL
+            SHELL=/usr/bin/bash; export SHELL
             echo "Explicitly using GNU Bash to execute ./configure"
             /usr/bin/bash ./configure %(options_configure)
         dependencies:
