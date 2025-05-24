@@ -689,6 +689,8 @@ packages          :
             - /usr/share/man/man3
             - /usr/share/man/man9
             - /usr/share/pkgconfig
+            # GObject introspection build files
+            - /usr/share/gir-1.0/*.gir
             # Qt5/Qt6
             - /usr/lib/*.prl
             - /usr/lib/metatypes
