@@ -82,18 +82,36 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         .collect::<Vec<_>>();
 
     if synced.is_empty() && removed.is_empty() {
-        println!("No packages to sync");
+        tracing::info!("No packages to sync");
         return Ok(());
     }
 
     if !synced.is_empty() {
-        println!("The following packages will be sync'd: ");
+        tracing::info!("The following packages will be sync'd: ");
+        for package in synced.iter() {
+            tracing::trace!(
+                type = "package",
+                action = "sync",
+                name = %package.meta.name,
+                version = %format!("{}-{}", package.meta.version_identifier, package.meta.source_release),
+                "Package update event"
+            );
+        }
         println!();
         autoprint_columns(synced.as_slice());
         println!();
     }
     if !removed.is_empty() {
-        println!("The following orphaned packages will be removed: ");
+        tracing::info!("The following orphaned packages will be removed: ");
+        for package in removed.iter() {
+            tracing::trace!(
+                type = "package",
+                action = "remove",
+                name = %package.meta.name,
+                version = %format!("{}-{}", package.meta.version_identifier, package.meta.source_release),
+                "Package update event"
+            );
+        }
         println!();
         autoprint_columns(removed.as_slice());
         println!();

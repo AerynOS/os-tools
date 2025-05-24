@@ -20,7 +20,7 @@ use crate::{
 };
 
 pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::Error> {
-    println!("Verifying assets");
+    tracing::info!("Verifying assets");
 
     // Get all installed layouts, this is our source of truth
     let layouts = client.layout_db.all()?;
@@ -65,7 +65,7 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
         if !path.exists() {
             pb.inc(1);
             if verbose {
-                pb.suspend(|| println!(" {} {display_hash} - {files:?}", "×".yellow()));
+                pb.suspend(|| tracing::warn!(" {} {display_hash} - {files:?}", "×".yellow()));
             }
             issues.push(Issue::MissingAsset {
                 hash: display_hash,
@@ -89,7 +89,7 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
         if verified_hash != hash {
             pb.inc(1);
             if verbose {
-                pb.suspend(|| println!(" {} {display_hash} - {files:?}", "×".yellow()));
+                pb.suspend(|| tracing::warn!(" {} {display_hash} - {files:?}", "×".yellow()));
             }
             issues.push(Issue::CorruptAsset {
                 hash: display_hash,
@@ -101,7 +101,7 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
 
         pb.inc(1);
         if verbose {
-            pb.suspend(|| println!(" {} {display_hash} - {files:?}", "»".green()));
+            pb.suspend(|| tracing::warn!(" {} {display_hash} - {files:?}", "»".green()));
         }
     }
 
@@ -111,7 +111,7 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
     pb.set_length(states.len() as u64);
     pb.set_position(0);
     pb.suspend(|| {
-        println!("Verifying states");
+        tracing::info!("Verifying states");
     });
 
     // Check the VFS of each state exists properly on the FS
@@ -153,25 +153,25 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
         pb.inc(1);
         if verbose {
             let mark = if num_issues > 0 { "×".yellow() } else { "»".green() };
-            pb.suspend(|| println!(" {mark} state #{}", state.id));
+            pb.suspend(|| tracing::warn!(" {mark} state #{}", state.id));
         }
     }
 
     pb.finish_and_clear();
 
     if issues.is_empty() {
-        println!("No issues found");
+        tracing::info!("No issues found");
         return Ok(());
     }
 
-    println!(
+    tracing::warn!(
         "Found {} issue{}",
         issues.len(),
         if issues.len() == 1 { "" } else { "s" }
     );
 
     for issue in &issues {
-        println!(" {} {issue}", "×".yellow());
+        tracing::info!(" {} {issue}", "×".yellow());
     }
 
     let result = if yes {
@@ -210,7 +210,7 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
             fs::remove_file(&path)?;
         }
 
-        println!("Reinstalling packages");
+        tracing::info!("Reinstalling packages");
 
         // And re-cache all packages that comprise the corrupt / missing asset
         runtime::block_on(client.cache_packages(&issue_packages))?;
@@ -230,7 +230,7 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
         .chain(issues.iter().filter_map(Issue::state))
         .collect::<BTreeSet<_>>();
 
-    println!("Reblitting affected states");
+    tracing::info!("Reblitting affected states");
 
     let _guard = signal::ignore([Signal::SIGINT])?;
     let _fd = signal::inhibit(
@@ -268,10 +268,10 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
             client.archive_state(state.id)?;
         }
 
-        println!(" {} state #{}", "»".green(), state.id);
+        tracing::info!(" {} state #{}", "»".green(), state.id);
     }
 
-    println!("All issues resolved");
+    tracing::info!("All issues resolved");
 
     Ok(())
 }

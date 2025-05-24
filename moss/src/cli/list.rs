@@ -137,27 +137,27 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         } else {
             item.name.dim()
         };
-        print!("{name} {:width$} ", " ");
 
-        let print_revision = |rev: Revision, is_sync| {
+        let print_revision = |rev: Revision, is_sync| -> String {
             let version = if is_sync {
                 rev.version.green()
             } else {
                 rev.version.magenta()
             };
-            print!("{version}-{}", rev.release.dim());
+            format!("{version}-{}", rev.release.dim())
         };
 
         // Print revision
-        print_revision(item.revision, false);
+        let local = print_revision(item.revision, false);
 
         // Print sync version
-        if let Some(sync) = item.sync {
-            print!(" => ");
-            print_revision(sync, true);
-        }
+        let sync = if let Some(sync) = item.sync {
+            format!(" => {}", print_revision(sync, true))
+        } else {
+            String::new() // Ensures `sync` is always a `String`
+        };
 
-        println!(" - {}", item.summary);
+        tracing::info!("{name} {:width$} {local}{sync} - {}", " ", item.summary)
     }
 
     Ok(())
