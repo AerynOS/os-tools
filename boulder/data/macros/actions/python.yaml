@@ -7,6 +7,7 @@ actions:
             python3 setup.py build
         dependencies:
             - binary(python3)
+            - python(setuptools)
 
     - python_install:
         description: Install python package to the destination directory
@@ -14,6 +15,7 @@ actions:
             python3 setup.py install --root="%(installroot)"
         dependencies:
             - binary(python3)
+            - python(setuptools)
             - python-packaging # auto deps handler
 
     - pyproject_build:
