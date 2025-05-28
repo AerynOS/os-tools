@@ -24,11 +24,6 @@ use crate::{
     util,
 };
 
-#[cfg(all(feature = "compat_dlang_emul_both", feature = "compat_dlang_emul_flush"))]
-compile_error!(
-    "feature \"compat_dlang_emul_both\" and feature \"compat_dlang_emul_flush\" cannot be enabled at the same time"
-);
-
 pub fn elf(bucket: &mut BucketMut<'_>, info: &mut PathInfo) -> Result<Response, BoxError> {
     let file_name = info.file_name();
 
@@ -126,15 +121,6 @@ fn parse_dynamic_section(
         }
     }
 
-    // https://github.com/serpent-os/moss/issues/231
-    let depends_isa = if cfg!(feature = "compat_dlang_emul_both") && machine_isa == "386" {
-        "x86"
-    } else {
-        machine_isa
-    };
-    let add_provide_x86 =
-        (cfg!(feature = "compat_dlang_emul_both") || cfg!(feature = "compat_dlang_emul_flush")) && machine_isa == "386";
-
     // Resolve offsets against string table and add the applicable
     // depends and provides
     if let Ok(Some((_, strtab))) = elf.dynamic_symbol_table() {
@@ -192,7 +178,7 @@ fn parse_dynamic_section(
 
                 bucket.dependencies.insert(Dependency {
                     kind: dependency::Kind::SharedLibrary,
-                    name: format!("{picked}({depends_isa})"),
+                    name: format!("{picked}({machine_isa})"),
                 });
             }
         }
@@ -227,25 +213,11 @@ fn parse_dynamic_section(
                     kind: dependency::Kind::SharedLibrary,
                     name: format!("{rpathed}({machine_isa})"),
                 });
-
-                if add_provide_x86 {
-                    bucket.providers.insert(Provider {
-                        kind: dependency::Kind::SharedLibrary,
-                        name: format!("{rpathed}(x86)"),
-                    });
-                }
             } else {
                 bucket.providers.insert(Provider {
                     kind: dependency::Kind::SharedLibrary,
                     name: format!("{soname}({machine_isa})"),
                 });
-
-                if add_provide_x86 {
-                    bucket.providers.insert(Provider {
-                        kind: dependency::Kind::SharedLibrary,
-                        name: format!("{soname}(x86)"),
-                    });
-                }
             }
 
             // Do we possibly have an Interpreter? This is a .dynamic library ..
@@ -267,17 +239,6 @@ fn parse_dynamic_section(
                 };
 
                 for path in interp_paths {
-                    if add_provide_x86 {
-                        bucket.providers.insert(Provider {
-                            kind: dependency::Kind::Interpreter,
-                            name: path.clone().replace("(386)", "(x86)"),
-                        });
-                        bucket.providers.insert(Provider {
-                            kind: dependency::Kind::SharedLibrary,
-                            name: path.clone().replace("(386)", "(x86)"),
-                        });
-                    }
-
                     bucket.providers.insert(Provider {
                         kind: dependency::Kind::Interpreter,
                         name: path.clone(),
@@ -302,15 +263,9 @@ fn parse_interp_section(elf: &mut elf::ElfStream<AnyEndian, File>, bucket: &mut 
     };
 
     if let Some(content) = CStr::from_bytes_until_nul(data).ok().and_then(|s| s.to_str().ok()) {
-        // https://github.com/serpent-os/moss/issues/231
-        let depends_isa = if cfg!(feature = "compat_dlang_emul_both") && machine_isa == "386" {
-            "x86"
-        } else {
-            machine_isa
-        };
         bucket.dependencies.insert(Dependency {
             kind: dependency::Kind::Interpreter,
-            name: format!("{content}({depends_isa})"),
+            name: format!("{content}({machine_isa})"),
         });
     }
 }

@@ -6,14 +6,6 @@ rust-version.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
-[features]
-# See https://github.com/AerynOS/os-tools/issues/231 for details
-default = ["compat_dlang_emul_flush"]
-# In this mode we create duplicate provides for both `386` and `x86` while depending on `x86`
-compat_dlang_emul_both = []
-# In this mode we create duplicate provides for both `386` and `x86` while depending on `386`
-compat_dlang_emul_flush = []
-
 [dependencies]
 config = { path = "../crates/config" }
 container = { path = "../crates/container" }
