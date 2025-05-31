@@ -144,7 +144,7 @@ fn add(
 
     runtime::block_on(manager.refresh(&id))?;
 
-    println!("{id} added");
+    tracing::info!("{id} added");
 
     Ok(())
 }
@@ -155,7 +155,7 @@ fn list(installation: Installation, config: config::Manager) -> Result<(), Error
 
     let configured_repos = manager.list();
     if configured_repos.len() == 0 {
-        println!("No repositories have been configured yet");
+        tracing::info!("No repositories have been configured yet");
         return Ok(());
     }
 
@@ -166,7 +166,7 @@ fn list(installation: Installation, config: config::Manager) -> Result<(), Error
             String::new()
         };
 
-        println!(" - {id} = {} [{}]{disabled}", repo.uri, repo.priority);
+        tracing::info!(" - {id} = {} [{}]{disabled}", repo.uri, repo.priority);
     }
 
     Ok(())
@@ -194,17 +194,17 @@ fn remove(installation: Installation, config: config::Manager, repo: String) -> 
 
     match manager.remove(id.clone())? {
         repository::manager::Removal::NotFound => {
-            println!("{id} not found");
+            tracing::info!("{id} not found");
             process::exit(1);
         }
         repository::manager::Removal::ConfigDeleted(false) => {
-            println!(
+            tracing::info!(
                 "{id} configuration must be manually deleted since it doesn't exist in it's own configuration file"
             );
             process::exit(1);
         }
         repository::manager::Removal::ConfigDeleted(true) => {
-            println!("{id} removed");
+            tracing::info!("{id} removed");
         }
     }
 
@@ -217,7 +217,7 @@ fn enable(installation: Installation, config: config::Manager, repo: String) -> 
 
     runtime::block_on(manager.enable(&id))?;
 
-    println!("{id} enabled");
+    tracing::info!("{id} enabled");
 
     Ok(())
 }
@@ -228,7 +228,7 @@ fn disable(installation: Installation, config: config::Manager, repo: String) ->
 
     runtime::block_on(manager.disable(&id))?;
 
-    println!("{id} disabled");
+    tracing::info!("{id} disabled");
 
     Ok(())
 }
