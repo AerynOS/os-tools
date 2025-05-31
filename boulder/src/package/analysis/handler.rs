@@ -141,22 +141,19 @@ pub fn python(bucket: &mut BucketMut<'_>, info: &mut PathInfo) -> Result<Respons
         .get_headers()
         .get_first_value("Name")
         .unwrap_or_else(|| panic!("Failed to parse {}", info.file_name()))
+        /* Normalize name per https://peps.python.org/pep-0503/#normalized-names, replacing `_` and `.` with `-` and lowercaseing */
+        .replace(".", "-")
+        .replace("_", "-")
         .to_lowercase();
 
     /* Insert generic provider */
     bucket.providers.insert(Provider {
         kind: dependency::Kind::Python,
-        name: python_name.to_string(),
+        name: python_name.clone(),
     });
 
-    if python_name.contains("_") {
-        /* Insert normalized generic provider */
-        bucket.providers.insert(Provider {
-            kind: dependency::Kind::Python,
-            name: python_name.replace("_", "-"),
-        });
-    }
-
+    /* Per discussion in Matrix (https://github.com/AerynOS/os-tools/issues/496) we are NOT going to be doing versioned
+      python provides/depends at this time. However we still need to add a provides for it until the repo is rebuilt (ugh) */
     let output = Command::new("/usr/bin/python3")
         .arg("-c")
         .arg("import platform; print(f'{platform.python_version_tuple()[0]}.{platform.python_version_tuple()[1]}')")
@@ -167,20 +164,8 @@ pub fn python(bucket: &mut BucketMut<'_>, info: &mut PathInfo) -> Result<Respons
     /* Insert versioned provider for auto deps */
     bucket.providers.insert(Provider {
         kind: dependency::Kind::Python,
-        name: format!("{python_name}({})", &python_version.to_string().trim_end()),
+        name: format!("{python_name}({})", python_version.trim_end()),
     });
-
-    if python_name.contains("_") {
-        /* Insert normalized versioned provider */
-        bucket.providers.insert(Provider {
-            kind: dependency::Kind::Python,
-            name: format!(
-                "{}({})",
-                python_name.replace("_", "-"),
-                &python_version.to_string().trim_end()
-            ),
-        });
-    }
 
     /* Now parse dependencies */
     let dist_path = info
@@ -200,7 +185,7 @@ pub fn python(bucket: &mut BucketMut<'_>, info: &mut PathInfo) -> Result<Respons
     for dep in deps.lines() {
         bucket.dependencies.insert(Dependency {
             kind: dependency::Kind::Python,
-            name: format!("{}({})", &dep.to_lowercase(), &python_version.to_string().trim_end()),
+            name: format!("{}", &dep.replace(".", "-").replace("_", "-").to_lowercase()),
         });
     }
 
