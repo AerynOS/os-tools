@@ -5,7 +5,7 @@ use std::{
     io::{BufReader, BufWriter, Write},
     os::unix::fs::symlink,
     path::{Component, Path, PathBuf},
-    process::{Command, Stdio},
+    process::Command,
 };
 
 use fs_err as fs;
@@ -13,12 +13,12 @@ use moss::{Dependency, Provider, dependency};
 
 use crate::package::collect::PathInfo;
 
-use mailparse::{MailHeaderMap, parse_mail};
-
 pub use self::elf::elf;
+pub use self::python::python;
 use super::{BoxError, BucketMut, Decision, Response};
 
 mod elf;
+mod python;
 
 pub fn include_any(_bucket: &mut BucketMut<'_>, _info: &mut PathInfo) -> Result<Response, BoxError> {
     Ok(Decision::IncludeFile.into())
@@ -120,87 +120,6 @@ pub fn pkg_config(bucket: &mut BucketMut<'_>, info: &mut PathInfo) -> Result<Res
         bucket.dependencies.insert(Dependency {
             kind,
             name: dep.to_owned(),
-        });
-    }
-
-    Ok(Decision::NextHandler.into())
-}
-
-pub fn python(bucket: &mut BucketMut<'_>, info: &mut PathInfo) -> Result<Response, BoxError> {
-    let file_path = info.path.clone().into_os_string().into_string().unwrap_or_default();
-    let is_dist_info = file_path.contains(".dist-info") && info.file_name().ends_with("METADATA");
-    let is_egg_info = file_path.contains(".egg-info") && info.file_name().ends_with("PKG-INFO");
-
-    if !(is_dist_info || is_egg_info) {
-        return Ok(Decision::NextHandler.into());
-    }
-
-    let data = fs::read(&info.path)?;
-    let mail = parse_mail(&data)?;
-    let python_name = mail
-        .get_headers()
-        .get_first_value("Name")
-        .unwrap_or_else(|| panic!("Failed to parse {}", info.file_name()))
-        .to_lowercase();
-
-    /* Insert generic provider */
-    bucket.providers.insert(Provider {
-        kind: dependency::Kind::Python,
-        name: python_name.to_string(),
-    });
-
-    if python_name.contains("_") {
-        /* Insert normalized generic provider */
-        bucket.providers.insert(Provider {
-            kind: dependency::Kind::Python,
-            name: python_name.replace("_", "-"),
-        });
-    }
-
-    let output = Command::new("/usr/bin/python3")
-        .arg("-c")
-        .arg("import platform; print(f'{platform.python_version_tuple()[0]}.{platform.python_version_tuple()[1]}')")
-        .stdout(Stdio::piped())
-        .output()?;
-    let python_version = String::from_utf8_lossy(&output.stdout);
-
-    /* Insert versioned provider for auto deps */
-    bucket.providers.insert(Provider {
-        kind: dependency::Kind::Python,
-        name: format!("{python_name}({})", &python_version.to_string().trim_end()),
-    });
-
-    if python_name.contains("_") {
-        /* Insert normalized versioned provider */
-        bucket.providers.insert(Provider {
-            kind: dependency::Kind::Python,
-            name: format!(
-                "{}({})",
-                python_name.replace("_", "-"),
-                &python_version.to_string().trim_end()
-            ),
-        });
-    }
-
-    /* Now parse dependencies */
-    let dist_path = info
-        .path
-        .parent()
-        .unwrap_or_else(|| panic!("Failed to get parent path for {}", info.file_name()));
-    let find_deps_script = include_str!("scripts/get-py-deps.py");
-
-    let output = Command::new("/usr/bin/python3")
-        .arg("-c")
-        .arg(find_deps_script)
-        .arg(dist_path)
-        .stdout(Stdio::piped())
-        .output()?;
-
-    let deps = String::from_utf8_lossy(&output.stdout);
-    for dep in deps.lines() {
-        bucket.dependencies.insert(Dependency {
-            kind: dependency::Kind::Python,
-            name: format!("{}({})", &dep.to_lowercase(), &python_version.to_string().trim_end()),
         });
     }
 
