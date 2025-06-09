@@ -139,19 +139,22 @@ fn packages(builder: &Builder) -> Vec<&str> {
             if let Some((_, ext)) = path.rsplit_once('.') {
                 match ext {
                     "xz" => {
-                        packages.extend(["binary(tar)", "binary(xz)"]);
+                        packages.push("binary(bsdtar-static)");
                     }
                     "zst" => {
-                        packages.extend(["binary(tar)", "binary(zstd)"]);
+                        packages.push("binary(bsdtar-static)");
                     }
                     "bz2" => {
-                        packages.extend(["binary(tar)", "binary(bzip2)"]);
+                        packages.push("binary(bsdtar-static)");
                     }
                     "gz" => {
-                        packages.extend(["binary(tar)", "binary(gzip)"]);
+                        packages.push("binary(bsdtar-static)");
+                    }
+                    "lz" => {
+                        packages.push("binary(bsdtar-static)");
                     }
                     "zip" => {
-                        packages.push("binary(unzip)");
+                        packages.push("binary(bsdtar-static)");
                     }
                     "rpm" => {
                         packages.extend(["binary(rpm2cpio)", "cpio"]);

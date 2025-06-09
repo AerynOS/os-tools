@@ -253,17 +253,10 @@ fn prepare_script(upstreams: &[stone_recipe::Upstream]) -> String {
                 let strip_dirs = strip_dirs.unwrap_or(1);
 
                 let _ = writeln!(&mut content, "mkdir -p {unpack_dir}");
-                if rename.ends_with(".zip") {
-                    let _ = writeln!(
-                        &mut content,
-                        r#"unzip -d "{unpack_dir}" "%(sourcedir)/{rename}" || (echo "Failed to extract archive"; exit 1);"#,
-                    );
-                } else {
-                    let _ = writeln!(
-                        &mut content,
-                        r#"tar xf "%(sourcedir)/{rename}" -C "{unpack_dir}" --strip-components={strip_dirs} --no-same-owner || (echo "Failed to extract archive"; exit 1);"#,
-                    );
-                }
+                let _ = writeln!(
+                    &mut content,
+                    r#"bsdtar-static xf "%(sourcedir)/{rename}" -C "{unpack_dir}" --strip-components={strip_dirs} --no-same-owner || (echo "Failed to extract archive"; exit 1);"#,
+                );
             }
             stone_recipe::Upstream::Git { uri, clone_dir, .. } => {
                 let source = util::uri_file_name(uri);
