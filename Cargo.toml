@@ -127,9 +127,10 @@ debug = true
 # We want people who use the onboarding steps to get a nice compromise
 # between fast compilation and fast runtime, but with checks in place
 # and full backtraces. Hyperfine tests shows opt-level = 1 to be a good
-# compromise between compile speed and runtime speed.
+# compromise between compile speed and runtime speed. However, opt-level
+# = 2 _is_ faster.
 [profile.onboarding]
 inherits = "dev"
-opt-level = 1
+opt-level = 2
 debug = true
 strip = "none"
