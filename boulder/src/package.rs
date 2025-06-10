@@ -119,10 +119,12 @@ fn resolve_packages(
     recipe: &Recipe,
     collector: &mut Collector,
 ) -> Result<BTreeMap<String, Package>, Error> {
+    use stone_recipe::macros::BuiltinDefinition as Def;
+
     let mut parser = script::Parser::new();
-    parser.add_definition("name", &recipe.parsed.source.name);
-    parser.add_definition("version", &recipe.parsed.source.version);
-    parser.add_definition("release", recipe.parsed.source.release);
+    parser.add_definition(Def::Name, &recipe.parsed.source.name);
+    parser.add_definition(Def::Version, &recipe.parsed.source.version);
+    parser.add_definition(Def::Release, recipe.parsed.source.release);
 
     let mut packages = BTreeMap::new();
 
