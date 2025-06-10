@@ -243,30 +243,30 @@ impl BuildEntry {
 /// leading zeros for spaces if the duration is
 /// too small
 fn fmt_elapsed(duration: Duration) -> String {
-    let total_seconds = duration.as_secs_f32();
-    let total_minutes = total_seconds as u64 / 60;
-    let total_hours = total_minutes / 60;
+    let _seconds = duration.as_secs_f32() % 60.0;
+    let _minutes = (duration.as_secs() / 60) % 60;
+    let _hours = duration.as_secs() / 3600;
 
     // Only pad zeros if next unit exists
-    let seconds = if total_minutes >= 1 {
-        format!("{:0>5.2}s", total_seconds % 60.0)
+    let seconds = if _minutes > 0 {
+        format!("{_seconds:0>5.2}s")
     } else {
-        format!("{:>5.2}s", total_seconds % 60.0)
+        format!("{_seconds:>5.2}s")
     };
 
-    let minutes = if total_minutes >= 1 {
+    let minutes = if _minutes > 0 {
         // Only pad zeros if next unit exists
-        if total_hours >= 1 {
-            format!("{total_minutes:0>2}m")
+        if _hours > 0 {
+            format!("{_minutes:0>2}m")
         } else {
-            format!("{total_minutes:>2}m")
+            format!("{_minutes:>2}m")
         }
     } else {
         " ".repeat(3)
     };
 
-    let hours = if total_hours >= 1 {
-        format!("{total_hours:>3}h")
+    let hours = if _hours > 0 {
+        format!("{_hours:>3}h")
     } else {
         " ".repeat(4)
     };
@@ -278,4 +278,69 @@ fn fmt_progress(elapsed: Duration, total: Duration) -> String {
     let pct = elapsed.as_secs_f32() / total.as_secs_f32() * 100.0;
 
     format!("{pct:>5.1}%")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_seconds_only() {
+        let elapsed = Duration::from_secs_f32(1.004);
+        assert_eq!(fmt_elapsed(elapsed), "        1.00s");
+    }
+
+    #[test]
+    fn test_minutes_and_seconds() {
+        let elapsed = Duration::from_secs(60);
+        assert_eq!(fmt_elapsed(elapsed), "     1m00.00s");
+    }
+
+    #[test]
+    fn test_minutes_and_seconds2() {
+        let elapsed = Duration::from_secs(61);
+        assert_eq!(fmt_elapsed(elapsed), "     1m01.00s");
+    }
+
+    #[test]
+    fn test_hours_minutes_and_seconds() {
+        let elapsed = Duration::from_secs(3600);
+        assert_eq!(fmt_elapsed(elapsed), "  1h    0.00s");
+    }
+
+    #[test]
+    fn test_hours_minutes_and_seconds2() {
+        let elapsed = Duration::from_secs(3601);
+        assert_eq!(fmt_elapsed(elapsed), "  1h    1.00s");
+    }
+
+    #[test]
+    fn test_hours_minutes_and_seconds3() {
+        let elapsed = Duration::from_secs(3661);
+        assert_eq!(fmt_elapsed(elapsed), "  1h01m01.00s");
+    }
+
+    #[test]
+    fn test_two_hours_or_more() {
+        let elapsed = Duration::from_secs(7200);
+        assert_eq!(fmt_elapsed(elapsed), "  2h    0.00s");
+    }
+
+    #[test]
+    fn test_two_hours_or_more2() {
+        let elapsed = Duration::from_secs(7201);
+        assert_eq!(fmt_elapsed(elapsed), "  2h    1.00s");
+    }
+
+    #[test]
+    fn test_two_hours_or_more3() {
+        let elapsed = Duration::from_secs(7261);
+        assert_eq!(fmt_elapsed(elapsed), "  2h01m01.00s");
+    }
+
+    #[test]
+    fn test_two_hours_or_more100() {
+        let elapsed = Duration::from_secs(360_061);
+        assert_eq!(fmt_elapsed(elapsed), "100h01m01.00s");
+    }
 }
