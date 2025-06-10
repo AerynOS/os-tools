@@ -40,6 +40,230 @@ pub struct Action {
     pub dependencies: Vec<String>,
 }
 
+macro_rules! builtin_definitions {
+    (
+        $(
+            $ident:ident {
+                name: $name:expr,
+                description: $description:expr,
+                example: $example:expr$(,)?
+            }
+        ),+
+        $(,)?
+    ) => {
+        pub enum BuiltinDefinition {
+            $( $ident ),+
+        }
+
+        impl BuiltinDefinition {
+            pub fn name(&self) -> &str {
+                match self {
+                    $( Self::$ident => $name, )+
+                }
+            }
+
+            pub fn details(&self) -> DefinitionDetails<'_> {
+                match self { $(
+                    Self::$ident => DefinitionDetails {
+                        name: $name,
+                        description: $description,
+                        example: $example,
+                    },
+                )+ }
+            }
+        }
+    };
+}
+
+pub struct DefinitionDetails<'a> {
+    pub name: &'a str,
+    pub description: &'a str,
+    pub example: &'a str,
+}
+
+builtin_definitions! {
+    Name {
+        name: "name",
+        description: "",
+        example: "",
+    },
+    Version {
+        name: "version",
+        description: "",
+        example: "",
+    },
+    Release {
+        name: "release",
+        description: "",
+        example: "",
+    },
+    Jobs {
+        name: "jobs",
+        description: "",
+        example: "",
+    },
+    PkgDir {
+        name: "pkgdir",
+        description: "",
+        example: "",
+    },
+    SourceDir {
+        name: "sourcedir",
+        description: "",
+        example: "",
+    },
+    InstallRoot {
+        name: "installroot",
+        description: "",
+        example: "",
+    },
+    BuildRoot {
+        name: "buildroot",
+        description: "",
+        example: "",
+    },
+    WorkDir {
+        name: "workdir",
+        description: "",
+        example: "",
+    },
+    CompilerCache {
+        name: "compiler_cache",
+        description: "",
+        example: "",
+    },
+    SCompilerCache {
+        name: "scompiler_cache",
+        description: "",
+        example: "",
+    },
+    SourceDateEpoch {
+        name: "sourcedateepoch",
+        description: "",
+        example: "",
+    },
+    RustcWrapper {
+        name: "rustc_wrapper",
+        description: "",
+        example: "",
+    },
+    CompilerC {
+        name: "compiler_c",
+        description: "",
+        example: "",
+    },
+    CompilerCxx {
+        name: "compiler_cxx",
+        description: "",
+        example: "",
+    },
+    CompilerObjC {
+        name: "compiler_objc",
+        description: "",
+        example: "",
+    },
+    CompilerObjCxx {
+        name: "compiler_objcxx",
+        description: "",
+        example: "",
+    },
+    CompilerCpp {
+        name: "compiler_cpp",
+        description: "",
+        example: "",
+    },
+    CompilerObjCpp {
+        name: "compiler_objcpp",
+        description: "",
+        example: "",
+    },
+    CompilerObjCxxCpp {
+        name: "compiler_objcxxcpp",
+        description: "",
+        example: "",
+    },
+    CompilerD {
+        name: "compiler_d",
+        description: "",
+        example: "",
+    },
+    CompilerAr {
+        name: "compiler_ar",
+        description: "",
+        example: "",
+    },
+    CompilerObjcopy {
+        name: "compiler_objcopy",
+        description: "",
+        example: "",
+    },
+    CompilerNm {
+        name: "compiler_nm",
+        description: "",
+        example: "",
+    },
+    CompilerRanlib {
+        name: "compiler_ranlib",
+        description: "",
+        example: "",
+    },
+    CompilerStrip {
+        name: "compiler_strip",
+        description: "",
+        example: "",
+    },
+    CompilerPath {
+        name: "compiler_path",
+        description: "",
+        example: "",
+    },
+    CompilerLd {
+        name: "compiler_ld",
+        description: "",
+        example: "",
+    },
+    PgoStage {
+        name: "pgo_stage",
+        description: "",
+        example: "",
+    },
+    PgoDir {
+        name: "pgo_dir",
+        description: "",
+        example: "",
+    },
+    CFlags {
+        name: "cflags",
+        description: "",
+        example: "",
+    },
+    CxxFlags {
+        name: "cxxflags",
+        description: "",
+        example: "",
+    },
+    FFlags {
+        name: "fflags",
+        description: "",
+        example: "",
+    },
+    LdFlags {
+        name: "ldflags",
+        description: "",
+        example: "",
+    },
+    DFlags {
+        name: "dflags",
+        description: "",
+        example: "",
+    },
+    RustFlags {
+        name: "rustflags",
+        description: "",
+        example: "",
+    },
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
