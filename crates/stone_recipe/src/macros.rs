@@ -39,6 +39,58 @@ pub struct Action {
     pub dependencies: Vec<String>,
 }
 
+/// Macro to define the `BuiltinDefinition` enum and its methods.
+///
+/// Example input:
+///
+/// ```ignore
+/// builtin_definitions! {
+///     Name {
+///         name: "name",
+///         description: "Package name",
+///         example: "I don't know how %(name) is used in practice",
+///     },
+///     Version {
+///         name: "version",
+///         description: "Package version",
+///         example: "I don't know how %(version) is used in practice",
+///     },
+/// }
+/// ```
+///
+/// Corresponding output:
+///
+/// ```no_run
+/// # use stone_recipe::macros::DefinitionDetails;
+/// pub enum BuiltinDefinition {
+///     Name,
+///     Version,
+/// }
+///
+/// impl BuiltinDefinition {
+///     pub fn name(&self) -> &str {
+///         match self {
+///             Self::Name => "name",
+///             Self::Version => "version",
+///         }
+///     }
+///
+///     pub fn details(&self) -> DefinitionDetails<'_> {
+///         match self {
+///             Self::Name => DefinitionDetails {
+///                 name: "name",
+///                 description: "Package name",
+///                 example: "I don't know how %(name) is used in practice",
+///             },
+///             Self::Version => DefinitionDetails {
+///                 name: "version",
+///                 description: "Package version",
+///                 example: "I don't know how %(version) is used in practice",
+///             },
+///         }
+///     }
+/// }
+/// ```
 macro_rules! builtin_definitions {
     (
         $(
