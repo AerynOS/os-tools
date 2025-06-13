@@ -16,6 +16,14 @@ actions:
         dependencies:
             - binary(cargo)
 
+    - cargo_vendor:
+        description: Vendor all dependencies
+        command: |
+            mkdir -pv ./.cargo
+            cargo vendor -v --locked >> ./.cargo/config.toml
+        dependencies:
+            - binary(cargo)
+
     - cargo_build:
         description: Build the rust project
         command: |
