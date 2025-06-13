@@ -137,5 +137,5 @@ impl Encoder {
 
 fn map_error_code(code: usize) -> io::Error {
     let msg = zstd_safe::get_error_name(code);
-    io::Error::new(io::ErrorKind::Other, msg.to_owned())
+    io::Error::other(msg.to_owned())
 }

@@ -112,7 +112,7 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
             package: p.id.clone(),
             // Package is explicit if it was one of the input
             // packages provided by the user
-            explicit: input.iter().any(|id| *id == p.id),
+            explicit: input.contains(&p.id),
             reason: None,
         });
 
