@@ -31,7 +31,7 @@ pub fn handle(_args: &ArgMatches, installation: Installation) -> Result<(), Erro
 
     let manager = blsforme::Manager::new(&config)?;
     match manager.boot_environment().firmware {
-        blsforme::Firmware::UEFI => {
+        blsforme::Firmware::Uefi => {
             println!("ESP            : {:?}", manager.boot_environment().esp());
             println!("XBOOTLDR       : {:?}", manager.boot_environment().xbootldr());
             if is_native {
@@ -41,7 +41,7 @@ pub fn handle(_args: &ArgMatches, installation: Installation) -> Result<(), Erro
                 }
             }
         }
-        blsforme::Firmware::BIOS => {
+        blsforme::Firmware::Bios => {
             println!("BOOT           : {:?}", manager.boot_environment().boot_partition());
         }
     }

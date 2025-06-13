@@ -358,17 +358,17 @@ dependencies = [
 [[package]]
 name = "blsforme"
 version = "0.1.0"
-source = "git+https://github.com/AerynOS/blsforme.git?rev=6e7ffc5e228f072b50c87dc4eac81e4cd2164d03#6e7ffc5e228f072b50c87dc4eac81e4cd2164d03"
+source = "git+https://github.com/AerynOS/blsforme.git?rev=c0489895a6e3809b14727b043e91c92c02fd576a#c0489895a6e3809b14727b043e91c92c02fd576a"
 dependencies = [
  "blake3",
+ "fs-err",
  "gpt",
  "log",
  "nix 0.30.1",
  "os-info",
  "serde",
  "serde_json",
- "superblock",
- "thiserror 2.0.12",
+ "snafu",
  "topology",
 ]
 
@@ -1148,9 +1148,9 @@ dependencies = [
 
 [[package]]
 name = "fs-err"
-version = "3.1.0"
+version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1f89bda4c2a21204059a977ed3bfe746677dfd137b83c339e702b0ac91d482aa"
+checksum = "88d7be93788013f265201256d58f04936a8079ad5dc898743aa20525f503b683"
 dependencies = [
  "autocfg",
  "tokio",
@@ -1282,13 +1282,13 @@ checksum = "a8d1add55171497b4705a648c6b583acafb01d58050a51727785f0b2c8e0a2b2"
 
 [[package]]
 name = "gpt"
-version = "3.1.0"
+version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8283e7331b8c93b9756e0cfdbcfb90312852f953c6faf9bf741e684cc3b6ad69"
+checksum = "3696fafb1ecdcc2ae3ce337de73e9202806068594b77d22fdf2f3573c5ec2219"
 dependencies = [
  "bitflags",
  "crc",
- "log",
+ "simple-bytes",
  "uuid",
 ]
 
@@ -2047,12 +2047,12 @@ dependencies = [
 [[package]]
 name = "os-info"
 version = "0.1.0"
-source = "git+https://github.com/AerynOS/os-info?rev=862808097f40ab5c04bb4c9a7ea0869acc05d339#862808097f40ab5c04bb4c9a7ea0869acc05d339"
+source = "git+https://github.com/AerynOS/os-info?rev=a3f68452502c0ff2e17449449b50cd665f11173d#a3f68452502c0ff2e17449449b50cd665f11173d"
 dependencies = [
  "chrono",
  "serde",
  "serde_json",
- "thiserror 2.0.12",
+ "snafu",
 ]
 
 [[package]]
@@ -2695,6 +2695,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "simple-bytes"
+version = "0.2.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c11532d9d241904f095185f35dcdaf930b1427a94d5b01d7002d74ba19b44cc4"
+
+[[package]]
 name = "slab"
 version = "0.4.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2708,6 +2714,27 @@ name = "smallvec"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8917285742e9f3e1683f0a9c4e6b57960b7314d0b08d30d1ecd426713ee2eee9"
+
+[[package]]
+name = "snafu"
+version = "0.8.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "320b01e011bf8d5d7a4a4a4be966d9160968935849c83b918827f6a435e7f627"
+dependencies = [
+ "snafu-derive",
+]
+
+[[package]]
+name = "snafu-derive"
+version = "0.8.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1961e2ef424c1424204d3a5d6975f934f56b6d50ff5732382d84ebf460e147f7"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "syn",
+]
 
 [[package]]
 name = "socket2"
@@ -2791,11 +2818,11 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "superblock"
 version = "0.1.0"
-source = "git+https://github.com/AerynOS/disks-rs?rev=eaf696353270f2cb76966f8a858f22c5289c9558#eaf696353270f2cb76966f8a858f22c5289c9558"
+source = "git+https://github.com/AerynOS/disks-rs?rev=437299f58e19ec8dc3a6699a918ee3dbece72bd3#437299f58e19ec8dc3a6699a918ee3dbece72bd3"
 dependencies = [
  "serde",
  "serde_json",
- "thiserror 2.0.12",
+ "snafu",
  "uuid",
  "zerocopy",
 ]
@@ -3068,13 +3095,14 @@ dependencies = [
 [[package]]
 name = "topology"
 version = "0.1.0"
-source = "git+https://github.com/AerynOS/blsforme.git?rev=6e7ffc5e228f072b50c87dc4eac81e4cd2164d03#6e7ffc5e228f072b50c87dc4eac81e4cd2164d03"
+source = "git+https://github.com/AerynOS/blsforme.git?rev=c0489895a6e3809b14727b043e91c92c02fd576a#c0489895a6e3809b14727b043e91c92c02fd576a"
 dependencies = [
+ "fs-err",
  "gpt",
  "log",
  "nix 0.30.1",
+ "snafu",
  "superblock",
- "thiserror 2.0.12",
 ]
 
 [[package]]
