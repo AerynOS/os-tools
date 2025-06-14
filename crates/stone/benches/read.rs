@@ -4,11 +4,12 @@
 
 use std::{
     fs::File,
+    hint::black_box,
     io::{sink, BufReader, Read, Seek},
     path::Path,
 };
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, Criterion};
 
 fn read_unbuffered(path: impl AsRef<Path>) {
     read(File::open(path).unwrap());
