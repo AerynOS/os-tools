@@ -22,6 +22,7 @@ enum ProviderFilter {
     All(Provider),
 }
 
+#[derive(Clone, Copy)]
 enum Lookup {
     InstalledOnly,
     Global,
@@ -99,39 +100,45 @@ impl Transaction<'_> {
             }
             let mut next = vec![];
             for check_id in items {
-                // Ensure node is added and get its index
-                let check_node = self.packages.add_node_or_get_index(check_id.clone());
-
-                // Grab this package in question
-                let package = self.registry.by_id(&check_id).next();
-                let package = package.ok_or(Error::NoCandidate(check_id.into()))?;
-
-                for dependency in package.meta.dependencies {
-                    let provider = Provider {
-                        kind: dependency.kind,
-                        name: dependency.name,
-                    };
-
-                    // Now get it resolved
-                    let search = match lookup {
-                        Lookup::Global => self.resolve_installation_provider(provider)?,
-                        Lookup::InstalledOnly => self.resolve_provider(ProviderFilter::InstalledOnly(provider))?,
-                    };
-
-                    // Add dependency node
-                    let need_search = !self.packages.node_exists(&search);
-                    let dep_node = self.packages.add_node_or_get_index(search.clone());
-
-                    // No dag node for it previously
-                    if need_search {
-                        next.push(search.clone());
-                    }
-
-                    // Connect w/ edges (rejects cyclical & duplicate edges)
-                    self.packages.add_edge(check_node, dep_node);
-                }
+                self.update_step(check_id, &mut next, lookup)?;
             }
             items = next;
+        }
+
+        Ok(())
+    }
+
+    fn update_step(&mut self, check_id: package::Id, next: &mut Vec<package::Id>, lookup: Lookup) -> Result<(), Error> {
+        // Ensure node is added and get its index
+        let check_node = self.packages.add_node_or_get_index(check_id.clone());
+
+        // Grab this package in question
+        let package = self.registry.by_id(&check_id).next();
+        let package = package.ok_or(Error::NoCandidate(check_id.into()))?;
+
+        for dependency in package.meta.dependencies {
+            let provider = Provider {
+                kind: dependency.kind,
+                name: dependency.name,
+            };
+
+            // Now get it resolved
+            let search = match lookup {
+                Lookup::Global => self.resolve_installation_provider(provider)?,
+                Lookup::InstalledOnly => self.resolve_provider(ProviderFilter::InstalledOnly(provider))?,
+            };
+
+            // Add dependency node
+            let need_search = !self.packages.node_exists(&search);
+            let dep_node = self.packages.add_node_or_get_index(search.clone());
+
+            // No dag node for it previously
+            if need_search {
+                next.push(search.clone());
+            }
+
+            // Connect w/ edges (rejects cyclical & duplicate edges)
+            self.packages.add_edge(check_node, dep_node);
         }
 
         Ok(())
