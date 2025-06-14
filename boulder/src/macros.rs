@@ -8,7 +8,7 @@ use std::{io, path::Path};
 use fs_err as fs;
 use thiserror::Error;
 
-use crate::{util, Env};
+use crate::{Env, util};
 
 #[derive(Debug)]
 pub struct Macros {

@@ -5,7 +5,7 @@
 use std::process::Command;
 
 use fs_err as fs;
-use nix::unistd::{getgid, getuid, Pid, User};
+use nix::unistd::{Pid, User, getgid, getuid};
 use thiserror::Error;
 
 pub fn idmap(pid: Pid) -> Result<(), Error> {
@@ -135,7 +135,9 @@ struct Idmap {
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("\n\nAt least 1,000 sub{1} mappings are required for {1} {0}, found {2}\n\nMappings can be added to /etc/sub{1}")]
+    #[error(
+        "\n\nAt least 1,000 sub{1} mappings are required for {1} {0}, found {2}\n\nMappings can be added to /etc/sub{1}"
+    )]
     SubMappingCount(u32, Kind, u32),
     #[error("new{1}map command failed: {0}")]
     Command(String, Kind),

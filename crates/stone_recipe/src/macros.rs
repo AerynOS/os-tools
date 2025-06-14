@@ -5,9 +5,8 @@
 use serde::Deserialize;
 
 use crate::{
-    sequence_of_key_value,
+    Error, KeyValue, Package, sequence_of_key_value,
     tuning::{TuningFlag, TuningGroup},
-    Error, KeyValue, Package,
 };
 
 pub fn from_slice(bytes: &[u8]) -> Result<Macros, Error> {

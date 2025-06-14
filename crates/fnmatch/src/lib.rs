@@ -18,7 +18,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
 
 use regex::Regex;
-use serde::{de, Deserialize};
+use serde::{Deserialize, de};
 use thiserror::Error;
 
 #[derive(Debug)]

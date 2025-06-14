@@ -1,7 +1,7 @@
 use std::{io, path::Path, process::ExitStatus, time::Duration};
 
 use fs_err::tokio::{self as fs, File};
-use futures_util::{stream, StreamExt, TryStreamExt};
+use futures_util::{StreamExt, TryStreamExt, stream};
 use moss::{environment, request, runtime};
 use sha2::{Digest, Sha256};
 use thiserror::Error;

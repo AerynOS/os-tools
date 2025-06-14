@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MPL-2.0
 use std::path::PathBuf;
 
-use boulder::{env, Env};
+use boulder::{Env, env};
 use clap::{Args, CommandFactory, Parser};
 use clap_complete::{
     generate_to,

@@ -2,15 +2,15 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-use clap::{arg, ArgMatches, Command};
+use clap::{ArgMatches, Command, arg};
 use itertools::Itertools;
 use thiserror::Error;
 
 use moss::{
+    Installation,
     client::{self, Client},
     environment,
     package::Flags,
-    Installation,
 };
 use tui::Styled;
 

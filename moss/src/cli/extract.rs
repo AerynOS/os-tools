@@ -3,12 +3,12 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use std::{
-    io::{copy, Read, Seek, SeekFrom},
+    io::{Read, Seek, SeekFrom, copy},
     os::unix::fs::symlink,
     path::PathBuf,
 };
 
-use clap::{arg, ArgMatches, Command};
+use clap::{ArgMatches, Command, arg};
 use fs_err::{self as fs, File};
 use moss::package::{self, MissingMetaFieldError};
 use stone::{payload::layout, read::PayloadKind};

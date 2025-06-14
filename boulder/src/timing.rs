@@ -193,7 +193,7 @@ pub enum Populate {
 }
 
 impl Populate {
-    fn styled(&self) -> impl fmt::Display {
+    fn styled(&self) -> impl fmt::Display + use<> {
         match self {
             Populate::Resolve => self.to_string().cyan(),
             Populate::Fetch => self.to_string().blue(),

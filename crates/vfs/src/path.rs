@@ -15,11 +15,7 @@ pub fn file_name(path: &str) -> Option<&str> {
 pub fn parent(path: &str) -> Option<&str> {
     path.trim_end_matches('/').rsplit_once('/').map(|(parent, _)| {
         // We had to have split on a direct descendent of `/`
-        if parent.is_empty() {
-            "/"
-        } else {
-            parent
-        }
+        if parent.is_empty() { "/" } else { parent }
     })
 }
 

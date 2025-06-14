@@ -19,11 +19,11 @@ use itertools::Itertools;
 use thiserror::Error;
 
 use tui::{
-    dialoguer::{theme::ColorfulTheme, Confirm},
+    dialoguer::{Confirm, theme::ColorfulTheme},
     pretty::autoprint_columns,
 };
 
-use crate::{client::cache, db, package, state, Installation, State};
+use crate::{Installation, State, client::cache, db, package, state};
 
 /// The prune strategy for removing old states
 #[derive(Debug, Clone, Copy)]

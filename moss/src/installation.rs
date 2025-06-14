@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 use fs_err as fs;
 use log::{trace, warn};
-use nix::unistd::{access, AccessFlags, Uid};
+use nix::unistd::{AccessFlags, Uid, access};
 use thiserror::Error;
 use tui::Styled;
 

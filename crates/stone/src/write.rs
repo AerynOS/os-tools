@@ -6,9 +6,8 @@ use std::io::{self, Read, Seek, SeekFrom, Write};
 use thiserror::Error;
 
 use crate::{
-    header,
+    Header, header,
     payload::{self, Attribute, Index, Layout, Meta},
-    Header,
 };
 
 pub mod digest;

@@ -13,7 +13,7 @@ use elf::{
 };
 use fs_err::File;
 
-use moss::{dependency, Dependency, Provider};
+use moss::{Dependency, Provider, dependency};
 use stone_recipe::tuning::Toolchain;
 
 use crate::{

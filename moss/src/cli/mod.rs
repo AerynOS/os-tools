@@ -10,7 +10,7 @@ use clap_complete::{
     shells::{Bash, Fish, Zsh},
 };
 use clap_mangen::Man;
-use moss::{installation, runtime, Installation};
+use moss::{Installation, installation, runtime};
 use thiserror::Error;
 use tracing::level_filters::LevelFilter;
 use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};

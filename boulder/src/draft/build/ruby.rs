@@ -4,8 +4,8 @@
 
 // filename.gem
 pub mod gemfile {
-    use crate::draft::build::{Error, Phases, State};
     use crate::draft::File;
+    use crate::draft::build::{Error, Phases, State};
 
     pub fn phases() -> Phases {
         Phases {
@@ -30,8 +30,8 @@ pub mod gemfile {
 
 // A normal tarball
 pub mod tarball {
-    use crate::draft::build::{Error, Phases, State};
     use crate::draft::File;
+    use crate::draft::build::{Error, Phases, State};
 
     pub fn phases() -> Phases {
         Phases {

@@ -18,7 +18,7 @@ use url::Url;
 
 use stone::{payload, read::PayloadKind};
 
-use crate::{package, request, Installation};
+use crate::{Installation, package, request};
 
 /// Synchronized set of assets that are currently being
 /// unpacked. Used to prevent unpacking the same asset

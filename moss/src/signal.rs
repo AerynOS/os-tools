@@ -4,7 +4,7 @@
 
 //! Signal handling
 
-use nix::sys::signal::{sigaction, SaFlags, SigAction, SigHandler, SigSet};
+use nix::sys::signal::{SaFlags, SigAction, SigHandler, SigSet, sigaction};
 use thiserror::Error;
 use zbus::message::{self};
 

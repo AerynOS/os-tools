@@ -5,9 +5,9 @@
 use log::warn;
 
 use crate::{
-    db,
+    Provider, db,
     package::{self, Package},
-    repository, Provider,
+    repository,
 };
 
 #[derive(Debug)]

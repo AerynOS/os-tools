@@ -6,7 +6,7 @@ use serde::Deserialize;
 use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
 
-use crate::{sequence_of_key_value, single_as_sequence, KeyValue, Macros};
+use crate::{KeyValue, Macros, sequence_of_key_value, single_as_sequence};
 
 #[derive(Debug, Clone)]
 pub enum Tuning {

@@ -5,7 +5,7 @@
 use dag::Dag;
 use thiserror::Error;
 
-use crate::{package, Provider, Registry};
+use crate::{Provider, Registry, package};
 
 enum ProviderFilter {
     /// Must be installed

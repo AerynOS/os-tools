@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
 pub mod pep517 {
-    use crate::draft::build::{Error, Phases, State};
     use crate::draft::File;
+    use crate::draft::build::{Error, Phases, State};
 
     pub fn phases() -> Phases {
         Phases {
@@ -26,8 +26,8 @@ pub mod pep517 {
 }
 
 pub mod setup_tools {
-    use crate::draft::build::{Error, Phases, State};
     use crate::draft::File;
+    use crate::draft::build::{Error, Phases, State};
 
     pub fn phases() -> Phases {
         Phases {

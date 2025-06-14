@@ -8,17 +8,17 @@ use std::time::{Duration, Instant};
 
 use thiserror::Error;
 use tui::{
-    dialoguer::{theme::ColorfulTheme, Confirm},
+    dialoguer::{Confirm, theme::ColorfulTheme},
     pretty::autoprint_columns,
 };
 
 use crate::{
+    Package, Provider,
     client::{self, Client},
     package::{self, Flags},
     registry::transaction,
     runtime,
     state::Selection,
-    Package, Provider,
 };
 
 /// Install a set of packages.

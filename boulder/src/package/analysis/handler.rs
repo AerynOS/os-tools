@@ -9,11 +9,11 @@ use std::{
 };
 
 use fs_err as fs;
-use moss::{dependency, Dependency, Provider};
+use moss::{Dependency, Provider, dependency};
 
 use crate::package::collect::PathInfo;
 
-use mailparse::{parse_mail, MailHeaderMap};
+use mailparse::{MailHeaderMap, parse_mail};
 
 pub use self::elf::elf;
 use super::{BoxError, BucketMut, Decision, Response};

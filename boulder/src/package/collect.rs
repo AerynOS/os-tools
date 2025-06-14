@@ -12,7 +12,7 @@ use std::{
 use fs_err as fs;
 use glob::Pattern;
 use nix::libc::{S_IFDIR, S_IRGRP, S_IROTH, S_IRWXU, S_IXGRP, S_IXOTH};
-use stone::payload::{layout, Layout};
+use stone::payload::{Layout, layout};
 use stone::write::digest;
 use thiserror::Error;
 

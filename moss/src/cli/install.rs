@@ -4,8 +4,8 @@
 
 use std::path::PathBuf;
 
-use clap::{arg, value_parser, ArgMatches, Command};
-use moss::{client::Client, environment, Installation};
+use clap::{ArgMatches, Command, arg, value_parser};
+use moss::{Installation, client::Client, environment};
 
 pub use moss::client::install::Error;
 

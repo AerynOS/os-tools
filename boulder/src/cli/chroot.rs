@@ -5,8 +5,9 @@
 use std::{io, path::PathBuf, process};
 
 use boulder::{
+    Env, Macros, Paths, Recipe,
     architecture::{self, BuildTarget},
-    build, container, macros, recipe, Env, Macros, Paths, Recipe,
+    build, container, macros, recipe,
 };
 use clap::Parser;
 use fs_err as fs;

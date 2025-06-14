@@ -6,7 +6,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use diesel::prelude::*;
 use diesel::{Connection as _, SqliteConnection};
-use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 
 use crate::db::Connection;
 use crate::package::{self, Meta};
@@ -366,10 +366,10 @@ fn batch_remove_impl(packages: &[&str], tx: &mut SqliteConnection) -> Result<(),
 
 mod model {
     use diesel::{
+        Selectable,
         associations::{Associations, Identifiable},
         deserialize::Queryable,
         prelude::Insertable,
-        Selectable,
     };
 
     pub use crate::db::meta::schema::{meta, meta_conflicts, meta_dependencies, meta_licenses, meta_providers};

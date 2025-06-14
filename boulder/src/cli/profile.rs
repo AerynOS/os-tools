@@ -9,8 +9,8 @@ use itertools::Itertools;
 use thiserror::Error;
 use url::Url;
 
-use boulder::{profile, Env, Profile};
-use moss::{repository, runtime, Installation, Repository};
+use boulder::{Env, Profile, profile};
+use moss::{Installation, Repository, repository, runtime};
 
 #[derive(Debug, Parser)]
 #[command(about = "Manage boulder profiles")]

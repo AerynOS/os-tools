@@ -8,7 +8,7 @@ use std::{
 };
 
 use fs_err as fs;
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{Serialize, de::DeserializeOwned};
 use thiserror::Error;
 
 const EXTENSION: &str = "yaml";
@@ -116,11 +116,7 @@ fn enumerate_paths(entry: Entry, resolve: Resolve<'_>, domain: &str) -> Vec<Path
         Entry::File => {
             let file = resolve.file(domain);
 
-            if file.exists() {
-                vec![file]
-            } else {
-                vec![]
-            }
+            if file.exists() { vec![file] } else { vec![] }
         }
         Entry::Directory => {
             if let Ok(read_dir) = fs::read_dir(resolve.dir(domain)) {

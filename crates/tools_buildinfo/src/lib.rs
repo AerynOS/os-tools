@@ -34,11 +34,7 @@ pub const fn get_if_git_build() -> bool {
 
 /// Returns `-dirty` if the project was built from a dirty git source, `` otherwise
 pub const fn get_git_dirty() -> &'static str {
-    if cfg!(BUILDINFO_IS_DIRTY) {
-        "-dirty"
-    } else {
-        ""
-    }
+    if cfg!(BUILDINFO_IS_DIRTY) { "-dirty" } else { "" }
 }
 
 /// Returns the git hash that the project was built from if built from a git source

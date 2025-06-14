@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use fs_err::{self as fs, File};
-use futures_util::{stream, StreamExt, TryStreamExt};
+use futures_util::{StreamExt, TryStreamExt, stream};
 use thiserror::Error;
 use xxhash_rust::xxh3::xxh3_64;
 
@@ -16,8 +16,8 @@ use tui::{MultiProgress, ProgressBar, ProgressStyle, Styled};
 
 use crate::db::meta;
 use crate::repository::{self, Repository};
+use crate::{Installation, package};
 use crate::{environment, runtime};
-use crate::{package, Installation};
 
 enum Source {
     System(config::Manager),
@@ -179,11 +179,7 @@ impl Manager {
                 let index_file =
                     cache_dir(self.source.identifier(), &state.repository, &self.installation).join("stone.index");
 
-                if !index_file.exists() {
-                    Some(id)
-                } else {
-                    None
-                }
+                if !index_file.exists() { Some(id) } else { None }
             })
             .collect::<Vec<_>>();
 

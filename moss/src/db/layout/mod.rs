@@ -4,7 +4,7 @@
 
 use diesel::prelude::*;
 use diesel::{Connection as _, SqliteConnection};
-use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use std::collections::BTreeSet;
 
 use stone::payload;
@@ -204,7 +204,7 @@ fn encode_entry(entry: payload::layout::Entry) -> (&'static str, Option<String>,
 }
 
 mod model {
-    use diesel::{associations::Identifiable, deserialize::Queryable, prelude::Insertable, Selectable};
+    use diesel::{Selectable, associations::Identifiable, deserialize::Queryable, prelude::Insertable};
 
     use crate::package;
 

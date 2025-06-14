@@ -5,11 +5,11 @@
 use std::{
     fs::File,
     hint::black_box,
-    io::{sink, BufReader, Read, Seek},
+    io::{BufReader, Read, Seek, sink},
     path::Path,
 };
 
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 
 fn read_unbuffered(path: impl AsRef<Path>) {
     read(File::open(path).unwrap());

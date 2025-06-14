@@ -5,8 +5,8 @@
 use std::io::Write;
 
 use tui::{
-    pretty::{Column, ColumnDisplay},
     Styled,
+    pretty::{Column, ColumnDisplay},
 };
 
 use crate::Package;

@@ -11,8 +11,8 @@ use thiserror::Error;
 
 use stone::read::PayloadKind;
 
-use crate::package::{self, meta, Meta, MissingMetaFieldError, Package};
 use crate::Provider;
+use crate::package::{self, Meta, MissingMetaFieldError, Package, meta};
 
 // TODO:
 #[derive(Default, Debug, Clone, PartialEq, Eq)]
