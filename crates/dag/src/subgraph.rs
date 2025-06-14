@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-use petgraph::{prelude::Graph, stable_graph::IndexType, visit::Dfs, EdgeType};
+use petgraph::{EdgeType, prelude::Graph, stable_graph::IndexType, visit::Dfs};
 
 /// Given an input [`Graph`] and the start nodes, construct a subgraph
 /// Used largely in transposed form for reverse dependency calculation

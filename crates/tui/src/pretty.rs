@@ -6,7 +6,7 @@
 
 use std::{
     cmp::{max, min},
-    io::{stdout, Write},
+    io::{Write, stdout},
 };
 
 use crate::TermSize;

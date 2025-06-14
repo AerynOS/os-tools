@@ -6,7 +6,7 @@ use std::{io, path::PathBuf};
 
 use derive_more::Debug;
 
-use crate::{util, Recipe};
+use crate::{Recipe, util};
 
 #[derive(Debug, Clone)]
 #[debug("{_0:?}")]

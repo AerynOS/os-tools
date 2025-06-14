@@ -11,14 +11,14 @@ use std::sync::atomic::{AtomicI32, Ordering};
 
 use fs_err::{self as fs, PathExt as _};
 use nix::libc::SIGCHLD;
-use nix::mount::{mount, umount2, MntFlags, MsFlags};
-use nix::sched::{clone, CloneFlags};
+use nix::mount::{MntFlags, MsFlags, mount, umount2};
+use nix::sched::{CloneFlags, clone};
 use nix::sys::prctl::set_pdeathsig;
-use nix::sys::signal::{kill, sigaction, SaFlags, SigAction, SigHandler, Signal};
+use nix::sys::signal::{SaFlags, SigAction, SigHandler, Signal, kill, sigaction};
 use nix::sys::signalfd::SigSet;
-use nix::sys::stat::{umask, Mode};
-use nix::sys::wait::{waitpid, WaitStatus};
-use nix::unistd::{close, pipe, pivot_root, read, sethostname, tcsetpgrp, write, Pid, Uid};
+use nix::sys::stat::{Mode, umask};
+use nix::sys::wait::{WaitStatus, waitpid};
+use nix::unistd::{Pid, Uid, close, pipe, pivot_root, read, sethostname, tcsetpgrp, write};
 use thiserror::Error;
 
 use self::idmap::idmap;

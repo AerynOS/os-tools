@@ -13,8 +13,8 @@ use std::{
 };
 
 use blsforme::{
-    os_release::{self, OsRelease},
     CmdlineEntry, Entry, Schema,
+    os_release::{self, OsRelease},
 };
 use fnmatch::Pattern;
 use fs_err as fs;
@@ -22,7 +22,7 @@ use itertools::Itertools;
 use stone::payload::layout::{self, Layout};
 use thiserror::{self, Error};
 
-use crate::{db, package::Id, Installation, State};
+use crate::{Installation, State, db, package::Id};
 
 use super::Client;
 

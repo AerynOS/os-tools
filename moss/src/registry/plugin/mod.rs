@@ -10,8 +10,8 @@
 //!
 //! [`Registry`]: super::Registry
 
-use crate::registry::package::{self, Package};
 use crate::Provider;
+use crate::registry::package::{self, Package};
 
 pub use self::active::Active;
 pub use self::cobble::Cobble;

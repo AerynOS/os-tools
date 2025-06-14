@@ -7,9 +7,9 @@ use clap::{Arg, ArgMatches, Command};
 
 use moss::client;
 use moss::package::{self, Name};
-use moss::{environment, Client, Installation};
-use tui::pretty::{print_columns, ColumnDisplay};
+use moss::{Client, Installation, environment};
 use tui::Styled;
+use tui::pretty::{ColumnDisplay, print_columns};
 
 const ARG_KEYWORD: &str = "KEYWORD";
 const FLAG_INSTALLED: &str = "installed";

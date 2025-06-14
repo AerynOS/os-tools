@@ -9,14 +9,15 @@ use itertools::Itertools;
 use fs_err as fs;
 use stone::{payload::layout, write::digest};
 use tui::{
-    dialoguer::{theme::ColorfulTheme, Confirm},
     ProgressBar, ProgressStyle, Styled,
+    dialoguer::{Confirm, theme::ColorfulTheme},
 };
 use vfs::tree::BlitFile;
 
 use crate::{
+    Client, Package, Signal,
     client::{self, cache},
-    package, runtime, signal, state, Client, Package, Signal,
+    package, runtime, signal, state,
 };
 
 pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::Error> {

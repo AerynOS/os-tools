@@ -9,13 +9,13 @@ use std::{
 
 use fs_err::{self as fs, File};
 use itertools::Itertools;
-use moss::{package::Meta, Dependency, Provider};
+use moss::{Dependency, Provider, package::Meta};
 use thiserror::Error;
 use tui::{ProgressBar, ProgressStyle, Styled};
 
 use self::manifest::Manifest;
 use super::analysis;
-use crate::{architecture, util, Architecture, Paths, Recipe};
+use crate::{Architecture, Paths, Recipe, architecture, util};
 
 mod manifest;
 

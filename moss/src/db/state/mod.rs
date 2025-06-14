@@ -5,12 +5,12 @@
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 use diesel::{Connection as _, SqliteConnection};
-use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
 use itertools::Itertools;
 
 use super::{Connection, Error, MAX_VARIABLE_NUMBER};
-use crate::state::{self, Id, Selection};
 use crate::State;
+use crate::state::{self, Id, Selection};
 
 const MIGRATIONS: EmbeddedMigrations = embed_migrations!("src/db/state/migrations");
 
@@ -174,11 +174,11 @@ impl Database {
 
 mod model {
     use diesel::{
+        Selectable,
         associations::{Associations, Identifiable},
         deserialize::Queryable,
         prelude::Insertable,
         sqlite::Sqlite,
-        Selectable,
     };
 
     use crate::{db::Timestamp, package, state::Kind};

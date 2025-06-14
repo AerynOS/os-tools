@@ -11,7 +11,7 @@ use std::{
 };
 
 use fs_err as fs;
-use nix::unistd::{linkat, LinkatFlags};
+use nix::unistd::{LinkatFlags, linkat};
 use url::Url;
 
 pub fn ensure_dir_exists(path: &Path) -> io::Result<()> {

@@ -8,9 +8,9 @@ use std::{
 };
 
 use boulder::{
-    architecture,
+    Env, Macros, architecture,
     draft::{self, Drafter},
-    macros, recipe, Env, Macros,
+    macros, recipe,
 };
 use clap::Parser;
 use fs_err as fs;
@@ -21,8 +21,8 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use tokio::io::AsyncWriteExt;
 use tui::{
-    pretty::{self, ColumnDisplay},
     MultiProgress, ProgressBar, ProgressStyle, Styled,
+    pretty::{self, ColumnDisplay},
 };
 use url::Url;
 
@@ -209,10 +209,10 @@ fn update(
     for (i, (original, update)) in parsed.upstreams.iter().zip(upstreams).enumerate() {
         match (original, update) {
             (stone_recipe::Upstream::Plain { .. }, Upstream::Git(_)) => {
-                return Err(Error::UpstreamMismatch(i, "Plain", "Git"))
+                return Err(Error::UpstreamMismatch(i, "Plain", "Git"));
             }
             (stone_recipe::Upstream::Git { .. }, Upstream::Plain(_)) => {
-                return Err(Error::UpstreamMismatch(i, "Git", "Plain"))
+                return Err(Error::UpstreamMismatch(i, "Git", "Plain"));
             }
             (stone_recipe::Upstream::Plain { .. }, Upstream::Plain(new_uri)) => {
                 let key = value["upstreams"][i]

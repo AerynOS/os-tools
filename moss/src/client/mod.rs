@@ -18,12 +18,12 @@ use std::{
 };
 
 use fs_err as fs;
-use futures_util::{stream, StreamExt, TryStreamExt};
+use futures_util::{StreamExt, TryStreamExt, stream};
 use nix::{
     errno::Errno,
     fcntl::{self, OFlag},
-    libc::{syscall, SYS_renameat2, AT_FDCWD, RENAME_EXCHANGE},
-    sys::stat::{fchmodat, mkdirat, Mode},
+    libc::{AT_FDCWD, RENAME_EXCHANGE, SYS_renameat2, syscall},
+    sys::stat::{Mode, fchmodat, mkdirat},
     unistd::{close, linkat, mkdir, symlinkat},
 };
 use postblit::TriggerScope;
@@ -31,17 +31,16 @@ use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use stone::{payload::layout, read::PayloadKind};
 use thiserror::Error;
 use tui::{MultiProgress, ProgressBar, ProgressStyle, Styled};
-use vfs::tree::{builder::TreeBuilder, BlitFile, Element};
+use vfs::tree::{BlitFile, Element, builder::TreeBuilder};
 
 use self::install::install;
 use self::prune::prune;
 use self::verify::verify;
 use crate::{
-    db, environment, installation, package,
+    Installation, Package, Registry, Signal, State, db, environment, installation, package,
     registry::plugin::{self, Plugin},
     repository, runtime, signal,
     state::{self, Selection},
-    Installation, Package, Registry, Signal, State,
 };
 
 pub mod boot;
@@ -572,7 +571,7 @@ impl Client {
 
                 total_progress.inc(1);
 
-                Ok(()) as Result<_, Error>
+                Ok::<_, Error>(())
             }
         })
         .await?;

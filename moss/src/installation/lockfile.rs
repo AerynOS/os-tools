@@ -11,7 +11,7 @@ use std::{
 };
 
 use fs_err::File;
-use nix::fcntl::{flock, FlockArg};
+use nix::fcntl::{FlockArg, flock};
 use thiserror::Error;
 
 /// An acquired file lock guaranteeing exclusive access

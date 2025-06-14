@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Copyright © 2020-2025 Serpent OS Developers
 //
 // SPDX-License-Identifier: MPL-2.0
-use std::collections::{btree_map, BTreeMap};
+use std::collections::{BTreeMap, btree_map};
 use std::{io, num::NonZeroU64};
 
 use fs_err as fs;
@@ -9,9 +9,9 @@ use itertools::Itertools;
 use thiserror::Error;
 
 use stone::write::digest;
-use stone_recipe::{script, Package};
+use stone_recipe::{Package, script};
 
-use crate::{build, container, timing, util, Macros, Paths, Recipe, Timing};
+use crate::{Macros, Paths, Recipe, Timing, build, container, timing, util};
 
 use self::collect::Collector;
 use self::emit::emit;

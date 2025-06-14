@@ -8,13 +8,13 @@ use nom::{
     bytes::complete::tag,
     character::complete::{alpha1, anychar, char, digit1, newline},
     combinator::{eof, iterator, map, peek, recognize, value},
-    multi::{many1, many_till},
+    multi::{many_till, many1},
     sequence::{delimited, preceded, terminated},
 };
 use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
 
-use crate::{macros::Action, Macros};
+use crate::{Macros, macros::Action};
 
 #[derive(Default)]
 pub struct Parser {
@@ -293,8 +293,7 @@ mod test {
 
     #[test]
     fn parse_script() {
-        let input =
-            "\n\n%patch %%escaped %{ %break_continue\n%break_exit %(pkgdir)/0001-deps-analysis-elves-In-absence-of-soname.-make-one-u.patch";
+        let input = "\n\n%patch %%escaped %{ %break_continue\n%break_exit %(pkgdir)/0001-deps-analysis-elves-In-absence-of-soname.-make-one-u.patch";
 
         let mut parser = Parser::new();
         parser.add_action(

@@ -4,11 +4,12 @@
 
 use std::process;
 
-use clap::{arg, Arg, ArgAction, ArgMatches, Command};
+use clap::{Arg, ArgAction, ArgMatches, Command, arg};
 use itertools::Itertools;
 use moss::{
+    Installation, Repository,
     repository::{self, Priority},
-    runtime, Installation, Repository,
+    runtime,
 };
 use thiserror::Error;
 use tui::Styled;

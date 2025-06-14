@@ -8,7 +8,7 @@ use derive_more::{AsRef, Debug, Display, From, Into};
 use stone::payload;
 use thiserror::Error;
 
-use crate::{dependency, Dependency, Provider};
+use crate::{Dependency, Provider, dependency};
 
 /// A package identifier constructed from metadata fields
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Display)]

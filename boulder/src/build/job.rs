@@ -8,12 +8,12 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use stone_recipe::{script, tuning, Script, Upstream};
+use stone_recipe::{Script, Upstream, script, tuning};
 use thiserror::Error;
 
 pub use self::phase::Phase;
 use crate::build::pgo;
-use crate::{architecture::BuildTarget, util, Macros, Paths, Recipe};
+use crate::{Macros, Paths, Recipe, architecture::BuildTarget, util};
 
 mod phase;
 

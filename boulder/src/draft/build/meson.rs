@@ -4,11 +4,11 @@
 use std::path::Path;
 
 use fs_err as fs;
-use moss::{dependency, Dependency};
+use moss::{Dependency, dependency};
 use regex::Regex;
 
-use crate::draft::build::{Error, Phases, State};
 use crate::draft::File;
+use crate::draft::build::{Error, Phases, State};
 
 pub fn phases() -> Phases {
     Phases {

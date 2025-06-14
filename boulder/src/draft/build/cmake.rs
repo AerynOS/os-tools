@@ -7,9 +7,9 @@ use std::path::Path;
 
 use fs_err as fs;
 
-use crate::draft::build::{Error, Phases, State};
 use crate::draft::File;
-use moss::{dependency, Dependency};
+use crate::draft::build::{Error, Phases, State};
+use moss::{Dependency, dependency};
 
 pub fn phases() -> Phases {
     Phases {

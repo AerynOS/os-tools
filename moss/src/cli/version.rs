@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-use clap::{arg, ArgMatches, Command};
+use clap::{ArgMatches, Command, arg};
 
 /// Construct the Version command
 pub fn command() -> Command {

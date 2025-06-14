@@ -3,10 +3,11 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use chrono::Local;
-use clap::{arg, ArgAction, ArgMatches, Command};
+use clap::{ArgAction, ArgMatches, Command, arg};
 use moss::{
-    client::{self, prune, Client},
-    environment, state, Installation,
+    Installation,
+    client::{self, Client, prune},
+    environment, state,
 };
 use thiserror::Error;
 use tui::Styled;

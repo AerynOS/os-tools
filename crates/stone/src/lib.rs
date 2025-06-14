@@ -11,7 +11,7 @@ pub mod write;
 
 pub use self::header::Header;
 pub use self::payload::Payload;
-pub use self::read::{read, read_bytes, Reader};
+pub use self::read::{Reader, read, read_bytes};
 pub use self::write::Writer;
 
 pub trait ReadExt: Read {

@@ -97,7 +97,10 @@ impl<'a> Monitoring<'a> {
                 Ok(None)
             }
         } else if body.total_items > 1 && body.total_items < 10 {
-            println!("{} | Multiple potential IDs matched, find the correct ID for the project at https://release-monitoring.org/", "Warning".yellow());
+            println!(
+                "{} | Multiple potential IDs matched, find the correct ID for the project at https://release-monitoring.org/",
+                "Warning".yellow()
+            );
             for i in body.items {
                 println!(
                     "ID {} Name {} URL https://release-monitoring.org/project/{}/",

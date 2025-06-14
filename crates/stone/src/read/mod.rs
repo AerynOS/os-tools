@@ -6,8 +6,8 @@ use std::io::{self, Cursor, Read, Seek, SeekFrom, Write};
 use thiserror::Error;
 
 use crate::payload::{Attribute, Compression, Index, Layout, Meta};
-use crate::{header, Payload};
-use crate::{payload, Header};
+use crate::{Header, payload};
+use crate::{Payload, header};
 
 use self::zstd::Zstd;
 
@@ -166,11 +166,7 @@ impl PayloadKind {
     }
 
     pub fn meta(&self) -> Option<&Payload<Vec<Meta>>> {
-        if let Self::Meta(meta) = self {
-            Some(meta)
-        } else {
-            None
-        }
+        if let Self::Meta(meta) = self { Some(meta) } else { None }
     }
 
     pub fn attributes(&self) -> Option<&Payload<Vec<Attribute>>> {

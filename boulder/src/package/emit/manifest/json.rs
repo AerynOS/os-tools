@@ -13,7 +13,7 @@ use itertools::Itertools;
 use serde::Serialize;
 
 use super::Error;
-use crate::{package::emit, Recipe};
+use crate::{Recipe, package::emit};
 
 pub fn write(
     path: &Path,

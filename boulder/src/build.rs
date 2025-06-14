@@ -15,11 +15,11 @@ use itertools::Itertools;
 use moss::runtime;
 use nix::{
     sys::signal::Signal,
-    unistd::{getpgrp, setpgid, Pid},
+    unistd::{Pid, getpgrp, setpgid},
 };
 use stone_recipe::{
-    script::{self, Breakpoint},
     Script,
+    script::{self, Breakpoint},
 };
 use thiserror::Error;
 use tui::Styled;
@@ -31,7 +31,7 @@ mod upstream;
 
 use self::job::Job;
 use crate::{
-    architecture::BuildTarget, container, macros, profile, recipe, timing, util, Env, Macros, Paths, Recipe, Timing,
+    Env, Macros, Paths, Recipe, Timing, architecture::BuildTarget, container, macros, profile, recipe, timing, util,
 };
 
 pub struct Builder {
@@ -388,11 +388,7 @@ fn breakpoint_line(
         .filter(|(_, line)| {
             let indented = line.trim().chars().next() != line.chars().next();
 
-            if profile.is_none() {
-                !indented
-            } else {
-                indented
-            }
+            if profile.is_none() { !indented } else { indented }
         })
         // Skip lines occurring before profile, otherwise it's the
         // root profile

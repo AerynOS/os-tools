@@ -5,19 +5,19 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use clap::{arg, value_parser, ArgMatches, Command};
+use clap::{ArgMatches, Command, arg, value_parser};
 use moss::registry::transaction;
 use moss::state::Selection;
+use moss::{Installation, environment, runtime};
 use moss::{
+    Package,
     client::{self, Client},
     package::{self},
-    Package,
 };
-use moss::{environment, runtime, Installation};
 use thiserror::Error;
 
-use tui::dialoguer::theme::ColorfulTheme;
 use tui::dialoguer::Confirm;
+use tui::dialoguer::theme::ColorfulTheme;
 use tui::pretty::autoprint_columns;
 
 pub fn command() -> Command {

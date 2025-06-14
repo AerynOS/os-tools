@@ -8,12 +8,12 @@ use std::path::PathBuf;
 
 use boulder::build::{self, Builder};
 use boulder::package::Packager;
-use boulder::{container, package, profile, timing, Env, Timing};
+use boulder::{Env, Timing, container, package, profile, timing};
 use chrono::Local;
 use clap::Parser;
 use moss::signal::inhibit;
 use thiserror::Error;
-use thread_priority::{thread_native_id, NormalThreadSchedulePolicy, ThreadPriority, ThreadSchedulePolicy};
+use thread_priority::{NormalThreadSchedulePolicy, ThreadPriority, ThreadSchedulePolicy, thread_native_id};
 
 #[derive(Debug, Parser)]
 #[command(about = "Build ... TODO")]

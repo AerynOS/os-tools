@@ -6,16 +6,15 @@ use itertools::Itertools;
 use std::collections::BTreeSet;
 
 use stone_recipe::{
-    script,
+    Script, script,
     tuning::{self, Toolchain},
-    Script,
 };
 use tui::Styled;
 
 use crate::build::pgo;
-use crate::{architecture::BuildTarget, util, Macros, Paths, Recipe};
+use crate::{Macros, Paths, Recipe, architecture::BuildTarget, util};
 
-use super::{work_dir, Error};
+use super::{Error, work_dir};
 
 pub fn list(pgo_stage: Option<pgo::Stage>) -> Vec<Phase> {
     if matches!(pgo_stage, Some(pgo::Stage::One | pgo::Stage::Two)) {

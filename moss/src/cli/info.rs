@@ -2,13 +2,13 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-use clap::{arg, ArgMatches, Command};
+use clap::{ArgMatches, Command, arg};
 use itertools::Itertools;
 use moss::{
+    Installation, Package, Provider,
     client::{self, Client},
     environment,
     package::Flags,
-    Installation, Package, Provider,
 };
 use stone::payload::layout;
 use thiserror::Error;

@@ -7,8 +7,8 @@ use std::{io, path::PathBuf, sync::OnceLock};
 use bytes::Bytes;
 use fs_err::tokio::File;
 use futures_util::{
-    stream::{self, BoxStream},
     Stream, StreamExt,
+    stream::{self, BoxStream},
 };
 use thiserror::Error;
 use tokio::io::AsyncReadExt;

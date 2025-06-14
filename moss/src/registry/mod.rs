@@ -7,8 +7,8 @@
 
 use itertools::Itertools;
 
-use crate::package::{self, Package};
 use crate::Provider;
+use crate::package::{self, Package};
 
 pub use self::plugin::Plugin;
 pub use self::transaction::Transaction;
