@@ -5,7 +5,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
-use derive_more::{Display, From, Into};
+use derive_more::{Debug, Display, From, Into};
 use fs_err::tokio::File;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
@@ -23,6 +23,7 @@ pub mod manager;
 
 /// A unique [`Repository`] identifier
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Ord, PartialOrd, From, Display)]
+#[debug("{_0:?}")]
 #[serde(from = "String")]
 pub struct Id(String);
 

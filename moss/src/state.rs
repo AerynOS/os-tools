@@ -5,13 +5,14 @@
 use std::io::Write;
 
 use chrono::{DateTime, Utc};
-use derive_more::{Display, From, Into};
+use derive_more::{Debug, Display, From, Into};
 use tui::{pretty, Styled};
 
 use crate::package;
 
 /// Unique identifier for [`State`]
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, From, Into, Display)]
+#[debug("{_0:?}")]
 pub struct Id(i32);
 
 impl Id {

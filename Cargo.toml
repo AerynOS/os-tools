@@ -19,6 +19,7 @@ criterion = { version = "0.5.1", features = ["html_reports"] }
 crossterm = "0.28.1"
 derive_more = { version = "2.0.1", features = [
     "as_ref",
+    "debug",
     "display",
     "from",
     "into",

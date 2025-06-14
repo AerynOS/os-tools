@@ -4,9 +4,12 @@
 
 use std::{io, path::PathBuf};
 
+use derive_more::Debug;
+
 use crate::{util, Recipe};
 
 #[derive(Debug, Clone)]
+#[debug("{_0:?}")]
 pub struct Id(String);
 
 impl Id {

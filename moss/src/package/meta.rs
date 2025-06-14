@@ -4,7 +4,7 @@
 
 use std::collections::BTreeSet;
 
-use derive_more::{AsRef, Display, From, Into};
+use derive_more::{AsRef, Debug, Display, From, Into};
 use stone::payload;
 use thiserror::Error;
 
@@ -12,6 +12,7 @@ use crate::{dependency, Dependency, Provider};
 
 /// A package identifier constructed from metadata fields
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Display)]
+#[debug("{_0:?}")]
 pub struct Id(pub(super) String);
 
 /// The name of a [`super::Package`]

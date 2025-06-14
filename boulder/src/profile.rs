@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
+use derive_more::Debug;
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -15,6 +16,7 @@ use crate::Env;
 
 /// A unique [`Profile`] identifier
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Ord, PartialOrd, Display)]
+#[debug("{_0:?}")]
 #[serde(from = "String")]
 pub struct Id(String);
 
