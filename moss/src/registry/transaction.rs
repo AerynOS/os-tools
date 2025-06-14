@@ -22,7 +22,7 @@ enum ProviderFilter {
     All(Provider),
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum Lookup {
     InstalledOnly,
     Global,
@@ -43,10 +43,12 @@ pub struct Transaction<'a> {
     pinned_providers: Vec<package::Id>,
 }
 
-/// Construct a new Transaction wrapped around the underlying Registry
+/// Construct a new Transaction wrapped around the underlying [`Registry`].
+///
 /// At this point the registry is initialised and we can probe the installed
 /// set.
 pub(super) fn new(registry: &Registry) -> Result<Transaction<'_>, Error> {
+    tracing::debug!("creating new transaction");
     Ok(Transaction {
         registry,
         packages: Dag::default(),
@@ -69,7 +71,9 @@ impl Transaction<'_> {
 
     /// Pins to the provided packages if a provider lookup matches one of these
     pub fn pin_providers(&mut self, packages: impl IntoIterator<Item = package::Id>) {
-        self.pinned_providers.extend(packages);
+        self.pinned_providers.extend(packages.into_iter().inspect(|pkg_id| {
+            tracing::debug!(?pkg_id, "pinning package");
+        }));
     }
 
     /// Remove a set of packages and their reverse dependencies
@@ -91,6 +95,7 @@ impl Transaction<'_> {
     }
 
     /// Update internal package graph with all incoming packages & their deps
+    #[tracing::instrument(skip_all, fields(?lookup))]
     fn update(&mut self, incoming: Vec<package::Id>, lookup: Lookup) -> Result<(), Error> {
         let mut items = incoming;
 
@@ -105,6 +110,7 @@ impl Transaction<'_> {
         Ok(())
     }
 
+    #[tracing::instrument(skip_all, fields(?check_id, check_name))]
     fn update_step(&mut self, check_id: package::Id, next: &mut Vec<package::Id>, lookup: Lookup) -> Result<(), Error> {
         // Ensure node is added and get its index
         let check_node = self.packages.add_node_or_get_index(check_id.clone());
@@ -113,6 +119,12 @@ impl Transaction<'_> {
         let package = self.registry.by_id(&check_id).next();
         let package = package.ok_or(Error::NoCandidate(check_id.into()))?;
 
+        tracing::Span::current().record("check_name", package.meta.name.as_ref());
+        tracing::debug!(
+            num_dependencies = package.meta.dependencies.len(),
+            "added package to transaction"
+        );
+
         for dependency in package.meta.dependencies {
             let provider = Provider {
                 kind: dependency.kind,
@@ -120,18 +132,19 @@ impl Transaction<'_> {
             };
 
             // Now get it resolved
-            let search = match lookup {
+            let search_id = match lookup {
                 Lookup::Global => self.resolve_installation_provider(provider)?,
                 Lookup::InstalledOnly => self.resolve_provider(ProviderFilter::InstalledOnly(provider))?,
             };
 
             // Add dependency node
-            let need_search = !self.packages.node_exists(&search);
-            let dep_node = self.packages.add_node_or_get_index(search.clone());
+            let need_search = !self.packages.node_exists(&search_id);
+            let dep_node = self.packages.add_node_or_get_index(search_id.clone());
 
             // No dag node for it previously
             if need_search {
-                next.push(search.clone());
+                tracing::debug!(?search_id, "adding package to next");
+                next.push(search_id.clone());
             }
 
             // Connect w/ edges (rejects cyclical & duplicate edges)
