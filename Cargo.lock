@@ -358,7 +358,7 @@ dependencies = [
 [[package]]
 name = "blsforme"
 version = "0.1.0"
-source = "git+https://github.com/AerynOS/blsforme.git?rev=c0489895a6e3809b14727b043e91c92c02fd576a#c0489895a6e3809b14727b043e91c92c02fd576a"
+source = "git+https://github.com/AerynOS/blsforme.git?rev=a09fa783aab22c8a057fc38f827d2fd2d3d157d9#a09fa783aab22c8a057fc38f827d2fd2d3d157d9"
 dependencies = [
  "blake3",
  "fs-err",
@@ -2063,7 +2063,7 @@ dependencies = [
 [[package]]
 name = "os-info"
 version = "0.1.0"
-source = "git+https://github.com/AerynOS/os-info?rev=a3f68452502c0ff2e17449449b50cd665f11173d#a3f68452502c0ff2e17449449b50cd665f11173d"
+source = "git+https://github.com/AerynOS/os-info?rev=503a4bb97d558d8c821bcd4362d3ec06db29e0a6#503a4bb97d558d8c821bcd4362d3ec06db29e0a6"
 dependencies = [
  "chrono",
  "serde",
@@ -2836,7 +2836,7 @@ checksum = "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
 [[package]]
 name = "superblock"
 version = "0.1.0"
-source = "git+https://github.com/AerynOS/disks-rs?rev=437299f58e19ec8dc3a6699a918ee3dbece72bd3#437299f58e19ec8dc3a6699a918ee3dbece72bd3"
+source = "git+https://github.com/AerynOS/disks-rs?rev=0768fe553b123b2086980bc809011e9786bffd95#0768fe553b123b2086980bc809011e9786bffd95"
 dependencies = [
  "serde",
  "serde_json",
@@ -3122,7 +3122,7 @@ dependencies = [
 [[package]]
 name = "topology"
 version = "0.1.0"
-source = "git+https://github.com/AerynOS/blsforme.git?rev=c0489895a6e3809b14727b043e91c92c02fd576a#c0489895a6e3809b14727b043e91c92c02fd576a"
+source = "git+https://github.com/AerynOS/blsforme.git?rev=a09fa783aab22c8a057fc38f827d2fd2d3d157d9#a09fa783aab22c8a057fc38f827d2fd2d3d157d9"
 dependencies = [
  "fs-err",
  "gpt",
