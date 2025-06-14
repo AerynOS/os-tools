@@ -69,7 +69,7 @@ where
         }
 
         // don't add edge if it already exists
-        if self.0.find_edge(a, b).is_some() {
+        if self.0.contains_edge(a, b) {
             return false;
         }
 
@@ -80,7 +80,7 @@ where
     }
 
     pub fn iter_nodes(&self) -> impl Iterator<Item = &'_ N> {
-        self.0.node_indices().map(|i| &self.0[i])
+        self.0.node_weights()
     }
 
     /// Perform a depth-first search, given the start index
