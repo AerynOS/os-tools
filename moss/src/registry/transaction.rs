@@ -98,20 +98,18 @@ impl Transaction<'_> {
                 break;
             }
             let mut next = vec![];
-            for check_id in items.iter() {
-                // Ensure node is added and get it's index
+            for check_id in items {
+                // Ensure node is added and get its index
                 let check_node = self.packages.add_node_or_get_index(check_id.clone());
 
                 // Grab this package in question
-                let package = self
-                    .registry
-                    .by_id(check_id)
-                    .next()
-                    .ok_or(Error::NoCandidate(check_id.clone().into()))?;
-                for dependency in package.meta.dependencies.iter() {
+                let package = self.registry.by_id(&check_id).next();
+                let package = package.ok_or(Error::NoCandidate(check_id.into()))?;
+
+                for dependency in package.meta.dependencies {
                     let provider = Provider {
                         kind: dependency.kind,
-                        name: dependency.name.clone(),
+                        name: dependency.name,
                     };
 
                     // Now get it resolved
