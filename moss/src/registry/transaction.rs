@@ -94,10 +94,7 @@ impl Transaction<'_> {
     fn update(&mut self, incoming: Vec<package::Id>, lookup: Lookup) -> Result<(), Error> {
         let mut items = incoming;
 
-        loop {
-            if items.is_empty() {
-                break;
-            }
+        while !items.is_empty() {
             let mut next = vec![];
             for check_id in items {
                 self.update_step(check_id, &mut next, lookup)?;
