@@ -64,7 +64,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     // Add all installed packages to transaction
     let mut transaction = client
         .registry
-        .transaction_with_installed(installed_ids.clone().into_iter().collect())?;
+        .transaction_with_installed(installed_ids.iter().cloned().collect())?;
 
     // Remove all pkgs for removal
     transaction.remove(for_removal);
