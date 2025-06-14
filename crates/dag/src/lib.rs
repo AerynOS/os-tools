@@ -35,12 +35,13 @@ where
     }
 
     /// Adds node N to the graph and returns the index.
+    ///
     /// If N already exists, it'll return the index of that node.
-    pub fn add_node_or_get_index(&mut self, node: N) -> NodeIndex {
-        if let Some(index) = self.get_index(&node) {
+    pub fn add_node_or_get_index(&mut self, node: &N) -> NodeIndex {
+        if let Some(index) = self.get_index(node) {
             index
         } else {
-            self.0.add_node(node)
+            self.0.add_node(node.clone())
         }
     }
 
@@ -68,7 +69,7 @@ where
         }
 
         // don't add edge if it already exists
-        if self.0.find_edge(a, b).is_some() {
+        if self.0.contains_edge(a, b) {
             return false;
         }
 
@@ -79,7 +80,7 @@ where
     }
 
     pub fn iter_nodes(&self) -> impl Iterator<Item = &'_ N> {
-        self.0.node_indices().map(|i| &self.0[i])
+        self.0.node_weights()
     }
 
     /// Perform a depth-first search, given the start index

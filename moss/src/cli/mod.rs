@@ -147,7 +147,16 @@ pub fn process() -> Result<(), Error> {
     let debug = matches.get_flag("debug");
     if debug {
         tracing_subscriber::registry()
-            .with(tracing_subscriber::filter::Targets::new().with_default(LevelFilter::DEBUG))
+            .with(
+                tracing_subscriber::filter::Targets::new()
+                    .with_default(LevelFilter::DEBUG)
+                    // these log a lot of stuff when downloading.
+                    // it's very rare to need to debug HTTP issues, and then it might often be more
+                    // helpful to set up tcpdump or wireshark anyways.
+                    .with_target("h2", LevelFilter::INFO)
+                    .with_target("hyper", LevelFilter::INFO)
+                    .with_target("hyper_util", LevelFilter::INFO),
+            )
             .with(tracing_subscriber::fmt::layer())
             .init();
     }

@@ -46,12 +46,12 @@ impl Parser {
     }
 
     pub fn add_macros(&mut self, macros: Macros) {
-        macros.actions.into_iter().for_each(|kv| {
+        for kv in macros.actions {
             self.add_action(kv.key, kv.value);
-        });
-        macros.definitions.into_iter().for_each(|kv| {
+        }
+        for kv in macros.definitions {
             self.add_definition(kv.key, kv.value);
-        });
+        }
     }
 
     pub fn parse(&self, input: &str) -> Result<Script, Error> {

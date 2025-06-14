@@ -112,9 +112,9 @@ pub fn prune(
         let state = state_db.get(id)?;
 
         // Increment each package
-        state.selections.iter().for_each(|selection| {
+        for selection in &state.selections {
             *packages_counts.entry(selection.package.clone()).or_default() += 1;
-        });
+        }
 
         // Decrement if removal
         if removal_ids.contains(&id) {
@@ -123,9 +123,9 @@ pub fn prune(
                 return Err(Error::PruneCurrent);
             }
 
-            state.selections.iter().for_each(|selection| {
+            for selection in &state.selections {
                 *packages_counts.entry(selection.package.clone()).or_default() -= 1;
-            });
+            }
             removals.push(state);
         }
     }

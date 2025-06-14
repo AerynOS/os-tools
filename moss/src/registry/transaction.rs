@@ -83,10 +83,10 @@ impl Transaction<'_> {
         let subgraph = transposed.subgraph(&packages);
 
         // For each node, remove it from transaction graph
-        subgraph.iter_nodes().for_each(|package| {
+        for package in subgraph.iter_nodes() {
             // Remove that package
             self.packages.remove_node(package);
-        });
+        }
     }
 
     /// Return the package IDs in the fully baked configuration
@@ -113,7 +113,7 @@ impl Transaction<'_> {
     #[tracing::instrument(skip_all, fields(?check_id, check_name))]
     fn update_step(&mut self, check_id: package::Id, next: &mut Vec<package::Id>, lookup: Lookup) -> Result<(), Error> {
         // Ensure node is added and get its index
-        let check_node = self.packages.add_node_or_get_index(check_id.clone());
+        let check_node = self.packages.add_node_or_get_index(&check_id);
 
         // Grab this package in question
         let package = self.registry.by_id(&check_id).next();
@@ -139,12 +139,12 @@ impl Transaction<'_> {
 
             // Add dependency node
             let need_search = !self.packages.node_exists(&search_id);
-            let dep_node = self.packages.add_node_or_get_index(search_id.clone());
+            let dep_node = self.packages.add_node_or_get_index(&search_id);
 
             // No dag node for it previously
             if need_search {
                 tracing::debug!(?search_id, "adding package to next");
-                next.push(search_id.clone());
+                next.push(search_id);
             }
 
             // Connect w/ edges (rejects cyclical & duplicate edges)
