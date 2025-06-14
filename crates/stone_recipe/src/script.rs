@@ -14,7 +14,10 @@ use nom::{
 use std::collections::{BTreeMap, BTreeSet};
 use thiserror::Error;
 
-use crate::{macros::Action, Macros};
+use crate::{
+    macros::{Action, BuiltinDefinition},
+    Macros,
+};
 
 #[derive(Default)]
 pub struct Parser {
@@ -41,8 +44,9 @@ impl Parser {
         self.actions.insert(identifier.to_string(), action);
     }
 
-    pub fn add_definition(&mut self, identifier: impl ToString, definition: impl ToString) {
-        self.definitions.insert(identifier.to_string(), definition.to_string());
+    pub fn add_definition(&mut self, identifier: BuiltinDefinition, definition: impl ToString) {
+        self.definitions
+            .insert(identifier.name().to_owned(), definition.to_string());
     }
 
     pub fn add_macros(&mut self, macros: Macros) {
@@ -50,7 +54,7 @@ impl Parser {
             self.add_action(kv.key, kv.value);
         });
         macros.definitions.into_iter().for_each(|kv| {
-            self.add_definition(kv.key, kv.value);
+            self.definitions.insert(kv.key, kv.value);
         });
     }
 
@@ -313,7 +317,7 @@ mod test {
             ("pkgdir", "%(root)/pkg"),
             ("root", "/mason"),
         ] {
-            parser.add_definition(id, definition);
+            parser.definitions.insert(id.to_owned(), definition.to_owned());
         }
 
         let script = parser.parse(input).unwrap();
