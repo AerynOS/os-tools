@@ -38,7 +38,7 @@ pub fn command() -> Command {
         )
 }
 
-pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
+pub fn handle(args: &ArgMatches, installation: Installation, debug: bool) -> Result<(), Error> {
     let yes_all = *args.get_one::<bool>("yes").unwrap();
     let update = *args.get_one::<bool>("update").unwrap();
     let upgrade_only = *args.get_one::<bool>("upgrade-only").unwrap();
@@ -66,6 +66,12 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
 
     // Resolve the final state of packages after considering sync updates
     let finalized = resolve_with_sync(&client, upgrade_only, &installed)?;
+    if debug {
+        println!("Full package list after sync: ");
+        println!();
+        autoprint_columns(&finalized);
+        println!();
+    }
 
     // Synced are packages are:
     //

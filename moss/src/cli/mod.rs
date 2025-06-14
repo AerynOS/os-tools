@@ -12,6 +12,8 @@ use clap_complete::{
 use clap_mangen::Man;
 use moss::{installation, runtime, Installation};
 use thiserror::Error;
+use tracing::level_filters::LevelFilter;
+use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
 
 mod boot;
 mod extract;
@@ -56,6 +58,12 @@ fn command() -> Command {
                 .help("Cache directory")
                 .action(ArgAction::Set)
                 .value_parser(clap::value_parser!(PathBuf)),
+        )
+        .arg(
+            Arg::new("debug")
+                .long("debug")
+                .help("Enable debug logging")
+                .action(ArgAction::SetTrue),
         )
         .arg(
             Arg::new("yes")
@@ -136,6 +144,14 @@ pub fn process() -> Result<(), Error> {
     let args = replace_aliases(env::args());
     let matches = command().get_matches_from(args);
 
+    let debug = matches.get_flag("debug");
+    if debug {
+        tracing_subscriber::registry()
+            .with(tracing_subscriber::filter::Targets::new().with_default(LevelFilter::DEBUG))
+            .with(tracing_subscriber::fmt::layer())
+            .init();
+    }
+
     if let Some(dir) = matches.get_one::<String>("generate-manpages") {
         let dir = Path::new(dir);
         fs::create_dir_all(dir)?;
@@ -179,7 +195,7 @@ pub fn process() -> Result<(), Error> {
         Some(("repo", args)) => repo::handle(args, installation).map_err(Error::Repo),
         Some(("search", args)) => search::handle(args, installation).map_err(Error::Search),
         Some(("state", args)) => state::handle(args, installation).map_err(Error::State),
-        Some(("sync", args)) => sync::handle(args, installation).map_err(Error::Sync),
+        Some(("sync", args)) => sync::handle(args, installation, debug).map_err(Error::Sync),
         Some(("version", args)) => {
             version::handle(args);
             Ok(())
