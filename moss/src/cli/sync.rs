@@ -158,6 +158,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
 
 /// Returns the resolved package set w/ sync'd changes swapped in using
 /// the provided `packages`
+#[tracing::instrument(skip_all, fields(upgrade_only = upgrade_only))]
 fn resolve_with_sync(client: &Client, upgrade_only: bool, packages: &[Package]) -> Result<Vec<Package>, Error> {
     let all_ids = packages.iter().map(|p| &p.id).collect::<BTreeSet<_>>();
 

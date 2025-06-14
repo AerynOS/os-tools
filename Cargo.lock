@@ -1932,6 +1932,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tools_buildinfo",
+ "tracing",
  "triggers",
  "tui",
  "url",
