@@ -84,7 +84,7 @@ impl<'a> Collection<'a> {
 
         // ensure all keys are in place
         for id in self.hits.keys() {
-            let _ = graph.add_node_or_get_index(id.clone());
+            let _ = graph.add_node_or_get_index(id);
         }
 
         // add dependency ordering for the toplevel IDs
@@ -94,14 +94,14 @@ impl<'a> Collection<'a> {
                 .get(id)
                 .ok_or(Error::MissingHandler(id.clone(), id.clone()))?;
 
-            let node = graph.add_node_or_get_index(id.clone());
+            let node = graph.add_node_or_get_index(id);
 
             // This runs *before* B
             if let Some(before) = lookup
                 .before
                 .as_ref()
                 .and_then(|b| self.triggers.get(b))
-                .map(|f| graph.add_node_or_get_index(f.name.clone()))
+                .map(|f| graph.add_node_or_get_index(&f.name))
             {
                 graph.add_edge(node, before);
             }
@@ -111,7 +111,7 @@ impl<'a> Collection<'a> {
                 .after
                 .as_ref()
                 .and_then(|a| self.triggers.get(a))
-                .map(|f| graph.add_node_or_get_index(f.name.clone()))
+                .map(|f| graph.add_node_or_get_index(&f.name))
             {
                 graph.add_edge(after, node);
             }
