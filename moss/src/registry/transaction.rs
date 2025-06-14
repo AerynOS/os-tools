@@ -144,7 +144,7 @@ impl Transaction<'_> {
             // No dag node for it previously
             if need_search {
                 tracing::debug!(?search_id, "adding package to next");
-                next.push(search_id.clone());
+                next.push(search_id);
             }
 
             // Connect w/ edges (rejects cyclical & duplicate edges)
