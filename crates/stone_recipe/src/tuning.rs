@@ -160,12 +160,12 @@ impl Builder {
     }
 
     pub fn add_macros(&mut self, macros: Macros) {
-        macros.flags.into_iter().for_each(|kv| {
+        for kv in macros.flags {
             self.add_flag(kv.key, kv.value);
-        });
-        macros.tuning.into_iter().for_each(|kv| {
+        }
+        for kv in macros.tuning {
             self.add_group(kv.key, kv.value);
-        });
+        }
     }
 
     pub fn enable(&mut self, name: impl ToString, config: Option<String>) -> Result<(), Error> {
