@@ -83,10 +83,10 @@ impl Transaction<'_> {
         let subgraph = transposed.subgraph(&packages);
 
         // For each node, remove it from transaction graph
-        subgraph.iter_nodes().for_each(|package| {
+        for package in subgraph.iter_nodes() {
             // Remove that package
             self.packages.remove_node(package);
-        });
+        }
     }
 
     /// Return the package IDs in the fully baked configuration
