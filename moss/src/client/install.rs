@@ -33,7 +33,7 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
     let input = resolve_input(pkgs, client)?;
 
     // Add all inputs
-    let mut tx = client.registry.transaction()?;
+    let mut tx = client.registry.transaction(transaction::Lookup::PreferInstalled)?;
 
     tx.add(input.clone())?;
 

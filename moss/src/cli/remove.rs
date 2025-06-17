@@ -2,23 +2,23 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-use clap::{ArgMatches, Command, arg};
+use clap::{arg, ArgMatches, Command};
 use itertools::{Either, Itertools};
 use std::collections::BTreeSet;
 use thiserror::Error;
 
 use moss::{
-    Installation, Provider,
     client::{self, Client},
     environment,
     package::Flags,
     registry::transaction,
     state::Selection,
+    Installation, Provider,
 };
 use tui::{
-    Styled,
-    dialoguer::{Confirm, theme::ColorfulTheme},
+    dialoguer::{theme::ColorfulTheme, Confirm},
     pretty::autoprint_columns,
+    Styled,
 };
 
 pub fn command() -> Command {
@@ -62,9 +62,8 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     }
 
     // Add all installed packages to transaction
-    let mut transaction = client
-        .registry
-        .transaction_with_installed(installed_ids.iter().cloned().collect())?;
+    let mut transaction = client.registry.transaction(transaction::Lookup::InstalledOnly)?;
+    transaction.add(installed_ids.clone().into_iter().collect())?;
 
     // Remove all pkgs for removal
     transaction.remove(for_removal);

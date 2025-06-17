@@ -168,12 +168,14 @@ pub fn handle(args: &ArgMatches, installation: Installation, debug: bool) -> Res
 fn resolve_with_sync(client: &Client, upgrade_only: bool, packages: &[Package]) -> Result<Vec<Package>, Error> {
     let all_ids = packages.iter().map(|p| &p.id).collect::<BTreeSet<_>>();
 
-    // For each package, replace it w/ it's sync'd change (if available)
+    // For each explicit package, replace it w/ it's sync'd change (if available)
     // or return the original package
     let with_sync = packages
         .iter()
-        .map(|p| {
-            let is_explicit = p.flags.explicit;
+        .filter_map(|p| {
+            if !p.flags.explicit {
+                return None;
+            }
 
             // Get first available = use highest priority
             if let Some(lookup) = client
@@ -188,31 +190,18 @@ fn resolve_with_sync(client: &Client, upgrade_only: bool, packages: &[Package]) 
                 };
 
                 if !all_ids.contains(&lookup.id) && upgrade_check {
-                    return (lookup.id, is_explicit, true);
+                    return Some(lookup.id);
                 }
             }
 
-            (p.id.clone(), is_explicit, false)
+            Some(p.id.clone())
         })
         .collect::<Vec<_>>();
 
-    // Packages that are explicitly installed
-    let explicit = with_sync
-        .iter()
-        .filter_map(|(id, is_explicit, _)| is_explicit.then_some(id.clone()))
-        .collect::<Vec<_>>();
-    // Packages that have an update
-    let updated = with_sync
-        .iter()
-        .filter_map(|(id, _, is_updated)| is_updated.then_some(id.clone()));
-
     // Build a new tx from this sync'd package set
-    let mut tx = client.registry.transaction()?;
-    // Pin all updated packages so dependency resolution
-    // picks these versions
-    tx.pin_providers(updated);
+    let mut tx = client.registry.transaction(transaction::Lookup::PreferAvailable)?;
     // Add all explicit packages to build the final tx state
-    tx.add(explicit)?;
+    tx.add(with_sync)?;
 
     // Resolve the tx
     Ok(client.resolve_packages(tx.finalize())?)
