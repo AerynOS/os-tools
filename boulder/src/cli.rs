@@ -37,6 +37,8 @@ pub struct Global {
         global = true
     )]
     pub verbose: bool,
+    #[arg(short = 'V', long, default_value = "false", global = true)]
+    pub version: bool,
     #[arg(long, global = true)]
     pub cache_dir: Option<PathBuf>,
     #[arg(long, global = true)]
@@ -63,6 +65,11 @@ pub enum Subcommand {
 pub fn process() -> Result<(), Error> {
     let args = replace_aliases(std::env::args());
     let Command { global, subcommand } = Command::parse_from(args.clone());
+
+    // Prints the cli's information about version at startup
+    if global.version {
+        println!("boulder {}", tools_buildinfo::get_full_version());
+    }
 
     if let Some(dir) = global.generate_manpages {
         fs::create_dir_all(&dir)?;
