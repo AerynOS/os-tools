@@ -2,23 +2,23 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-use clap::{arg, ArgMatches, Command};
+use clap::{ArgMatches, Command, arg};
 use itertools::{Either, Itertools};
 use std::collections::BTreeSet;
 use thiserror::Error;
 
 use moss::{
+    Installation, Provider,
     client::{self, Client},
     environment,
     package::Flags,
     registry::transaction,
     state::Selection,
-    Installation, Provider,
 };
 use tui::{
-    dialoguer::{theme::ColorfulTheme, Confirm},
-    pretty::autoprint_columns,
     Styled,
+    dialoguer::{Confirm, theme::ColorfulTheme},
+    pretty::autoprint_columns,
 };
 
 pub fn command() -> Command {
