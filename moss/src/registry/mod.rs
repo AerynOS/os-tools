@@ -94,16 +94,8 @@ impl Registry {
     }
 
     /// Return a new transaction for this registry
-    pub fn transaction(&self) -> Result<Transaction<'_>, transaction::Error> {
-        transaction::new(self)
-    }
-
-    /// Return a new transaction for this registry initialised with the incoming package set as installed
-    pub fn transaction_with_installed(
-        &self,
-        incoming: Vec<package::Id>,
-    ) -> Result<Transaction<'_>, transaction::Error> {
-        transaction::new_with_installed(self, incoming)
+    pub fn transaction(&self, lookup: transaction::Lookup) -> Result<Transaction<'_>, transaction::Error> {
+        transaction::new(self, lookup)
     }
 }
 
