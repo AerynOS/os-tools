@@ -94,18 +94,21 @@ fn write_index(dir: &Path, map: BTreeMap<package::Name, Meta>, total_progress: &
     );
     total_progress.enable_steady_tick(Duration::from_millis(150));
 
-    let mut file = fs::File::create(dir.join("stone.index"))?;
+    let path = dir.join("stone.index");
+    let mut file = fs::File::create(&path)?;
 
-    let mut writer = stone::Writer::new(&mut file, stone::header::v1::FileType::Repository)?;
+    let write_stone_index = || {
+        let mut writer = stone::Writer::new(&mut file, stone::header::v1::FileType::Repository)?;
 
-    for (_, meta) in map {
-        let payload = meta.to_stone_payload();
-        writer.add_payload(payload.as_slice())?;
-    }
+        for (_, meta) in map {
+            let payload = meta.to_stone_payload();
+            writer.add_payload(payload.as_slice())?;
+        }
 
-    writer.finalize()?;
+        writer.finalize()
+    };
 
-    Ok(())
+    write_stone_index().map_err(|source| Error::StoneWrite { source, path })
 }
 
 fn get_meta(
@@ -205,8 +208,8 @@ pub enum Error {
     #[error("reading {path}")]
     StoneRead { source: stone::read::Error, path: PathBuf },
 
-    #[error("stone write")]
-    StoneWrite(#[from] stone::write::Error),
+    #[error("writing {path}")]
+    StoneWrite { source: stone::write::Error, path: PathBuf },
 
     #[error("package {0} has two files with the same release {1}")]
     DuplicateRelease(package::Name, u64),
