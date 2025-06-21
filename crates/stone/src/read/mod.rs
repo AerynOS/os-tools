@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use std::io::{self, Cursor, Read, Seek, SeekFrom, Write};
+use std::path::PathBuf;
 use thiserror::Error;
 
 use crate::payload::{Attribute, Compression, Index, Layout, Meta};
@@ -223,6 +224,8 @@ pub enum Error {
     PayloadDecode(#[from] payload::DecodeError),
     #[error("payload checksum mismatch: got {got:02x}, expected {expected:02x}")]
     PayloadChecksum { got: u64, expected: u64 },
+    #[error("payload checksum mismatch: got {got:02x}, expected {expected:02x}, path: {path}")]
+    PayloadCheckSumWithContext { got: u64, expected: u64, path: PathBuf },
     #[error("io")]
     Io(#[from] io::Error),
 }

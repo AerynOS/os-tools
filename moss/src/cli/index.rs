@@ -129,7 +129,17 @@ fn get_meta(
 
     let mut file = fs::File::open(path)?;
     let mut reader = stone::read(&mut file)?;
-    let payloads = reader.payloads()?.collect::<Result<Vec<_>, _>>()?;
+    // shadow the &Path once we know the path is a valid .stone
+    let path = std::fs::canonicalize(path)?;
+    let payloads = reader
+        .payloads()
+        .map_err(|e| match e {
+            stone::read::Error::PayloadChecksum { got, expected } => {
+                stone::read::Error::PayloadCheckSumWithContext { got, expected, path }
+            }
+            _ => e,
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
 
     let payload = payloads
         .iter()

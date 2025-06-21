@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-use std::{env, fs, io, path::Path, path::PathBuf};
+use std::{env, io, path::Path, path::PathBuf};
 
 use clap::{Arg, ArgAction, Command};
 use clap_complete::{
@@ -10,6 +10,7 @@ use clap_complete::{
     shells::{Bash, Fish, Zsh},
 };
 use clap_mangen::Man;
+use fs_err as fs;
 use moss::{Installation, installation, runtime};
 use thiserror::Error;
 use tracing::level_filters::LevelFilter;
