@@ -132,7 +132,10 @@ fn get_meta(
         let mut reader = stone::read(&mut file)?;
         reader.payloads()?.collect()
     };
-    let payloads = read_payloads().map_err(|source| Error::StoneRead { source })?;
+    let payloads = read_payloads().map_err(|source| Error::StoneRead {
+        source,
+        path: path.to_owned(),
+    })?;
 
     let payload = payloads
         .iter()
@@ -195,8 +198,8 @@ pub enum Error {
     #[error("io")]
     Io(#[from] io::Error),
 
-    #[error("stone read")]
-    StoneRead { source: stone::read::Error },
+    #[error("reading {path}")]
+    StoneRead { source: stone::read::Error, path: PathBuf },
 
     #[error("stone write")]
     StoneWrite(#[from] stone::write::Error),
