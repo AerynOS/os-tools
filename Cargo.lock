@@ -661,8 +661,8 @@ version = "0.25.5"
 dependencies = [
  "fs-err",
  "nix 0.27.1",
+ "snafu",
  "strum",
- "thiserror 2.0.12",
 ]
 
 [[package]]
@@ -1146,7 +1146,7 @@ version = "0.25.5"
 dependencies = [
  "regex",
  "serde",
- "thiserror 2.0.12",
+ "snafu",
 ]
 
 [[package]]

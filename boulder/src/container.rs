@@ -9,14 +9,14 @@ use crate::Paths;
 
 pub fn exec<E>(paths: &Paths, networking: bool, f: impl FnMut() -> Result<(), E>) -> Result<(), Error>
 where
-    E: std::error::Error + 'static,
+    E: std::error::Error + Send + Sync + 'static,
 {
     run(paths, networking, f)
 }
 
 fn run<E>(paths: &Paths, networking: bool, f: impl FnMut() -> Result<(), E>) -> Result<(), Error>
 where
-    E: std::error::Error + 'static,
+    E: std::error::Error + Send + Sync + 'static,
 {
     let rootfs = paths.rootfs().host;
     let artefacts = paths.artefacts();
