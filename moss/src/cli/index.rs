@@ -8,6 +8,7 @@ use std::{
     time::Duration,
 };
 
+use camino::Utf8Path;
 use clap::{ArgMatches, Command, arg, value_parser};
 use fs_err as fs;
 use moss::{
@@ -113,14 +114,17 @@ fn get_meta(
     multi_progress: &MultiProgress,
     total_progress: &ProgressBar,
 ) -> Result<Meta, Error> {
-    let relative_path = format!("{}", path.strip_prefix(dir)?.display());
+    let relative_path: &Utf8Path = path
+        .strip_prefix(dir)?
+        .try_into()
+        .map_err(|_| Error::NonUtf8Path { path: path.to_owned() })?;
 
     let progress = multi_progress.insert_before(total_progress, ProgressBar::new_spinner());
     progress.enable_steady_tick(Duration::from_millis(150));
 
-    let (size, hash) = stat_file(path, &relative_path, &progress)?;
+    let (size, hash) = stat_file(path, relative_path, &progress)?;
 
-    progress.set_message(format!("{} {}", "Indexing".yellow(), relative_path.clone().bold()));
+    progress.set_message(format!("{} {}", "Indexing".yellow(), relative_path.as_str().bold()));
     progress.set_style(
         ProgressStyle::with_template(" {spinner} {wide_msg}")
             .unwrap()
@@ -139,22 +143,22 @@ fn get_meta(
     let mut meta = Meta::from_stone_payload(&payload.body)?;
     meta.hash = Some(hash);
     meta.download_size = Some(size);
-    meta.uri = Some(relative_path.clone());
+    meta.uri = Some(relative_path.as_str().to_owned());
 
     progress.finish();
     multi_progress.remove(&progress);
-    multi_progress.suspend(|| println!("{} {}", "Indexed".green(), relative_path.bold()));
+    multi_progress.suspend(|| println!("{} {}", "Indexed".green(), relative_path.as_str().bold()));
     total_progress.inc(1);
 
     Ok(meta)
 }
 
-fn stat_file(path: &Path, relative_path: &str, progress: &ProgressBar) -> Result<(u64, String), Error> {
+fn stat_file(path: &Path, relative_path: &Utf8Path, progress: &ProgressBar) -> Result<(u64, String), Error> {
     let file = fs::File::open(path)?;
     let size = file.metadata()?.len();
 
     progress.set_length(size);
-    progress.set_message(format!("{} {}", "Hashing".blue(), relative_path.bold()));
+    progress.set_message(format!("{} {}", "Hashing".blue(), relative_path.as_str().bold()));
     progress.set_style(
         ProgressStyle::with_template(" {spinner} |{percent:>3}%| {wide_msg} {binary_bytes_per_sec:>.dim} ")
             .unwrap()
@@ -212,4 +216,7 @@ pub enum Error {
 
     #[error("client")]
     Client(#[from] client::Error),
+
+    #[error("non-utf8 path: {path}")]
+    NonUtf8Path { path: PathBuf },
 }
