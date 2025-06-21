@@ -42,6 +42,14 @@ fn command() -> Command {
                 .action(ArgAction::SetTrue),
         )
         .arg(
+            Arg::new("version")
+                .short('V')
+                .long("version")
+                .global(true)
+                .help("Prints version information about the binary")
+                .action(ArgAction::SetTrue),
+        )
+        .arg(
             Arg::new("root")
                 .short('D')
                 .long("directory")
@@ -144,6 +152,12 @@ pub fn process() -> Result<(), Error> {
     let args = replace_aliases(env::args());
     let matches = command().get_matches_from(args);
 
+    let show_version = matches.get_one::<bool>("version").is_some_and(|v| *v);
+
+    if show_version {
+        println!("moss {}", tools_buildinfo::get_full_version());
+    }
+
     let debug = matches.get_flag("debug");
     if debug {
         tracing_subscriber::registry()
@@ -210,7 +224,9 @@ pub fn process() -> Result<(), Error> {
             Ok(())
         }
         None => {
-            command().print_help().unwrap();
+            if !show_version {
+                command().print_help().unwrap();
+            }
             Ok(())
         }
         _ => unreachable!(),
