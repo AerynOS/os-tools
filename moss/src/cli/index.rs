@@ -127,9 +127,12 @@ fn get_meta(
             .tick_chars("--=≡■≡=--"),
     );
 
-    let mut file = fs::File::open(path)?;
-    let mut reader = stone::read(&mut file)?;
-    let payloads = reader.payloads()?.collect::<Result<Vec<_>, _>>()?;
+    let read_payloads = || -> Result<Vec<_>, _> {
+        let mut file = fs::File::open(path)?;
+        let mut reader = stone::read(&mut file)?;
+        reader.payloads()?.collect()
+    };
+    let payloads = read_payloads().map_err(|source| Error::StoneRead { source })?;
 
     let payload = payloads
         .iter()
@@ -193,7 +196,7 @@ pub enum Error {
     Io(#[from] io::Error),
 
     #[error("stone read")]
-    StoneRead(#[from] stone::read::Error),
+    StoneRead { source: stone::read::Error },
 
     #[error("stone write")]
     StoneWrite(#[from] stone::write::Error),
