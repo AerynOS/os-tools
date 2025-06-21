@@ -11,6 +11,7 @@ rust-version = "1.85"
 [workspace.dependencies]
 blsforme = { git = "https://github.com/AerynOS/blsforme.git", rev = "a09fa783aab22c8a057fc38f827d2fd2d3d157d9" }
 bytes = "1.6.0"
+camino = "1.1.10"
 chrono = "0.4.38"
 clap = { version = "4.5.8", features = ["derive", "string"] }
 clap_complete = "4.5.37"
