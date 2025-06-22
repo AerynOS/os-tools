@@ -28,9 +28,9 @@ pub fn command() -> Command {
 }
 
 pub fn handle(args: &ArgMatches) -> Result<(), Error> {
-    let dir = args.get_one::<PathBuf>("INDEX_DIR").unwrap().canonicalize()?;
+    let index_dir = args.get_one::<PathBuf>("INDEX_DIR").unwrap().canonicalize()?;
 
-    let stone_files = enumerate_stone_files(&dir)?;
+    let stone_files = enumerate_stone_files(&index_dir)?;
 
     println!("Indexing {} files\n", stone_files.len());
 
@@ -45,9 +45,14 @@ pub fn handle(args: &ArgMatches) -> Result<(), Error> {
     );
     total_progress.tick();
 
+    let ctx = GetMetaCtx {
+        index_dir: &index_dir,
+        multi_progress: &multi_progress,
+        total_progress: &total_progress,
+    };
     let list = stone_files
         .par_iter()
-        .map(|path| get_meta(path, &dir, &multi_progress, &total_progress))
+        .map(|path| get_meta(path, ctx))
         .collect::<Result<Vec<_>, _>>()?;
 
     let mut map = BTreeMap::new();
@@ -76,11 +81,11 @@ pub fn handle(args: &ArgMatches) -> Result<(), Error> {
         }
     }
 
-    write_index(&dir, map, &total_progress)?;
+    write_index(&index_dir, map, &total_progress)?;
 
     multi_progress.clear()?;
 
-    println!("\nIndex file written to {:?}", dir.join("stone.index").display());
+    println!("\nIndex file written to {:?}", index_dir.join("stone.index").display());
 
     Ok(())
 }
@@ -111,18 +116,22 @@ fn write_index(dir: &Path, map: BTreeMap<package::Name, Meta>, total_progress: &
     write_stone_index().map_err(|source| Error::StoneWrite { source, path })
 }
 
-fn get_meta(
-    path: &Path,
-    dir: &Path,
-    multi_progress: &MultiProgress,
-    total_progress: &ProgressBar,
-) -> Result<Meta, Error> {
+#[derive(Clone, Copy)]
+struct GetMetaCtx<'a> {
+    index_dir: &'a Path,
+    multi_progress: &'a MultiProgress,
+    total_progress: &'a ProgressBar,
+}
+
+fn get_meta(path: &Path, ctx: GetMetaCtx<'_>) -> Result<Meta, Error> {
     let relative_path: &Utf8Path = path
-        .strip_prefix(dir)?
+        .strip_prefix(ctx.index_dir)?
         .try_into()
         .map_err(|_| Error::NonUtf8Path { path: path.to_owned() })?;
 
-    let progress = multi_progress.insert_before(total_progress, ProgressBar::new_spinner());
+    let progress = ctx
+        .multi_progress
+        .insert_before(ctx.total_progress, ProgressBar::new_spinner());
     progress.enable_steady_tick(Duration::from_millis(150));
 
     let (size, hash) = stat_file(path, relative_path, &progress)?;
@@ -155,9 +164,10 @@ fn get_meta(
     meta.uri = Some(relative_path.as_str().to_owned());
 
     progress.finish();
-    multi_progress.remove(&progress);
-    multi_progress.suspend(|| println!("{} {}", "Indexed".green(), relative_path.as_str().bold()));
-    total_progress.inc(1);
+    ctx.multi_progress.remove(&progress);
+    ctx.multi_progress
+        .suspend(|| println!("{} {}", "Indexed".green(), relative_path.as_str().bold()));
+    ctx.total_progress.inc(1);
 
     Ok(meta)
 }
