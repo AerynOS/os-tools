@@ -8,7 +8,7 @@ use std::{
     time::Duration,
 };
 
-use camino::Utf8Path;
+use camino::{Utf8Path, Utf8PathBuf};
 use clap::{ArgMatches, Command, arg, value_parser};
 use fs_err as fs;
 use moss::{
@@ -25,10 +25,18 @@ pub fn command() -> Command {
         .visible_alias("ix")
         .about("Index a collection of packages")
         .arg(arg!(<INDEX_DIR> "directory of index files").value_parser(value_parser!(PathBuf)))
+        .arg(
+            arg!(-o --"output-dir" [output_dir] "directory to write the stone.index to (defaults to INDEX_DIR)")
+                .value_parser(value_parser!(PathBuf)),
+        )
 }
 
 pub fn handle(args: &ArgMatches) -> Result<(), Error> {
     let index_dir = args.get_one::<PathBuf>("INDEX_DIR").unwrap().canonicalize()?;
+    let output_dir = match args.get_one::<PathBuf>("output-dir") {
+        Some(dir) => &dir.canonicalize()?,
+        None => &index_dir,
+    };
 
     let stone_files = enumerate_stone_files(&index_dir)?;
 
@@ -46,7 +54,7 @@ pub fn handle(args: &ArgMatches) -> Result<(), Error> {
     total_progress.tick();
 
     let ctx = GetMetaCtx {
-        index_dir: &index_dir,
+        output_dir,
         multi_progress: &multi_progress,
         total_progress: &total_progress,
     };
@@ -81,11 +89,11 @@ pub fn handle(args: &ArgMatches) -> Result<(), Error> {
         }
     }
 
-    write_index(&index_dir, map, &total_progress)?;
+    write_index(output_dir, map, &total_progress)?;
 
     multi_progress.clear()?;
 
-    println!("\nIndex file written to {:?}", index_dir.join("stone.index").display());
+    println!("\nIndex file written to {:?}", output_dir.join("stone.index").display());
 
     Ok(())
 }
@@ -118,14 +126,13 @@ fn write_index(dir: &Path, map: BTreeMap<package::Name, Meta>, total_progress: &
 
 #[derive(Clone, Copy)]
 struct GetMetaCtx<'a> {
-    index_dir: &'a Path,
+    output_dir: &'a Path,
     multi_progress: &'a MultiProgress,
     total_progress: &'a ProgressBar,
 }
 
 fn get_meta(path: &Path, ctx: GetMetaCtx<'_>) -> Result<Meta, Error> {
-    let relative_path: &Utf8Path = path
-        .strip_prefix(ctx.index_dir)?
+    let relative_path: Utf8PathBuf = rel_path_from_to(ctx.output_dir, path)
         .try_into()
         .map_err(|_| Error::NonUtf8Path { path: path.to_owned() })?;
 
@@ -134,7 +141,7 @@ fn get_meta(path: &Path, ctx: GetMetaCtx<'_>) -> Result<Meta, Error> {
         .insert_before(ctx.total_progress, ProgressBar::new_spinner());
     progress.enable_steady_tick(Duration::from_millis(150));
 
-    let (size, hash) = stat_file(path, relative_path, &progress)?;
+    let (size, hash) = stat_file(path, &relative_path, &progress)?;
 
     progress.set_message(format!("{} {}", "Indexing".yellow(), relative_path.as_str().bold()));
     progress.set_style(
@@ -238,4 +245,79 @@ pub enum Error {
 
     #[error("non-utf8 path: {path}")]
     NonUtf8Path { path: PathBuf },
+}
+
+/// Make a relative path that points to `to` if the current working directory is `from_dir`.
+///
+/// Inputs must start with `/` (be absolute) and not contain `.` or `..` segments.
+fn rel_path_from_to(from_dir: &Path, to: &Path) -> PathBuf {
+    assert!(from_dir.is_absolute());
+    assert!(to.is_absolute());
+
+    if from_dir == to {
+        return ".".into();
+    }
+
+    let mut from_dir = from_dir.to_owned();
+    let mut result = PathBuf::new();
+    loop {
+        if let Ok(suffix) = to.strip_prefix(&from_dir) {
+            result.push(suffix);
+            return result;
+        }
+
+        let popped = from_dir.pop();
+        assert!(popped, "strip_prefix must succeed when reaching the root");
+
+        result.push("..");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::rel_path_from_to;
+
+    #[test]
+    fn test_rel_path_from_to_strips_prefix() {
+        assert_eq!(rel_path_from_to(Path::new("/"), Path::new("/root")), Path::new("root"));
+        assert_eq!(rel_path_from_to(Path::new("/x"), Path::new("/x/y/z")), Path::new("y/z"));
+    }
+
+    #[test]
+    fn test_rel_path_from_to_works_for_identical_inputs() {
+        assert_eq!(rel_path_from_to(Path::new("/"), Path::new("/")), Path::new("."));
+        assert_eq!(rel_path_from_to(Path::new("/a"), Path::new("/a")), Path::new("."));
+        assert_eq!(
+            rel_path_from_to(Path::new("/hello/world"), Path::new("/hello/world")),
+            Path::new(".")
+        );
+    }
+
+    #[test]
+    fn test_rel_path_from_to_works_for_almost_identical_inputs() {
+        assert_eq!(rel_path_from_to(Path::new("/a/"), Path::new("/a")), Path::new("."));
+    }
+
+    #[test]
+    fn test_rel_path_from_to_goes_up_one_level() {
+        assert_eq!(
+            rel_path_from_to(Path::new("/a/b"), Path::new("/a/x")),
+            Path::new("../x")
+        );
+    }
+
+    #[test]
+    fn test_rel_path_from_to_goes_up_two_levels() {
+        assert_eq!(
+            rel_path_from_to(Path::new("/a/b/c"), Path::new("/a/x")),
+            Path::new("../../x")
+        );
+    }
+
+    #[test]
+    fn test_rel_path_from_to_goes_up_to_root() {
+        assert_eq!(rel_path_from_to(Path::new("/a"), Path::new("/b")), Path::new("../b"));
+    }
 }
