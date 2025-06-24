@@ -61,7 +61,7 @@ pub enum Subcommand {
     },
     #[command(about = "Update a recipe file")]
     Update {
-        #[arg(long = "ver", required = true, help = "Update version")]
+        #[arg(id = "recipe_version", long = "ver", required = true, help = "Update version")]
         version: String,
         #[arg(
             short = 'u',
