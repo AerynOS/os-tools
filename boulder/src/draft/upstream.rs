@@ -84,7 +84,7 @@ async fn extract(archive: &Path, destination: &Path) -> Result<(), Error> {
     if let Some(kind) = infer::get_from_path(archive)? {
         println!("Detected type: {} ({})", kind.mime_type(), kind.extension());
         // If we can't specialise (.zip, etc) assume its a tar
-        let result = Command::new("bsdtar-static")
+        let result = Command::new("bsdtar")
             .arg("xf")
             .arg(archive)
             .arg("-C")
@@ -99,7 +99,7 @@ async fn extract(archive: &Path, destination: &Path) -> Result<(), Error> {
         }
     } else {
         println!("Unknown file type, attempting tar extraction");
-        let result = Command::new("bsdtar-static")
+        let result = Command::new("bsdtar")
             .arg("xf")
             .arg(archive)
             .arg("-C")
