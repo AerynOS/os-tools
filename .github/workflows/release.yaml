@@ -12,7 +12,7 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  nightly:
+  build-push:
     runs-on: ubuntu-latest
     name: Build release binaries
 
@@ -44,7 +44,7 @@ jobs:
         tar czvf moss.tar.gz -C ../target/x86_64-unknown-linux-musl/packaging moss
         sha256sum moss.tar.gz > moss.tar.gz.sha256
 
-    - name: Upload binaries to nightly release
+    - name: Upload binaries
       uses: svenstaro/upload-release-action@v2
       with:
         repo_token: ${{ secrets.GITHUB_TOKEN }}
