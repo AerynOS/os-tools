@@ -29,13 +29,6 @@ jobs:
         targets: x86_64-unknown-linux-musl
         components: rust-src
 
-    - name: Cargo Cache
-      uses: actions/cache@v3
-      with:
-        path: |
-          ~/.cargo/registry/index/
-          ~/.cargo/registry/cache/
-
     - name: Build project
       run: |
         cargo +nightly -Z build-std=std build --target=x86_64-unknown-linux-musl --profile packaging
