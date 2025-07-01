@@ -117,10 +117,9 @@ wildcard_imports = "warn"
 # has false positives in indicatif usage
 literal_string_with_formatting_args = "allow"
 
-[profile.dev]
-# makes linking faster, enables everything needed for backtraces
-# for attaching an interactive debugger, use another profile
-debug = "line-tables-only"
+# Build dependencies (but not workspace members) in release mode
+[profile.dev.package."*"]
+opt-level = 3
 
 [profile.release]
 lto = "thin"
