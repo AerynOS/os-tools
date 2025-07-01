@@ -153,6 +153,9 @@ fn packages(builder: &Builder) -> Vec<&str> {
                     "lz" => {
                         packages.push("binary(bsdtar-static)");
                     }
+                    "tgz" => {
+                        packages.push("binary(bsdtar-static)");
+                    }
                     "zip" => {
                         packages.push("binary(bsdtar-static)");
                     }
