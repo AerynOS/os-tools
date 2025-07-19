@@ -2,8 +2,6 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-use std::io::{self, Write};
-
 use clap::builder::NonEmptyStringValueParser;
 use clap::{Arg, ArgMatches, Command};
 
@@ -28,7 +26,18 @@ pub fn command() -> Command {
 }
 
 pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
-    let keyword = args.get_one::<String>(ARG_KEYWORD).unwrap();
+    let mut keyword = String::from(args.get_one::<String>(ARG_KEYWORD).unwrap());
+
+    // moss db doesn't record the /usr/ prefix so strip any combination of it
+    // so queries like r/bin/nano, /bin/nano and /usr/bin/nano still succeed.
+    let prefix = "/usr/";
+    for i in 0..=prefix.len() {
+        let suffix = &prefix[i..];
+        if keyword.starts_with(suffix) {
+            keyword.drain(..suffix.len());
+            break;
+        }
+    }
 
     let client = Client::new(environment::NAME, installation)?;
 
@@ -38,11 +47,11 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         stone::payload::layout::Entry::Regular(_, file)
         | stone::payload::layout::Entry::Symlink(_, file)
         | stone::payload::layout::Entry::Directory(file) => {
-            if file.contains(keyword) {
+            if file.contains(&keyword) {
                 let resolved = client.registry.by_id(&id).next();
                 if let Some(pkg) = resolved {
                     let name = pkg.meta.name;
-                    println!("/usr/{} from {}", file, name.to_string().bold());
+                    println!("{prefix}{file} from {}", name.to_string().bold());
                 }
             }
         }
