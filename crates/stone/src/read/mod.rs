@@ -200,6 +200,16 @@ impl PayloadKind {
             None
         }
     }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            PayloadKind::Meta(_) => "Meta",
+            PayloadKind::Attributes(_) => "Attributes",
+            PayloadKind::Layout(_) => "Layout",
+            PayloadKind::Index(_) => "Index",
+            PayloadKind::Content(_) => "Content",
+        }
+    }
 }
 
 fn validate_checksum(hasher: &digest::Hasher, header: &payload::Header) -> Result<(), Error> {
