@@ -290,6 +290,10 @@ fn split_debug(
     bit_size: Class,
     build_id: &str,
 ) -> Result<Option<PathBuf>, BoxError> {
+    if !bucket.recipe.parsed.options.debug {
+        return Ok(None);
+    }
+
     let use_llvm = matches!(bucket.recipe.parsed.options.toolchain, Toolchain::Llvm);
     let objcopy = if use_llvm {
         "/usr/bin/llvm-objcopy"
