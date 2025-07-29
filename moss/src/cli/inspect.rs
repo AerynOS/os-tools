@@ -20,8 +20,9 @@ pub fn command() -> Command {
         .arg(arg!(<PATH> ... "files to inspect").value_parser(clap::value_parser!(PathBuf)))
         .arg(arg!(--check "Check the integrity of the stone file(s)").action(clap::ArgAction::SetTrue))
         .arg(
-            arg!(-q --quiet "Suppress output, only exit status indicates success or failure")
-                .action(clap::ArgAction::SetTrue),
+            arg!(-q --quiet "Suppress output, only exit status indicates success or failure (requires --check)")
+                .action(clap::ArgAction::SetTrue)
+                .requires("check"),
         )
 }
 
@@ -40,131 +41,139 @@ pub fn handle(args: &ArgMatches) -> Result<(), Error> {
     let quiet = args.get_flag("quiet");
 
     if check {
-        let mut had_error = false;
-        for path in paths {
-            if !quiet {
-                println!("Checking: {:?}", path.display());
-            }
-
-            match File::open(&path).map_err(Error::IO).and_then(check_stone_integrity) {
-                Ok(payload_kinds) => {
-                    if !quiet {
-                        for kind in payload_kinds {
-                            println!("  OK: {kind}");
-                        }
-                        println!("Result: OK\n");
-                    }
-                }
-                Err(e) => {
-                    had_error = true;
-                    if !quiet {
-                        println!("Result: FAILED - {e}\n");
-                    }
-                }
-            }
-        }
-
-        if had_error {
-            Err(Error::ValidationFailed)
-        } else {
-            Ok(())
-        }
+        handle_check(paths, quiet)
     } else {
-        // Process each input path in order.
-        for path in paths {
-            let mut file = File::open(&path)?;
-            let mut reader = stone::read(&mut file)?;
+        handle_detailed(paths)
+    }
+}
 
-            let header = reader.header;
-            let payloads = reader.payloads()?;
+fn handle_check(paths: Vec<PathBuf>, quiet: bool) -> Result<(), Error> {
+    let mut had_error = false;
+    for path in paths {
+        if !quiet {
+            println!("Checking: {:?}", path.display());
+        }
 
-            // Grab the header version
-            print!("{path:?} = stone container version {:?}", header.version());
-
-            for payload in payloads.flatten() {
-                let mut layouts = vec![];
-
-                // Grab deps/providers/conflicts
-                let mut deps = vec![];
-                let mut provs = vec![];
-                let mut cnfls = vec![];
-
-                match payload {
-                    PayloadKind::Layout(l) => layouts = l.body,
-                    PayloadKind::Meta(meta) => {
-                        println!();
-
-                        for record in meta.body {
-                            let name = format!("{:?}", record.tag);
-
-                            match &record.kind {
-                                meta::Kind::Provider(k, p) if record.tag == meta::Tag::Provides => {
-                                    provs.push(format!("{k}({p})"));
-                                }
-                                meta::Kind::Provider(k, p) if record.tag == meta::Tag::Conflicts => {
-                                    cnfls.push(format!("{k}({p})"));
-                                }
-                                meta::Kind::Dependency(k, d) => {
-                                    deps.push(format!("{k}({d})"));
-                                }
-                                meta::Kind::String(s) => {
-                                    println!("{name:COLUMN_WIDTH$} : {s}");
-                                }
-                                meta::Kind::Int64(i) => {
-                                    println!("{name:COLUMN_WIDTH$} : {i}");
-                                }
-                                meta::Kind::Uint64(i) => {
-                                    println!("{name:COLUMN_WIDTH$} : {i}");
-                                }
-                                _ => {
-                                    println!("{name:COLUMN_WIDTH$} : {record:?}");
-                                }
-                            }
-                        }
+        match File::open(&path).map_err(Error::IO).and_then(check_stone_integrity) {
+            Ok(payload_kinds) => {
+                if !quiet {
+                    for kind in payload_kinds {
+                        println!("  OK: {kind}");
                     }
-                    _ => {}
+                    println!("Result: OK\n");
                 }
-
-                if !deps.is_empty() {
-                    println!("\n{:COLUMN_WIDTH$} :", "Dependencies");
-                    for dep in deps {
-                        println!("    - {dep}");
-                    }
-                }
-                if !provs.is_empty() {
-                    println!("\n{:COLUMN_WIDTH$} :", "Providers");
-                    for prov in provs {
-                        println!("    - {prov}");
-                    }
-                }
-                if !cnfls.is_empty() {
-                    println!("\n{:COLUMN_WIDTH$} :", "Conflicts");
-                    for cnfl in cnfls {
-                        println!("    - {cnfl}");
-                    }
-                }
-
-                if !layouts.is_empty() {
-                    println!("\n{:COLUMN_WIDTH$} :", "Layout entries");
-                    for layout in layouts {
-                        match layout.entry {
-                            layout::Entry::Regular(hash, target) => {
-                                println!("    - /usr/{target} - [Regular] {hash:032x}");
-                            }
-                            layout::Entry::Directory(target) => {
-                                println!("    - /usr/{target} [Directory]");
-                            }
-                            layout::Entry::Symlink(source, target) => {
-                                println!("    - /usr/{target} -> {source} [Symlink]");
-                            }
-                            _ => unreachable!(),
-                        };
-                    }
+            }
+            Err(e) => {
+                had_error = true;
+                if !quiet {
+                    println!("Result: FAILED - {e}\n");
                 }
             }
         }
+    }
+
+    if had_error {
+        Err(Error::ValidationFailed)
+    } else {
         Ok(())
     }
+}
+
+fn handle_detailed(paths: Vec<PathBuf>) -> Result<(), Error> {
+    // Process each input path in order.
+    for path in paths {
+        let mut file = File::open(&path)?;
+        let mut reader = stone::read(&mut file)?;
+
+        let header = reader.header;
+        let payloads = reader.payloads()?;
+
+        // Grab the header version
+        print!("{path:?} = stone container version {:?}", header.version());
+
+        for payload in payloads.flatten() {
+            let mut layouts = vec![];
+
+            // Grab deps/providers/conflicts
+            let mut deps = vec![];
+            let mut provs = vec![];
+            let mut cnfls = vec![];
+
+            match payload {
+                PayloadKind::Layout(l) => layouts = l.body,
+                PayloadKind::Meta(meta) => {
+                    println!();
+
+                    for record in meta.body {
+                        let name = format!("{:?}", record.tag);
+
+                        match &record.kind {
+                            meta::Kind::Provider(k, p) if record.tag == meta::Tag::Provides => {
+                                provs.push(format!("{k}({p})"));
+                            }
+                            meta::Kind::Provider(k, p) if record.tag == meta::Tag::Conflicts => {
+                                cnfls.push(format!("{k}({p})"));
+                            }
+                            meta::Kind::Dependency(k, d) => {
+                                deps.push(format!("{k}({d})"));
+                            }
+                            meta::Kind::String(s) => {
+                                println!("{name:COLUMN_WIDTH$} : {s}");
+                            }
+                            meta::Kind::Int64(i) => {
+                                println!("{name:COLUMN_WIDTH$} : {i}");
+                            }
+                            meta::Kind::Uint64(i) => {
+                                println!("{name:COLUMN_WIDTH$} : {i}");
+                            }
+                            _ => {
+                                println!("{name:COLUMN_WIDTH$} : {record:?}");
+                            }
+                        }
+                    }
+                }
+                _ => {}
+            }
+
+            if !deps.is_empty() {
+                println!("\n{:COLUMN_WIDTH$} :", "Dependencies");
+                for dep in deps {
+                    println!("    - {dep}");
+                }
+            }
+            if !provs.is_empty() {
+                println!("\n{:COLUMN_WIDTH$} :", "Providers");
+                for prov in provs {
+                    println!("    - {prov}");
+                }
+            }
+            if !cnfls.is_empty() {
+                println!("\n{:COLUMN_WIDTH$} :", "Conflicts");
+                for cnfl in cnfls {
+                    println!("    - {cnfl}");
+                }
+            }
+
+            if !layouts.is_empty() {
+                println!("\n{:COLUMN_WIDTH$} :", "Layout entries");
+                for layout in layouts {
+                    match layout.entry {
+                        layout::Entry::Regular(hash, target) => {
+                            println!("    - /usr/{target} - [Regular] {hash:032x}");
+                        }
+                        layout::Entry::Directory(target) => {
+                            println!("    - /usr/{target} [Directory]");
+                        }
+                        layout::Entry::Symlink(source, target) => {
+                            println!("    - /usr/{target} -> {source} [Symlink]");
+                        }
+                        _ => unreachable!(),
+                    };
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Checks the integrity of a single .stone file by reading all payloads
@@ -173,8 +182,7 @@ fn check_stone_integrity(mut source: impl Read + Seek) -> Result<Vec<String>, Er
     let mut reader = stone::read(&mut source)?;
     let mut found_payloads = Vec::new();
 
-    // The `collect` call forces the iterator to run, which in turn decodes
-    // each payload and validates its checksum as a side-effect.
+    // Decode all non-content payloads which validates checksums
     let payloads = reader.payloads()?.collect::<Result<Vec<_>, _>>()?;
 
     // Find the content payload, if it exists.
@@ -187,14 +195,7 @@ fn check_stone_integrity(mut source: impl Read + Seek) -> Result<Vec<String>, Er
 
     // Collect the names of found payloads for reporting.
     for p in payloads {
-        let name = match p {
-            PayloadKind::Meta(_) => "Meta",
-            PayloadKind::Attributes(_) => "Attributes",
-            PayloadKind::Layout(_) => "Layout",
-            PayloadKind::Index(_) => "Index",
-            PayloadKind::Content(_) => "Content",
-        };
-        found_payloads.push(name.to_owned());
+        found_payloads.push(p.name().to_owned());
     }
 
     Ok(found_payloads)
