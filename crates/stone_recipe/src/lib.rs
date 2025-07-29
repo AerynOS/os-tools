@@ -92,6 +92,8 @@ pub struct Options {
     #[serde(default, deserialize_with = "stringy_bool")]
     pub samplepgo: bool,
     #[serde(default = "default_true", deserialize_with = "stringy_bool")]
+    pub debug: bool,
+    #[serde(default = "default_true", deserialize_with = "stringy_bool")]
     pub strip: bool,
     #[serde(default, deserialize_with = "stringy_bool")]
     pub networking: bool,
