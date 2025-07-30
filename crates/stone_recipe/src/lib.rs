@@ -18,6 +18,10 @@ pub mod macros;
 pub mod script;
 pub mod tuning;
 
+fn is_valid_sha1(s: &str) -> bool {
+    s.len() == 40 && s.chars().all(|c| c.is_ascii_hexdigit())
+}
+
 pub fn from_slice(bytes: &[u8]) -> Result<Recipe, Error> {
     serde_yaml::from_slice(bytes)
 }
@@ -186,6 +190,21 @@ impl<'de> Deserialize<'de> for Upstream {
         #[error("invalid uri: {0}")]
         struct UriParseError(#[from] url::ParseError);
 
+        // Helper function to validate the ref_id for git type upstreams to ensure it is a valid SHA1 hash.
+        // This helps ensure reproducibility since git tags and branches are mutable references that can be updated to point to different commits over time.
+        fn validate_ref_id<'de, D>(ref_id: &str) -> Result<(), D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            if !is_valid_sha1(ref_id) {
+                return Err(serde::de::Error::custom(format!(
+                    "Using git tags or branches in upstreams is disallowed for reproducibility. Please use the full 40-character commit SHA instead of '{}'.",
+                    ref_id
+                )));
+            }
+            Ok(())
+        }
+
         let raw_map = BTreeMap::<Uri, Outer>::deserialize(deserializer)?;
 
         match raw_map.into_iter().next() {
@@ -197,12 +216,15 @@ impl<'de> Deserialize<'de> for Upstream {
                 unpack: default_true(),
                 unpack_dir: None,
             }),
-            Some((Uri::Git(uri), Outer::String(ref_id))) => Ok(Upstream::Git {
-                uri,
-                ref_id,
-                clone_dir: None,
-                staging: default_true(),
-            }),
+            Some((Uri::Git(uri), Outer::String(ref_id))) => {
+                validate_ref_id::<D>(&ref_id)?;
+                Ok(Upstream::Git {
+                    uri,
+                    ref_id,
+                    clone_dir: None,
+                    staging: default_true(),
+                })
+            }
             Some((
                 Uri::Plain(uri),
                 Outer::Inner(Inner::Plain {
@@ -227,12 +249,15 @@ impl<'de> Deserialize<'de> for Upstream {
                     clone_dir,
                     staging,
                 }),
-            )) => Ok(Upstream::Git {
-                uri,
-                ref_id,
-                clone_dir,
-                staging,
-            }),
+            )) => {
+                validate_ref_id::<D>(&ref_id)?;
+                Ok(Upstream::Git {
+                    uri,
+                    ref_id,
+                    clone_dir,
+                    staging,
+                })
+            }
             Some((Uri::Plain(_), Outer::Inner(Inner::Git { .. }))) => Err(serde::de::Error::custom(
                 "found git payload but missing 'git|' prefixed URI",
             )),
@@ -382,5 +407,38 @@ mod test {
             let recipe = from_slice(input).unwrap();
             dbg!(&recipe);
         }
+    }
+
+    #[test]
+    fn reject_git_tag() {
+        let input = r#"
+name: test-pkg
+version: 1.0.0
+release: 1
+license: MIT
+homepage: https://example.com
+upstreams:
+    - git|https://github.com/example/repo : v1.0.0
+"#;
+        let result = from_str(input);
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(err_msg.contains("Using git tags or branches in upstreams is disallowed for reproducibility."));
+        assert!(err_msg.contains("Please use the full 40-character commit SHA instead of 'v1.0.0'."));
+    }
+
+    #[test]
+    fn accept_git_sha() {
+        let input = r#"
+name: test-pkg
+version: 1.0.0
+release: 1
+license: MIT
+homepage: https://example.com
+upstreams:
+    - git|https://github.com/example/repo : 85f8339d9c11caa203d79e6b10fd928a388d6466
+"#;
+        let result = from_str(input);
+        assert!(result.is_ok());
     }
 }
