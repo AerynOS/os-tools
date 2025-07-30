@@ -22,6 +22,16 @@ fn is_valid_sha1(s: &str) -> bool {
     s.len() == 40 && s.chars().all(|c| c.is_ascii_hexdigit())
 }
 
+fn format_git_ref_error(ref_id: &str) -> String {
+    format!(
+        "{} '{ref_id}'.",
+        "Using git tags or branches in upstreams is disallowed. \
+This helps ensure reproducibility since git tags and branches are mutable \
+references that can be updated to point to different commits over time. \
+Please use the full 40-character commit SHA instead of"
+    )
+}
+
 pub fn from_slice(bytes: &[u8]) -> Result<Recipe, Error> {
     serde_yaml::from_slice(bytes)
 }
@@ -191,16 +201,12 @@ impl<'de> Deserialize<'de> for Upstream {
         struct UriParseError(#[from] url::ParseError);
 
         // Helper function to validate the ref_id for git type upstreams to ensure it is a valid SHA1 hash.
-        // This helps ensure reproducibility since git tags and branches are mutable references that can be updated to point to different commits over time.
         fn validate_ref_id<'de, D>(ref_id: &str) -> Result<(), D::Error>
         where
             D: serde::Deserializer<'de>,
         {
             if !is_valid_sha1(ref_id) {
-                return Err(serde::de::Error::custom(format!(
-                    "Using git tags or branches in upstreams is disallowed for reproducibility. Please use the full 40-character commit SHA instead of '{}'.",
-                    ref_id
-                )));
+                return Err(serde::de::Error::custom(format_git_ref_error(ref_id)));
             }
             Ok(())
         }
@@ -422,9 +428,9 @@ upstreams:
 "#;
         let result = from_str(input);
         assert!(result.is_err());
-        let err_msg = result.unwrap_err().to_string();
-        assert!(err_msg.contains("Using git tags or branches in upstreams is disallowed for reproducibility."));
-        assert!(err_msg.contains("Please use the full 40-character commit SHA instead of 'v1.0.0'."));
+        let formatted_msg = format_git_ref_error("v1.0.0");
+        let actual_msg = result.unwrap_err().to_string();
+        assert!(actual_msg.contains(&formatted_msg));
     }
 
     #[test]
