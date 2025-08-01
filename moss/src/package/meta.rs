@@ -60,6 +60,7 @@ pub struct Meta {
     pub hash: Option<String>,
     /// How big is this package in the repo..?
     pub download_size: Option<u64>,
+    pub origin: Option<String>,
 }
 
 impl Meta {
@@ -76,6 +77,7 @@ impl Meta {
         let uri = find_meta_string(payload, payload::meta::Tag::PackageURI).ok();
         let hash = find_meta_string(payload, payload::meta::Tag::PackageHash).ok();
         let download_size = find_meta_u64(payload, payload::meta::Tag::PackageSize).ok();
+        let origin = None;
 
         let licenses = payload
             .iter()
@@ -110,6 +112,7 @@ impl Meta {
             uri,
             hash,
             download_size,
+            origin,
         })
     }
 
