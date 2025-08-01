@@ -251,11 +251,11 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
         let is_active = client.installation.active_state == Some(state.id);
 
         // Blits to staging dir
-        let fstree = client.blit_root(state.selections.iter().map(|s| &s.package))?;
+        let fstree = client.blit_root(state.selections.iter().map(|s| &s.package), None)?;
 
         if is_active {
             // Override install root with the newly blitted active state
-            client.apply_stateful_blit(fstree, state, None)?;
+            client.apply_stateful_blit(fstree, state, None, None)?;
             // Remove corrupt (swapped) state from staging directory
             fs::remove_dir_all(client.installation.staging_dir())?;
         } else {

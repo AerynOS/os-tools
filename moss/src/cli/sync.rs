@@ -157,7 +157,7 @@ pub fn handle(args: &ArgMatches, installation: Installation, debug: bool) -> Res
     };
 
     // Perfect, apply state.
-    client.new_state(&new_selections, "Sync")?;
+    client.new_state(&new_selections, "Sync", None)?;
 
     Ok(())
 }
