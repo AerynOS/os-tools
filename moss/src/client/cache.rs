@@ -116,7 +116,7 @@ pub async fn fetch(
 /// A package that has been downloaded to the installation
 pub struct Download {
     id: package::Id,
-    path: PathBuf,
+    pub path: PathBuf,
     installation: Installation,
     pub was_cached: bool,
 }
