@@ -34,21 +34,6 @@ pub fn python(bucket: &mut BucketMut<'_>, info: &mut PathInfo) -> Result<Respons
         name: python_name.clone(),
     });
 
-    /* Per discussion in Matrix (https://github.com/AerynOS/os-tools/issues/496) we are NOT going to be doing versioned
-    python provides/depends at this time. However we still need to add a provides for it until the repo is rebuilt (ugh) */
-    let output = Command::new("/usr/bin/python3")
-        .arg("-c")
-        .arg("import platform; print(f'{platform.python_version_tuple()[0]}.{platform.python_version_tuple()[1]}')")
-        .stdout(Stdio::piped())
-        .output()?;
-    let python_version = String::from_utf8_lossy(&output.stdout);
-
-    /* Insert versioned provider for auto deps */
-    bucket.providers.insert(Provider {
-        kind: dependency::Kind::Python,
-        name: format!("{python_name}({})", python_version.trim_end()),
-    });
-
     /* Now parse dependencies */
     let dist_path = info
         .path
