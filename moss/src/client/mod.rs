@@ -14,6 +14,7 @@ use std::{
     fmt, io,
     os::{fd::RawFd, unix::fs::symlink},
     path::{Path, PathBuf},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -76,6 +77,13 @@ pub struct Client {
 
     /// Operational scope (real systems, ephemeral, etc)
     scope: Scope,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum ProgressStage {
+    Blit = 0,
+    Transaction = 1,
+    System = 2,
 }
 
 impl Client {
@@ -281,7 +289,12 @@ impl Client {
     /// Then blit the filesystem, promote it, finally archiving the active ID
     ///
     /// Returns `None` if the client is ephemeral
-    pub fn new_state(&self, selections: &[Selection], summary: impl ToString) -> Result<Option<State>, Error> {
+    pub fn new_state(
+        &self,
+        selections: &[Selection],
+        summary: impl ToString,
+        progress_callback: Option<Arc<dyn Fn(f32, ProgressStage) + Send + Sync>>,
+    ) -> Result<Option<State>, Error> {
         let _guard = signal::ignore([Signal::SIGINT])?;
         let _fd = signal::inhibit(
             vec!["shutdown", "sleep", "idle", "handle-lid-switch"],
@@ -292,14 +305,14 @@ impl Client {
 
         let old_state = self.installation.active_state;
 
-        let fstree = self.blit_root(selections.iter().map(|s| &s.package))?;
+        let fstree = self.blit_root(selections.iter().map(|s| &s.package), progress_callback.clone())?;
 
         match &self.scope {
             Scope::Stateful => {
                 // Add to db
                 let state = self.state_db.add(selections, Some(&summary.to_string()), None)?;
 
-                self.apply_stateful_blit(fstree, &state, old_state)?;
+                self.apply_stateful_blit(fstree, &state, old_state, progress_callback)?;
 
                 Ok(Some(state))
             }
@@ -312,7 +325,11 @@ impl Client {
     }
 
     /// Apply all triggers with the given scope, wrapping with a progressbar.
-    fn apply_triggers(scope: TriggerScope<'_>, fstree: &vfs::Tree<PendingFile>) -> Result<(), postblit::Error> {
+    fn apply_triggers(
+        scope: TriggerScope<'_>,
+        fstree: &vfs::Tree<PendingFile>,
+        progress_callback: Option<Arc<dyn Fn(f32, ProgressStage) + Send + Sync>>,
+    ) -> Result<(), postblit::Error> {
         let triggers = postblit::triggers(scope, fstree)?;
 
         let progress = ProgressBar::new(triggers.len() as u64).with_style(
@@ -326,8 +343,22 @@ impl Client {
             TriggerScope::System(_, _) => progress.set_message("Running system-scope triggers"),
         };
 
+        let phase = match &scope {
+            TriggerScope::Transaction(_, _) => ProgressStage::Transaction,
+            TriggerScope::System(_, _) => ProgressStage::System,
+        };
+
         for trigger in progress.wrap_iter(triggers.iter()) {
             trigger.execute()?;
+
+            // Call progress callback after incrementing
+            if let Some(ref callback) = progress_callback {
+                let current_pos = progress.position();
+                let total_len = progress.length().unwrap_or(1);
+                let percentage = (current_pos as f32 / total_len as f32) * 100.0;
+
+                callback(percentage, phase);
+            }
         }
 
         progress.finish_and_clear();
@@ -340,12 +371,17 @@ impl Client {
         fstree: vfs::Tree<PendingFile>,
         state: &State,
         old_state: Option<state::Id>,
+        progress_callback: Option<Arc<dyn Fn(f32, ProgressStage) + Send + Sync>>,
     ) -> Result<(), Error> {
         record_state_id(&self.installation.staging_dir(), state.id)?;
         record_os_release(&self.installation.staging_dir())?;
 
         create_root_links(&self.installation.isolation_dir())?;
-        Self::apply_triggers(TriggerScope::Transaction(&self.installation, &self.scope), &fstree)?;
+        Self::apply_triggers(
+            TriggerScope::Transaction(&self.installation, &self.scope),
+            &fstree,
+            progress_callback.clone(),
+        )?;
 
         // Staging is only used with [`Scope::Stateful`]
         self.promote_staging()?;
@@ -358,7 +394,11 @@ impl Client {
         }
 
         // At this point we're allowed to run system triggers
-        Self::apply_triggers(TriggerScope::System(&self.installation, &self.scope), &fstree)?;
+        Self::apply_triggers(
+            TriggerScope::System(&self.installation, &self.scope),
+            &fstree,
+            progress_callback.clone(),
+        )?;
 
         boot::synchronize(self, state)?;
 
@@ -374,9 +414,13 @@ impl Client {
         fs::create_dir_all(etc)?;
 
         // ephemeral tx triggers
-        Self::apply_triggers(TriggerScope::Transaction(&self.installation, &self.scope), &fstree)?;
+        Self::apply_triggers(
+            TriggerScope::Transaction(&self.installation, &self.scope),
+            &fstree,
+            None,
+        )?;
         // ephemeral system triggers
-        Self::apply_triggers(TriggerScope::System(&self.installation, &self.scope), &fstree)?;
+        Self::apply_triggers(TriggerScope::System(&self.installation, &self.scope), &fstree, None)?;
 
         Ok(())
     }
@@ -615,6 +659,7 @@ impl Client {
     fn blit_root<'a>(
         &self,
         packages: impl IntoIterator<Item = &'a package::Id>,
+        progress_callback: Option<Arc<dyn Fn(f32, ProgressStage) + Send + Sync>>,
     ) -> Result<vfs::tree::Tree<PendingFile>, Error> {
         let progress = ProgressBar::new(1).with_style(
             ProgressStyle::with_template("\n|{bar:20.red/blue}| {pos}/{len} {msg}")
@@ -652,7 +697,7 @@ impl Client {
                 stats = stats.merge(
                     children
                         .into_par_iter()
-                        .map(|child| self.blit_element(root_dir, cache_fd, child, &progress))
+                        .map(|child| self.blit_element(root_dir, cache_fd, child, &progress, progress_callback.clone()))
                         .try_reduce(BlitStats::default, |a, b| Ok(a.merge(b)))?,
                 );
             }
@@ -684,10 +729,20 @@ impl Client {
         cache: RawFd,
         element: Element<'_, PendingFile>,
         progress: &ProgressBar,
+        progress_callback: Option<Arc<dyn Fn(f32, ProgressStage) + Send + Sync>>,
     ) -> Result<BlitStats, Error> {
         let mut stats = BlitStats::default();
 
         progress.inc(1);
+
+        // Call progress callback after incrementing
+        if let Some(ref callback) = progress_callback {
+            let current_pos = progress.position();
+            let total_len = progress.length().unwrap_or(1);
+            let percentage = (current_pos as f32 / total_len as f32) * 100.0;
+            callback(percentage, ProgressStage::Blit);
+        }
+
         match element {
             Element::Directory(name, item, children) => {
                 // Construct within the parent
@@ -699,7 +754,7 @@ impl Client {
                 stats = stats.merge(
                     children
                         .into_par_iter()
-                        .map(|child| self.blit_element(newdir, cache, child, progress))
+                        .map(|child| self.blit_element(newdir, cache, child, progress, progress_callback.clone()))
                         .try_reduce(BlitStats::default, |a, b| Ok(a.merge(b)))?,
                 );
 

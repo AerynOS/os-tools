@@ -120,7 +120,7 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
     };
 
     // Perfect, apply state.
-    client.new_state(&new_state_pkgs, "Install")?;
+    client.new_state(&new_state_pkgs, "Install", None)?;
 
     timing.blit = instant.elapsed();
 
