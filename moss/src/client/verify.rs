@@ -214,7 +214,7 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
         println!("Reinstalling packages");
 
         // And re-cache all packages that comprise the corrupt / missing asset
-        runtime::block_on(client.cache_packages(&issue_packages))?;
+        runtime::block_on(client.cache_packages(&issue_packages, None))?;
     }
 
     // Now we must fix any states that referenced these packages

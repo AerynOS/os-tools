@@ -96,7 +96,7 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
     instant = Instant::now();
 
     // Cache packages
-    runtime::block_on(client.cache_packages(&missing))?;
+    runtime::block_on(client.cache_packages(&missing, None))?;
 
     timing.fetch = instant.elapsed();
     instant = Instant::now();

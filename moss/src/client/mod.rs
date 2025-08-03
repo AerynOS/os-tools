@@ -14,7 +14,10 @@ use std::{
     fmt, io,
     os::{fd::RawFd, unix::fs::symlink},
     path::{Path, PathBuf},
-    sync::Arc,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -84,6 +87,11 @@ pub enum ProgressStage {
     Blit = 0,
     Transaction = 1,
     System = 2,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum DownloadCallback {
+    DownloadOverall(f32),
 }
 
 impl Client {
@@ -490,7 +498,11 @@ impl Client {
     }
 
     /// Download & unpack the provided packages. Packages already cached will be validated & skipped.
-    pub async fn cache_packages<T>(&self, packages: &[T]) -> Result<(), Error>
+    pub async fn cache_packages<T>(
+        &self,
+        packages: &[T],
+        progress_callback: Option<Arc<dyn Fn(DownloadCallback) + Send + Sync>>,
+    ) -> Result<(), Error>
     where
         T: Borrow<Package>,
     {
@@ -508,6 +520,12 @@ impl Client {
         total_progress.tick();
 
         let unpacking_in_progress = cache::UnpackingInProgress::default();
+
+        let total_bytes = packages.iter().fold(0, |acc, p| {
+            let pkg: &Package = p.borrow();
+            acc + pkg.meta.download_size.unwrap_or_default()
+        });
+        let total_completed_bytes = &AtomicU64::new(0);
 
         // Download and unpack each package
         let cached = stream::iter(packages)
@@ -536,11 +554,23 @@ impl Client {
                 // Download and update progress
                 let download = cache::fetch(&package.meta, &self.installation, |progress| {
                     progress_bar.inc(progress.delta);
+                    if let Some(ref callback) = progress_callback {
+                        callback({
+                            DownloadCallback::DownloadOverall({
+                                let current_pkg_completed = progress.completed;
+                                let total_completed =
+                                    total_completed_bytes.load(Ordering::Relaxed) + current_pkg_completed;
+                                total_completed as f32 / total_bytes as f32
+                            })
+                        })
+                    }
                 })
                 .await?;
                 let is_cached = download.was_cached;
 
                 // Move rest of blocking code to threadpool
+
+                total_completed_bytes.fetch_add(package.meta.download_size.unwrap_or_default(), Ordering::Relaxed);
 
                 let multi_progress = multi_progress.clone();
                 let total_progress = total_progress.clone();
