@@ -6,7 +6,9 @@ use std::{
     io,
     os::unix::process::ExitStatusExt,
     path::{Path, PathBuf},
-    process, thread,
+    process,
+    sync::Mutex,
+    thread,
     time::Duration,
 };
 
@@ -17,6 +19,8 @@ use nix::{
     sys::signal::Signal,
     unistd::{Pid, getpgrp, setpgid},
 };
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use stone_recipe::{
     Script,
     script::{self, Breakpoint},
@@ -34,6 +38,23 @@ use crate::{
     Env, Macros, Paths, Recipe, Timing, architecture::BuildTarget, container, macros, profile, recipe, timing, util,
 };
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum LockedUpstream {
+    Git {
+        uri: String,
+        tag: Option<String>,
+        branch: Option<String>,
+        rev: String,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct StoneLock {
+    #[serde(default)]
+    pub upstreams: Vec<LockedUpstream>,
+}
+
 pub struct Builder {
     pub targets: Vec<Target>,
     pub recipe: Recipe,
@@ -42,6 +63,7 @@ pub struct Builder {
     pub ccache: bool,
     pub env: Env,
     profile: profile::Id,
+    new_lock_data: Mutex<Option<StoneLock>>,
 }
 
 pub struct Target {
@@ -93,6 +115,7 @@ impl Builder {
             ccache,
             env,
             profile,
+            new_lock_data: Mutex::new(None),
         })
     }
 
@@ -121,10 +144,14 @@ impl Builder {
         // Populate rootfs
         root::populate(self, repos, timing, initialize_timer, update_repos)?;
 
+        // Resolve the upstreams
+        let (resolved_upstreams, new_lock_data) = resolve_upstreams(&self.recipe)?;
+        *self.new_lock_data.lock().unwrap() = Some(new_lock_data);
+
         let timer = timing.begin(timing::Kind::Fetch);
 
         // Sync (fetch & share) upstreams to rootfs
-        upstream::sync(&self.recipe, &self.paths)?;
+        upstream::sync(&resolved_upstreams, &self.paths)?;
 
         timing.finish(timer);
 
@@ -268,6 +295,151 @@ impl Builder {
 
         Ok(())
     }
+
+    pub fn write_lock_file(&self) -> Result<(), LockFileError> {
+        if let Some(lock_data) = self.new_lock_data.lock().unwrap().take() {
+            let lock_path = self.recipe.path.with_file_name("stone.lock");
+            let new_lock_content = serde_yaml::to_string(&lock_data)?;
+            fs::write(&lock_path, new_lock_content)?;
+        }
+        Ok(())
+    }
+}
+
+fn resolve_git_ref(uri: &url::Url, ref_id: &str) -> Result<String, GitError> {
+    let refs_to_try = [format!("refs/tags/{ref_id}"), format!("refs/heads/{ref_id}")];
+    let output = process::Command::new("git")
+        .args(["ls-remote", "--", uri.as_str()])
+        .args(&refs_to_try)
+        .output()?;
+    if !output.status.success() {
+        return Err(GitError::Failed);
+    }
+    let stdout = String::from_utf8(output.stdout)?;
+    // git ls-remote output is in the format: <hash>\t<ref_name>
+    // so just grab the first word to get the hash.
+    stdout
+        .split_whitespace()
+        .next()
+        .ok_or_else(|| GitError::UnresolvedReference {
+            ref_id: ref_id.to_owned(),
+            uri: uri.to_string(),
+        })
+        .map(|s| s.to_owned())
+}
+
+pub fn resolve_upstreams(recipe: &Recipe) -> Result<(Vec<upstream::Upstream>, StoneLock), Error> {
+    let lock_path = recipe.path.with_file_name("stone.lock");
+    let existing_lock: StoneLock = if lock_path.exists() {
+        let content = fs::read_to_string(&lock_path)?;
+        serde_yaml::from_str(&content).unwrap_or_default()
+    } else {
+        Default::default()
+    };
+    let lock_map: BTreeMap<String, &LockedUpstream> = existing_lock
+        .upstreams
+        .iter()
+        .map(|u| match u {
+            LockedUpstream::Git { uri, .. } => (uri.clone(), u),
+        })
+        .collect();
+
+    let mut resolved_upstreams = Vec::new();
+    let mut new_locked_upstreams = Vec::new();
+    for upstream in &recipe.parsed.upstreams {
+        match upstream {
+            stone_recipe::Upstream::Plain { .. } => {
+                resolved_upstreams.push(upstream::Upstream::from_recipe(upstream.clone())?);
+                // Plain upstreams are passed directly through since they always define a hash
+            }
+            stone_recipe::Upstream::Git {
+                uri, tag, branch, rev, ..
+            } => {
+                let uri_string = format!("git|{uri}");
+                let locked_entry = lock_map.get(&uri_string);
+                let resolved_rev = match (rev, tag, branch, locked_entry) {
+                    // The stone.yaml directly specifies a rev, so lock file is irrelevant
+                    (Some(r), ..) => r.clone(),
+                    // The stone.yaml specifies a tag that exists in the stone.lock
+                    (
+                        None,
+                        Some(t),
+                        None,
+                        Some(LockedUpstream::Git {
+                            tag: Some(locked_tag),
+                            rev: locked_rev,
+                            ..
+                        }),
+                    ) if t == locked_tag => {
+                        let current_rev = resolve_git_ref(uri, t)?;
+                        if current_rev != *locked_rev {
+                            eprintln!(
+                                "{} | The tag '{t}' for {uri} now points to a different commit hash.",
+                                "Warning".yellow(),
+                            );
+                            eprintln!("  Locked:   {}", locked_rev.clone().dim());
+                            eprintln!("  Current:  {}", current_rev.dim());
+                            eprintln!("  Using the locked commit hash for this build to ensure reproducibility.");
+                        }
+                        locked_rev.clone()
+                    }
+                    // The stone.yaml specifies a branch that exists in the stone.lock
+                    (
+                        None,
+                        None,
+                        Some(b),
+                        Some(LockedUpstream::Git {
+                            branch: Some(locked_branch),
+                            rev: locked_rev,
+                            ..
+                        }),
+                    ) if b == locked_branch => {
+                        let current_rev = resolve_git_ref(uri, b)?;
+                        if current_rev != *locked_rev {
+                            eprintln!(
+                                "{} | The branch '{b}' for {uri} now points to a different commit hash.",
+                                "Warning".yellow(),
+                            );
+                            eprintln!("  Locked:   {}", locked_rev.clone().dim());
+                            eprintln!("  Current:  {}", current_rev.dim());
+                            eprintln!("  Using the locked commit hash for this build to ensure reproducibility.");
+                        }
+                        locked_rev.clone()
+                    }
+                    // The stone.yml specifies a branch or tag and there is no entry in the stone.lock for it
+                    (None, tag, branch, None) => {
+                        let ref_id = tag.as_deref().or(branch.as_deref()).unwrap();
+                        resolve_git_ref(uri, ref_id)?
+                    }
+                    // Catch all if the lock file is missing or stale
+                    // This covers:
+                    //  - No lock file exists.
+                    //  - stone.yml has a tag, but stone.lock has a different tag or a branch.
+                    //  - stone.yml has a branch, but stone.lock has a different branch or a tag.
+                    // In all these cases, we resolve the reference from the remote repository.
+                    (None, tag, branch, _) => {
+                        let ref_id = tag.as_deref().or(branch.as_deref()).unwrap();
+                        resolve_git_ref(uri, ref_id)?
+                    }
+                };
+                resolved_upstreams
+                    .push(upstream::Upstream::from_recipe(upstream.clone())?.with_resolved_rev(resolved_rev.clone()));
+                // Add a locked_entry if the stone.yaml does not specify a rev
+                if !rev.is_some() {
+                    new_locked_upstreams.push(LockedUpstream::Git {
+                        uri: uri_string,
+                        tag: tag.clone(),
+                        branch: branch.clone(),
+                        rev: resolved_rev,
+                    });
+                }
+            }
+        }
+    }
+    let new_lock_data = StoneLock {
+        upstreams: new_locked_upstreams,
+    };
+    Ok((resolved_upstreams, new_lock_data))
 }
 
 pub fn build_target_prefix(target: BuildTarget, i: usize) -> String {
@@ -430,6 +602,41 @@ fn breakpoint_line(
 }
 
 #[derive(Debug, Error)]
+pub enum LockFileError {
+    #[error("failed to serialize lock file")]
+    Serialize {
+        #[from]
+        source: serde_yaml::Error,
+    },
+    #[error("failed to write lock file")]
+    Write {
+        #[from]
+        source: io::Error,
+    },
+}
+
+#[derive(Debug, Error)]
+pub enum GitError {
+    #[error("failed to run git command")]
+    Command {
+        #[from]
+        source: io::Error,
+    },
+
+    #[error("command failed with non-zero status")]
+    Failed,
+
+    #[error("output was not valid UTF-8")]
+    Utf8 {
+        #[from]
+        source: std::string::FromUtf8Error,
+    },
+
+    #[error("could not resolve '{ref_id}' for git repository '{uri}'")]
+    UnresolvedReference { ref_id: String, uri: String },
+}
+
+#[derive(Debug, Error)]
 pub enum Error {
     #[error("no supported build targets for recipe")]
     NoBuildTargets,
@@ -459,4 +666,8 @@ pub enum Error {
     Io(#[from] io::Error),
     #[error("recreate artefacts dir")]
     RecreateArtefactsDir(#[source] io::Error),
+    #[error("git")]
+    Git(#[from] GitError),
+    #[error("lock file")]
+    LockFile(#[from] LockFileError),
 }

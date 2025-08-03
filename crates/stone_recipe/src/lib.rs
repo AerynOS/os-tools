@@ -18,6 +18,11 @@ pub mod macros;
 pub mod script;
 pub mod tuning;
 
+fn is_valid_commit_hash(s: &str) -> bool {
+    // git commit hashes can be SHA-1 or SHA-256 hashes
+    (s.len() == 40 || s.len() == 64) && s.chars().all(|c| c.is_ascii_hexdigit())
+}
+
 pub fn from_slice(bytes: &[u8]) -> Result<Recipe, Error> {
     serde_yaml::from_slice(bytes)
 }
@@ -125,7 +130,9 @@ pub enum Upstream {
     },
     Git {
         uri: Url,
-        ref_id: String,
+        tag: Option<String>,
+        branch: Option<String>,
+        rev: Option<String>,
         clone_dir: Option<PathBuf>,
         staging: bool,
     },
@@ -150,8 +157,9 @@ impl<'de> Deserialize<'de> for Upstream {
                 unpack_dir: Option<PathBuf>,
             },
             Git {
-                #[serde(rename = "ref")]
-                ref_id: String,
+                tag: Option<String>,
+                branch: Option<String>,
+                rev: Option<String>,
                 #[serde(rename = "clonedir")]
                 clone_dir: Option<PathBuf>,
                 #[serde(default = "default_true", deserialize_with = "stringy_bool")]
@@ -188,6 +196,19 @@ impl<'de> Deserialize<'de> for Upstream {
         #[error("invalid uri: {0}")]
         struct UriParseError(#[from] url::ParseError);
 
+        // Helper function to validate the rev for git type upstreams to ensure it is a valid commit hash.
+        fn validate_rev<'de, D>(rev: &str) -> Result<(), D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            if !is_valid_commit_hash(rev) {
+                return Err(serde::de::Error::custom(format!(
+                    "'{rev}' is not a valid git commit hash. If this is a tag or branch name use the corresponding 'tag' or 'branch' keys instead. For example: `tag: {rev}`"
+                )));
+            }
+            Ok(())
+        }
+
         let raw_map = BTreeMap::<Uri, Outer>::deserialize(deserializer)?;
 
         match raw_map.into_iter().next() {
@@ -199,12 +220,17 @@ impl<'de> Deserialize<'de> for Upstream {
                 unpack: default_true(),
                 unpack_dir: None,
             }),
-            Some((Uri::Git(uri), Outer::String(ref_id))) => Ok(Upstream::Git {
-                uri,
-                ref_id,
-                clone_dir: None,
-                staging: default_true(),
-            }),
+            Some((Uri::Git(uri), Outer::String(rev))) => {
+                validate_rev::<D>(&rev)?;
+                Ok(Upstream::Git {
+                    uri,
+                    tag: None,
+                    branch: None,
+                    rev: Some(rev),
+                    clone_dir: None,
+                    staging: default_true(),
+                })
+            }
             Some((
                 Uri::Plain(uri),
                 Outer::Inner(Inner::Plain {
@@ -225,16 +251,34 @@ impl<'de> Deserialize<'de> for Upstream {
             Some((
                 Uri::Git(uri),
                 Outer::Inner(Inner::Git {
-                    ref_id,
+                    tag,
+                    branch,
+                    rev,
                     clone_dir,
                     staging,
                 }),
-            )) => Ok(Upstream::Git {
-                uri,
-                ref_id,
-                clone_dir,
-                staging,
-            }),
+            )) => {
+                // We prefer using rev, but allow tags and branches
+                // Regardless of which source is given here, the corresponding commit hash
+                // will be fetched and stored in the stone.lock file for reproducibility
+                let git_source_count = tag.is_some() as u32 + branch.is_some() as u32 + rev.is_some() as u32;
+                if git_source_count != 1 {
+                    return Err(serde::de::Error::custom(
+                        "For a git upstream, you must specify exactly one of: tag, branch, or rev",
+                    ));
+                }
+                if let Some(rev_string) = &rev {
+                    validate_rev::<D>(rev_string)?;
+                }
+                Ok(Upstream::Git {
+                    uri,
+                    tag,
+                    branch,
+                    rev,
+                    clone_dir,
+                    staging,
+                })
+            }
             Some((Uri::Plain(_), Outer::Inner(Inner::Git { .. }))) => Err(serde::de::Error::custom(
                 "found git payload but missing 'git|' prefixed URI",
             )),
@@ -385,4 +429,6 @@ mod test {
             dbg!(&recipe);
         }
     }
+
+    // TODO: more tests
 }
