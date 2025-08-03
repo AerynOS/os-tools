@@ -417,11 +417,6 @@ pub fn resolve_upstreams(recipe: &Recipe) -> Result<(Vec<upstream::Upstream>, St
                         }
                         locked_rev.clone()
                     }
-                    // The stone.yml specifies a branch or tag and there is no entry in the stone.lock for it
-                    (None, tag, branch, None) => {
-                        let ref_id = tag.as_deref().or(branch.as_deref()).unwrap();
-                        resolve_git_ref(uri, ref_id)?
-                    }
                     // Catch all if the lock file is missing or stale
                     // This covers:
                     //  - No lock file exists.
