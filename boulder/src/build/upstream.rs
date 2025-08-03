@@ -153,20 +153,7 @@ impl Upstream {
                 hash: hash.parse()?,
                 rename,
             })),
-            stone_recipe::Upstream::Git {
-                uri,
-                tag,
-                branch,
-                rev,
-                staging,
-                ..
-            } => Ok(Self::Git(Git {
-                uri,
-                tag,
-                branch,
-                rev,
-                staging,
-            })),
+            stone_recipe::Upstream::Git { uri, rev, staging, .. } => Ok(Self::Git(Git { uri, rev, staging })),
         }
     }
 
@@ -319,8 +306,6 @@ impl Plain {
 #[derive(Debug, Clone)]
 pub struct Git {
     uri: Url,
-    tag: Option<String>,
-    branch: Option<String>,
     rev: Option<String>,
     staging: bool,
 }

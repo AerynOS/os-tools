@@ -312,10 +312,12 @@ fn resolve_git_ref(uri: &url::Url, ref_id: &str) -> Result<String, GitError> {
         .args(["ls-remote", "--", uri.as_str()])
         .args(&refs_to_try)
         .output()?;
+
     if !output.status.success() {
         return Err(GitError::Failed);
     }
     let stdout = String::from_utf8(output.stdout)?;
+
     // git ls-remote output is in the format: <hash>\t<ref_name>
     // so just grab the first word to get the hash.
     stdout
@@ -336,6 +338,7 @@ pub fn resolve_upstreams(recipe: &Recipe) -> Result<(Vec<upstream::Upstream>, St
     } else {
         Default::default()
     };
+
     let lock_map: BTreeMap<String, &LockedUpstream> = existing_lock
         .upstreams
         .iter()
@@ -346,6 +349,7 @@ pub fn resolve_upstreams(recipe: &Recipe) -> Result<(Vec<upstream::Upstream>, St
 
     let mut resolved_upstreams = Vec::new();
     let mut new_locked_upstreams = Vec::new();
+
     for upstream in &recipe.parsed.upstreams {
         match upstream {
             stone_recipe::Upstream::Plain { .. } => {

@@ -430,5 +430,116 @@ mod test {
         }
     }
 
-    // TODO: more tests
+    #[test]
+    fn reject_git_tag() {
+        let input = r#"
+name: test-pkg
+version: 1.0.0
+release: 1
+license: MIT
+homepage: https://example.com
+upstreams:
+    - git|https://github.com/example/repo : v1.0.0
+"#;
+        let result = from_str(input);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn accept_git_tag() {
+        let input = r#"
+name: test-pkg
+version: 1.0.0
+release: 1
+license: MIT
+homepage: https://example.com
+upstreams:
+    - git|https://github.com/example/repo:
+        tag: v1.0.0
+"#;
+        let result = from_str(input);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn accept_git_branch() {
+        let input = r#"
+name: test-pkg
+version: 1.0.0
+release: 1
+license: MIT
+homepage: https://example.com
+upstreams:
+    - git|https://github.com/example/repo:
+        branch: main
+"#;
+        let result = from_str(input);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn accept_git_rev() {
+        let input = r#"
+name: test-pkg
+version: 1.0.0
+release: 1
+license: MIT
+homepage: https://example.com
+upstreams:
+    - git|https://github.com/example/repo:
+        rev: a94a8fe5ccb19ba61c4c0873d391e987982fbbd3
+"#;
+        let result = from_str(input);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn reject_git_rev() {
+        let input = r#"
+name: test-pkg
+version: 1.0.0
+release: 1
+license: MIT
+homepage: https://example.com
+upstreams:
+    - git|https://github.com/example/repo:
+        rev: v1.0.0
+"#;
+        let result = from_str(input);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn reject_git_rev_with_tag() {
+        let input = r#"
+name: test-pkg
+version: 1.0.0
+release: 1
+license: MIT
+homepage: https://example.com
+upstreams:
+    - git|https://github.com/example/repo:
+        tag: v1.0.0
+        rev: a94a8fe5ccb19ba61c4c0873d391e987982fbbd3
+"#;
+        let result = from_str(input);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn reject_git_rev_with_branch() {
+        let input = r#"
+name: test-pkg
+version: 1.0.0
+release: 1
+license: MIT
+homepage: https://example.com
+upstreams:
+    - git|https://github.com/example/repo:
+        branch: main
+        rev: a94a8fe5ccb19ba61c4c0873d391e987982fbbd3
+"#;
+        let result = from_str(input);
+        assert!(result.is_err());
+    }
 }
