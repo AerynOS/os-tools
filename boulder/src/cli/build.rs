@@ -121,6 +121,9 @@ pub fn handle(command: Command, env: Env) -> Result<(), Error> {
     // Copy artefacts to host recipe dir
     package::sync_artefacts(paths).map_err(Error::SyncArtefacts)?;
 
+    // Write the stone.lock file
+    builder.write_lock_file()?;
+
     println!(
         "Build finished successfully at {}",
         Local::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
@@ -143,4 +146,6 @@ pub enum Error {
     Container(#[from] container::Error),
     #[error("setting thread priority")]
     Priority(#[from] thread_priority::Error),
+    #[error("lock file")]
+    LockFile(#[from] build::LockFileError),
 }

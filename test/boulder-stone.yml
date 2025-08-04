@@ -8,7 +8,8 @@ description : |
     Extremely flexible and powerful, yet simple to use, package build
     tool for the Serpent OS project.
 upstreams   :
-    - git|https://github.com/serpent-os/boulder : v1.0.1
+    - git|https://github.com/serpent-os/boulder:
+        tag: v1.0.1
     - https://github.com/serpent-os/libmoss/releases/download/v1.2.0/libmoss-1.2.0.tar.xz:
         hash: cbf684b5a37a3a433e0526beb04a7b3419b71e81b3709c3b0d7ed6a1987d3dcb
         unpackdir: libmoss

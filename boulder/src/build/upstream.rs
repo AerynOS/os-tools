@@ -19,25 +19,20 @@ use tokio::io::AsyncWriteExt;
 use tui::{MultiProgress, ProgressBar, ProgressStyle, Styled};
 use url::Url;
 
-use crate::{Paths, Recipe, util};
+use crate::{Paths, util};
 
-/// Cache all upstreams from the provided [`Recipe`] and make them available
+/// Cache all resolved upstreams and make them available
 /// in the guest rootfs.
-pub fn sync(recipe: &Recipe, paths: &Paths) -> Result<(), Error> {
-    let upstreams = recipe
-        .parsed
-        .upstreams
-        .iter()
-        .cloned()
-        .map(Upstream::from_recipe)
-        .collect::<Result<Vec<_>, _>>()?;
-
+pub fn sync(resolved_upstreams: &[Upstream], paths: &Paths) -> Result<(), Error> {
     println!();
-    println!("Sharing {} upstream(s) with the build container", upstreams.len());
+    println!(
+        "Sharing {} upstream(s) with the build container",
+        resolved_upstreams.len()
+    );
 
     let mp = MultiProgress::new();
     let tp = mp.add(
-        ProgressBar::new(upstreams.len() as u64).with_style(
+        ProgressBar::new(resolved_upstreams.len() as u64).with_style(
             ProgressStyle::with_template("\n|{bar:20.cyan/blue}| {pos}/{len}")
                 .unwrap()
                 .progress_chars("■≡=- "),
@@ -49,7 +44,7 @@ pub fn sync(recipe: &Recipe, paths: &Paths) -> Result<(), Error> {
     util::ensure_dir_exists(&upstream_dir)?;
 
     runtime::block_on(
-        stream::iter(&upstreams)
+        stream::iter(resolved_upstreams)
             .map(|upstream| async {
                 let pb = mp.insert_before(
                     &tp,
@@ -158,9 +153,17 @@ impl Upstream {
                 hash: hash.parse()?,
                 rename,
             })),
-            stone_recipe::Upstream::Git {
-                uri, ref_id, staging, ..
-            } => Ok(Self::Git(Git { uri, ref_id, staging })),
+            stone_recipe::Upstream::Git { uri, rev, staging, .. } => Ok(Self::Git(Git { uri, rev, staging })),
+        }
+    }
+
+    pub fn with_resolved_rev(self, resolved_rev: String) -> Self {
+        match self {
+            Upstream::Git(mut git) => {
+                git.rev = Some(resolved_rev);
+                Upstream::Git(git)
+            }
+            plain => plain,
         }
     }
 
@@ -303,7 +306,7 @@ impl Plain {
 #[derive(Debug, Clone)]
 pub struct Git {
     uri: Url,
-    ref_id: String,
+    rev: Option<String>,
     staging: bool,
 }
 
@@ -398,13 +401,15 @@ impl Git {
 
         self.run(&["fetch"], Some(path)).await?;
 
-        let result = self.run(&["cat-file", "-e", &self.ref_id], Some(path)).await;
+        let rev_to_check = self.rev.as_deref().expect("Git rev should be resolved before fetch");
+        let result = self.run(&["cat-file", "-e", rev_to_check], Some(path)).await;
 
         Ok(result.is_ok())
     }
 
     async fn reset_to_ref(&self, path: &Path) -> Result<(), Error> {
-        self.run(&["reset", "--hard", &self.ref_id], Some(path)).await?;
+        let rev_to_reset = self.rev.as_deref().expect("Git rev should be resolved before fetch");
+        self.run(&["reset", "--hard", rev_to_reset], Some(path)).await?;
 
         self.run(
             &[
