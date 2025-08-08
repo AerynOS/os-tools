@@ -2,12 +2,16 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-use chrono::Local;
+use std::collections::HashMap;
+
+use chrono::{Local, Utc};
 use clap::{ArgAction, ArgMatches, Command, arg};
+use itertools::Itertools;
 use moss::{
-    Installation,
+    Installation, State,
     client::{self, Client, prune},
-    environment, state,
+    environment,
+    state::Kind,
 };
 use thiserror::Error;
 use tui::Styled;
@@ -28,6 +32,27 @@ pub fn command() -> Command {
                         .value_parser(clap::value_parser!(u64)),
                 )
                 .arg(arg!(--"skip-triggers" "Do not run triggers on activation").action(ArgAction::SetTrue)),
+        )
+        .subcommand(
+            Command::new("diff")
+                .about("Query difference between two states")
+                .arg(
+                    arg!(<A> "Old state id to query")
+                        .action(ArgAction::Set)
+                        .value_parser(clap::value_parser!(u64)),
+                )
+                .arg(
+                    arg!(<B> "New state id to query")
+                        .action(ArgAction::Set)
+                        .value_parser(clap::value_parser!(u64)),
+                ),
+        )
+        .subcommand(
+            Command::new("query").about("Query information for a state").arg(
+                arg!(<ID> "State id to query")
+                    .action(ArgAction::Set)
+                    .value_parser(clap::value_parser!(u64)),
+            ),
         )
         .subcommand(
             Command::new("prune")
@@ -62,6 +87,8 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         Some(("active", _)) => active(installation),
         Some(("list", _)) => list(installation),
         Some(("activate", args)) => activate(args, installation),
+        Some(("diff", args)) => diff(args, installation),
+        Some(("query", args)) => query(args, installation),
         Some(("prune", args)) => prune(args, installation),
         Some(("remove", args)) => remove(args, installation),
         Some(("verify", args)) => verify(args, installation),
@@ -114,6 +141,50 @@ pub fn activate(args: &ArgMatches, installation: Installation) -> Result<(), Err
     Ok(())
 }
 
+pub fn diff(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
+    let id_a = *args.get_one::<u64>("A").unwrap() as i32;
+    let id_b = *args.get_one::<u64>("B").unwrap() as i32;
+
+    let client = Client::new(environment::NAME, installation)?;
+
+    let state_a = client.state_db.get(id_a.into())?;
+    let state_b = client.state_db.get(id_b.into())?;
+
+    let filtered: Vec<_> = state_b
+        .selections
+        .iter()
+        .filter(|x| !state_a.selections.contains(x))
+        .cloned()
+        .collect();
+
+    let diff_state = State {
+        id: 0.into(),
+        summary: Some("Dummy difference state".to_string()),
+        description: Some(format!("Contains selections that are in #{id_b} but not in #{id_a}")),
+        selections: filtered,
+        created: Utc::now(),
+        kind: Kind::Transaction,
+    };
+
+    print_state(diff_state.clone());
+    print_state_selections(diff_state, &client, Some(state_a));
+
+    Ok(())
+}
+
+pub fn query(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
+    let id = *args.get_one::<u64>("ID").unwrap() as i32;
+
+    let client = Client::new(environment::NAME, installation)?;
+
+    let state = client.state_db.get(id.into())?;
+
+    print_state(state.clone());
+    print_state_selections(state, &client, None);
+
+    Ok(())
+}
+
 pub fn prune(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
     let keep = *args.get_one::<u64>("keep").unwrap();
     let include_newer = args.get_flag("include-newer");
@@ -146,7 +217,7 @@ pub fn verify(args: &ArgMatches, installation: Installation) -> Result<(), Error
 }
 
 /// Emit a state description for the TUI
-fn print_state(state: state::State) {
+fn print_state(state: State) {
     let local_time = state.created.with_timezone(&Local);
     let formatted_time = local_time.format("%Y-%m-%d %H:%M:%S %Z");
 
@@ -161,6 +232,104 @@ fn print_state(state: state::State) {
     }
     println!("{} {}", "Packages:".bold(), state.selections.len());
     println!();
+}
+
+fn print_state_selections(state: State, client: &Client, other_state: Option<State>) {
+    let set: Vec<_> = state
+        .selections
+        .into_iter()
+        .filter_map(|s| {
+            client.registry.by_id(&s.package).next().map(|pkg| Format {
+                name: pkg.meta.name.to_string(),
+                revision: Revision {
+                    version: pkg.meta.version_identifier,
+                    release: pkg.meta.source_release.to_string(),
+                },
+                explicit: s.explicit,
+            })
+        })
+        .collect();
+
+    let other_packages: HashMap<String, Revision> = if let Some(other) = other_state {
+        other
+            .selections
+            .into_iter()
+            .filter_map(|s| {
+                client.registry.by_id(&s.package).next().map(|pkg| {
+                    let name = pkg.meta.name.to_string();
+                    let revision = Revision {
+                        version: pkg.meta.version_identifier,
+                        release: pkg.meta.source_release.to_string(),
+                    };
+                    (name, revision)
+                })
+            })
+            .collect()
+    } else {
+        HashMap::new()
+    };
+
+    let max_length = set.iter().map(Format::size).max().unwrap_or_default() + 2;
+
+    for item in set.clone() {
+        let width = max_length - item.size() + 2;
+        let name = if item.explicit {
+            item.name.clone().bold()
+        } else {
+            item.name.clone().dim()
+        };
+        print!("{name} {:width$} ", " ");
+
+        // Check if we have version comparison data
+        if let Some(other_revision) = other_packages.get(&item.name) {
+            // Print current version
+            print!(
+                "{}-{}",
+                item.revision.version.clone().magenta(),
+                item.revision.release.clone().dim()
+            );
+
+            // Compare versions and show difference
+            if item.revision.release != other_revision.release {
+                print!(
+                    " (was {}-{})",
+                    other_revision.version.clone().yellow(),
+                    other_revision.release.clone().dim()
+                );
+            }
+            println!();
+        } else {
+            // No comparison available, just print current version
+            println!("{}-{}", item.revision.version.magenta(), item.revision.release.dim());
+        }
+    }
+
+    println!();
+}
+
+#[derive(Clone, Debug)]
+struct Format {
+    name: String,
+    revision: Revision,
+    explicit: bool,
+}
+
+impl Format {
+    fn size(&self) -> usize {
+        self.name.len() + self.revision.size()
+    }
+}
+
+#[derive(Clone, Debug)]
+struct Revision {
+    version: String,
+    release: String,
+}
+
+impl Revision {
+    fn size(&self) -> usize {
+        self.version.len() + self.release.len()
+    }
 }
 
 #[derive(Debug, Error)]
