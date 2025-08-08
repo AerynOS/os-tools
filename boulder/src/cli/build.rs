@@ -73,6 +73,12 @@ pub fn handle(command: Command, env: Env) -> Result<(), Error> {
     }
 
     let builder = Builder::new(&recipe_path, env, profile, ccache, output)?;
+    let pkg_name = format!(
+        "{}-{}-{}",
+        builder.recipe.parsed.source.name, builder.recipe.parsed.source.version, builder.recipe.parsed.source.release
+    );
+    println!("boulder {}", tools_buildinfo::get_simple_version());
+    println!("└─ building {pkg_name}-{build_release}\n");
     builder.setup(&mut timing, timer, update)?;
 
     let paths = &builder.paths;
@@ -86,11 +92,6 @@ pub fn handle(command: Command, env: Env) -> Result<(), Error> {
             ThreadSchedulePolicy::Normal(NormalThreadSchedulePolicy::Batch),
         )?;
     }
-
-    let pkg_name = format!(
-        "{}-{}-{}",
-        builder.recipe.parsed.source.name, builder.recipe.parsed.source.version, builder.recipe.parsed.source.release
-    );
 
     // hold a fd
     let _fd = inhibit(

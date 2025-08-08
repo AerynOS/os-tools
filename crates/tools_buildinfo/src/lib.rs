@@ -101,9 +101,9 @@ pub fn get_simple_version() -> String {
     format!("v{}{git}", values::VERSION)
 }
 
-/// For git builds this returns a string like `v0.1.0 (git 4ecad5d7e70c2cdc81350dc6b46fb55b1ccb18f5-dirty)`
+/// For git builds this returns a string like `version v0.1.0 (git 4ecad5d7e70c2cdc81350dc6b46fb55b1ccb18f5-dirty) (Built at 2025-07-09T19:20:40+00:00)`
 ///
-/// For builds from a non-git source just the version will be returned: `v0.1.0`
+/// For builds from a non-git source just the version will be returned: `version v0.1.0 (Built at 2025-07-09T19:20:40+00:00)`
 pub fn get_full_version() -> String {
     let git = if cfg!(BUILDINFO_IS_GIT_BUILD) {
         format!(" (Git ref {}{})", get_git_full_hash(), get_git_dirty())
