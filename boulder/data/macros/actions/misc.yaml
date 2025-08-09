@@ -16,7 +16,7 @@ actions:
         example: |
             %install_bin nano
         command: |
-            install -Dm00755 -t %(installroot)/%(bindir)
+            install -Dm00755 -t %(installroot)%(bindir)
 
     - install_dir:
         description: Create a new empty directory with the default permissions
@@ -27,22 +27,24 @@ actions:
 
     - install_exe:
         description: Macro to install a file with default executable permissions
+        example: |
+            %install_exe executable-file %(installroot)%(libexec)/%(name)/executable-file
         command: |
             install -Dm00755
 
     - install_file:
         description: Macro to install a file without executable permissions
         example: |
-            %install_file %(pkgdir)/helper.file %(installroot)%(datadir)/pkgname/pkgfile
+            %install_file %(pkgdir)/helper.file %(installroot)%(datadir)/%(name)/pkgfile
         command: |
             install -Dm00644
 
     - patch:
         description: Patch the upstream sources using an input patch file.
         example: |
-            %patch %(pkgdir)/${file}
+            %patch %(pkgdir)/some.patch
 
-            # If you need to override -p#, add it after ${file}
+            # If you need to override the default -p1, add it after the patch file
             %patch %(pkgdir)/some.patch -p3
         command: |
             patch -f -p1 -i
@@ -54,8 +56,8 @@ actions:
         command: |
             create_tmpfiles(){
                 if [ -z "%(libsuffix)" ]; then
-                    mkdir -p %(installroot)/%(tmpfilesdir)
-                    echo "$@" >> %(installroot)/%(tmpfilesdir)/%(name).conf
+                    mkdir -p %(installroot)%(tmpfilesdir)
+                    echo "$@" >> %(installroot)%(tmpfilesdir)/%(name).conf
                 fi
             }
             create_tmpfiles
@@ -65,8 +67,8 @@ actions:
         command: |
             create_sysusers(){
                 if [ -z "%(libsuffix)" ]; then
-                    mkdir -p %(installroot)/%(sysusersdir)
-                    echo "$@" >> %(installroot)/%(sysusersdir)/%(name).conf
+                    mkdir -p %(installroot)%(sysusersdir)
+                    echo "$@" >> %(installroot)%(sysusersdir)/%(name).conf
                 fi
             }
             create_sysusers
