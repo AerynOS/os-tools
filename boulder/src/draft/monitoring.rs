@@ -58,16 +58,16 @@ impl<'a> Monitoring<'a> {
 
     pub fn run(&self) -> Result<String, Error> {
         if self.name.is_empty() {
-            return self.format_monitoring(None, vec![], None);
+            return self.format_monitoring(None, vec![], None, "".to_owned());
         }
 
         let client = reqwest::blocking::Client::new();
 
         let id = self.find_monitoring_id(self.name, &client)?;
-        let cpes = self.find_security_cpe(self.name, &client)?;
+        let (cpes, cpe_search_status) = self.find_security_cpe(self.name, &client)?;
         let rss = self.guess_rss(self.homepage, self.name);
 
-        let output = self.format_monitoring(id, cpes, rss)?;
+        let output = self.format_monitoring(id, cpes, rss, cpe_search_status)?;
 
         Ok(output)
     }
@@ -75,14 +75,31 @@ impl<'a> Monitoring<'a> {
     fn find_monitoring_id(&self, name: &String, client: &reqwest::blocking::Client) -> Result<Option<u32>, Error> {
         let url = format!("https://release-monitoring.org/api/v2/projects/?name={name}");
 
-        let resp = client.get(&url).send()?;
-
-        match resp.error_for_status_ref() {
-            Ok(_res) => (),
-            Err(err) => return Err(Error::StatusCode(err)),
-        }
-
-        let body: Response = resp.json()?;
+        let body = match client.get(&url).send() {
+            Ok(resp) => match resp.error_for_status_ref() {
+                Ok(_) => resp.json()?,
+                Err(resp_err) => {
+                    // response error, maybe HTTP 5xx or 4xx?
+                    let status = resp_err
+                        .status()
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| "unknown".to_owned());
+                    println!("{} | Monitoring service returned error: {status}", "Warning".yellow(),);
+                    Response {
+                        items: Vec::new(),
+                        total_items: 0,
+                    }
+                }
+            },
+            Err(_) => {
+                // request error, maybe site is inaccessible?
+                println!("{} | Monitoring service is inaccessible", "Warning".yellow(),);
+                Response {
+                    items: Vec::new(),
+                    total_items: 0,
+                }
+            }
+        };
 
         if body.total_items == 1 {
             if let Some(result) = body.items.first() {
@@ -118,20 +135,38 @@ impl<'a> Monitoring<'a> {
         }
     }
 
-    fn find_security_cpe(&self, name: &String, client: &reqwest::blocking::Client) -> Result<Vec<Cpe>, Error> {
+    fn find_security_cpe(
+        &self,
+        name: &String,
+        client: &reqwest::blocking::Client,
+    ) -> Result<(Vec<Cpe>, String), Error> {
         const URL: &str = "https://cpe-guesser.cve-search.org/search";
 
         let mut query = HashMap::new();
         query.insert("query", [name]);
 
-        let resp = client.post(URL).json(&query).send()?;
-
-        match resp.error_for_status_ref() {
-            Ok(_res) => (),
-            Err(err) => return Err(Error::StatusCode(err)),
-        }
-
-        let json: Vec<Vec<Value>> = serde_json::from_str(&resp.text()?).unwrap_or_default();
+        let (json, search_status) = match client.post(URL).json(&query).send() {
+            Ok(resp) => match resp.error_for_status_ref() {
+                Ok(_) => {
+                    let json: Vec<Vec<Value>> = serde_json::from_str(&resp.text()?).unwrap_or_default();
+                    (json, "searched")
+                }
+                Err(resp_err) => {
+                    // response error, maybe HTTP 5xx or 4xx?
+                    let status = resp_err
+                        .status()
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| "unknown".to_owned());
+                    println!("{} | CPE service returned an error: {status}", "Warning".yellow(),);
+                    (Vec::new(), "service_error")
+                }
+            },
+            Err(_) => {
+                // request error, maybe site is inaccessible?
+                println!("{} | CPE service is inaccessible", "Warning".yellow(),);
+                (Vec::new(), "connection_failed")
+            }
+        };
 
         // Extract CPEs into a Vec<CPE>
         let cpes: Vec<Cpe> = json
@@ -168,7 +203,7 @@ impl<'a> Monitoring<'a> {
             );
         }
 
-        Ok(cpes)
+        Ok((cpes, search_status.to_owned()))
     }
 
     fn guess_rss(&self, homepage: &String, name: &String) -> Option<String> {
@@ -185,7 +220,13 @@ impl<'a> Monitoring<'a> {
         }
     }
 
-    fn format_monitoring(&self, id: Option<u32>, cpes: Vec<Cpe>, rss: Option<String>) -> Result<String, Error> {
+    fn format_monitoring(
+        &self,
+        id: Option<u32>,
+        cpes: Vec<Cpe>,
+        rss: Option<String>,
+        cpe_search_status: String,
+    ) -> Result<String, Error> {
         let monitoring_template = MonitoringTemplate {
             releases: Releases {
                 id: Some(id.unwrap_or_default()),
@@ -215,10 +256,20 @@ impl<'a> Monitoring<'a> {
             let cpe_string = "cpe: []";
             let cpe_marker = yaml_string.find(cpe_string).expect("security cpe marker not found");
             yaml_string = yaml_string.replace(cpe_string, "cpe: ~");
-            let cpe_help_text = format!(
-                " # Last checked {}",
-                chrono::Local::now().date_naive().format("%Y-%m-%d")
-            );
+            let cpe_help_text = match cpe_search_status.as_str() {
+                "service_error" => format!(
+                    " # CPE service returned error, retry later {}",
+                    chrono::Local::now().date_naive().format("%Y-%m-%d")
+                ),
+                "connection_failed" => format!(
+                    " # CPE service unreachable, retry later {}",
+                    chrono::Local::now().date_naive().format("%Y-%m-%d")
+                ),
+                _ => format!(
+                    " # No CPE found, last checked {}",
+                    chrono::Local::now().date_naive().format("%Y-%m-%d")
+                ),
+            };
             yaml_string.insert_str(cpe_marker + cpe_string.len() - 1, &cpe_help_text);
         }
 
