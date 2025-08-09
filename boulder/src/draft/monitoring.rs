@@ -84,7 +84,7 @@ impl<'a> Monitoring<'a> {
                         .status()
                         .map(|s| s.to_string())
                         .unwrap_or_else(|| "unknown".to_owned());
-                    println!("{} | Monitoring service returned error: {status}", "Warning".yellow(),);
+                    println!("{} | Monitoring service returned error: {status}", "Warning".yellow());
                     Response {
                         items: Vec::new(),
                         total_items: 0,
@@ -93,7 +93,7 @@ impl<'a> Monitoring<'a> {
             },
             Err(_) => {
                 // request error, maybe site is inaccessible?
-                println!("{} | Monitoring service is inaccessible", "Warning".yellow(),);
+                println!("{} | Monitoring service is inaccessible", "Warning".yellow());
                 Response {
                     items: Vec::new(),
                     total_items: 0,
@@ -157,13 +157,13 @@ impl<'a> Monitoring<'a> {
                         .status()
                         .map(|s| s.to_string())
                         .unwrap_or_else(|| "unknown".to_owned());
-                    println!("{} | CPE service returned an error: {status}", "Warning".yellow(),);
+                    println!("{} | CPE service returned an error: {status}", "Warning".yellow());
                     (Vec::new(), "service_error")
                 }
             },
             Err(_) => {
                 // request error, maybe site is inaccessible?
-                println!("{} | CPE service is inaccessible", "Warning".yellow(),);
+                println!("{} | CPE service is inaccessible", "Warning".yellow());
                 (Vec::new(), "connection_failed")
             }
         };
@@ -258,15 +258,15 @@ impl<'a> Monitoring<'a> {
             yaml_string = yaml_string.replace(cpe_string, "cpe: ~");
             let cpe_help_text = match cpe_search_status.as_str() {
                 "service_error" => format!(
-                    " # CPE service returned error, retry later {}",
+                    " # CPE service returned error, retry later ({})",
                     chrono::Local::now().date_naive().format("%Y-%m-%d")
                 ),
                 "connection_failed" => format!(
-                    " # CPE service unreachable, retry later {}",
+                    " # CPE service unreachable, retry later ({})",
                     chrono::Local::now().date_naive().format("%Y-%m-%d")
                 ),
                 _ => format!(
-                    " # No CPE found, last checked {}",
+                    " # No CPE found, last checked ({})",
                     chrono::Local::now().date_naive().format("%Y-%m-%d")
                 ),
             };
