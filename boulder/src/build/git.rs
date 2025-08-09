@@ -11,6 +11,11 @@ use tui::Styled;
 use url::Url;
 use yaml;
 
+fn is_valid_commit_hash(s: &str) -> bool {
+    // git commit hashes can be SHA-1 or SHA-256 hashes
+    (s.len() == 40 || s.len() == 64) && s.chars().all(|c| c.is_ascii_hexdigit())
+}
+
 /// Resolves a git reference to its commit hash using `git ls-remote`.
 pub fn resolve_git_ref(uri: &Url, ref_id: &str) -> Result<String, GitError> {
     let refs_to_try = [format!("refs/tags/{ref_id}"), format!("refs/heads/{ref_id}")];
@@ -68,8 +73,8 @@ pub fn update_git_upstream_refs(recipe: &Recipe, recipe_path: &Path) -> Result<(
 
     for (index, upstream) in recipe.parsed.upstreams.iter().enumerate() {
         if let stone_recipe::Upstream::Git { uri, ref_id, .. } = upstream {
-            let commit_hash = resolve_git_ref(uri, ref_id)?;
-            if commit_hash != *ref_id {
+            if !is_valid_commit_hash(ref_id) {
+                let commit_hash = resolve_git_ref(uri, ref_id)?;
                 update_git_upstream_ref_in_yaml(&mut yaml_updater, index, uri.as_str(), &commit_hash, ref_id);
                 println!(
                     "{} | Updated ref '{ref_id}' to commit {} for {uri}",
@@ -97,7 +102,7 @@ pub fn update_git_upstream_refs(recipe: &Recipe, recipe_path: &Path) -> Result<(
 pub enum GitError {
     #[error("git ls-remote failed for {0}")]
     LsRemoteFailed(Url),
-    #[error("could not resolve ref '{ref_id}' for {uri}")]
+    #[error("could not resolve ref '{ref_id}' for {uri}. note: partial hashes are not supported")]
     UnresolvedRef { ref_id: String, uri: Url },
     #[error(transparent)]
     Io(#[from] io::Error),
