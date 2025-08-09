@@ -24,6 +24,7 @@ use stone_recipe::{
 use thiserror::Error;
 use tui::Styled;
 
+pub mod git;
 pub mod job;
 pub mod pgo;
 mod root;
@@ -58,6 +59,8 @@ impl Builder {
         output_dir: impl Into<PathBuf>,
     ) -> Result<Self, Error> {
         let recipe = Recipe::load(recipe_path)?;
+
+        git::update_git_upstream_refs(&recipe, recipe_path)?;
 
         let macros = Macros::load(&env)?;
 
@@ -459,4 +462,6 @@ pub enum Error {
     Io(#[from] io::Error),
     #[error("recreate artefacts dir")]
     RecreateArtefactsDir(#[source] io::Error),
+    #[error("git upstream processing")]
+    Git(#[from] git::GitError),
 }
