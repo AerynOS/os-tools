@@ -1,5 +1,13 @@
 actions:
 
+    - export_docbook_catalogs:
+        description: Ensure that builds using docbook can find XML catalogs locally
+        example: |
+            environment : |
+                %export_docbook_catalogs
+        command: |
+            export XML_CATALOG_FILES=\"$(find /usr/share/defaults/docbook -type f -name 'catalog' -exec echo -e 'file://{} ' \;)\"
+
     - gtk_update_icon_cache:
         description: Pregenerate icon cache at build time
         example: |
