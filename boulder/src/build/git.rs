@@ -75,16 +75,23 @@ pub(crate) fn update_git_upstream_refs(
     let mut yaml_updater = yaml::Updater::new();
     let mut refs_updated = false;
 
-    for (index, installed) in installed_upstreams.iter().enumerate() {
+    for installed in installed_upstreams.iter() {
         if let Installed::Git {
             uri,
             original_ref,
             resolved_hash,
+            original_index,
             ..
         } = installed
         {
             if resolved_hash != original_ref {
-                update_git_upstream_ref_in_yaml(&mut yaml_updater, index, uri.as_str(), resolved_hash, original_ref);
+                update_git_upstream_ref_in_yaml(
+                    &mut yaml_updater,
+                    *original_index,
+                    uri.as_str(),
+                    resolved_hash,
+                    original_ref,
+                );
                 println!(
                     "{} | Updated ref '{original_ref}' to commit {} for {uri}",
                     "Warning".yellow(),
@@ -139,6 +146,7 @@ upstreams:
                 uri: Url::parse("https://github.com/example/repo1.git").unwrap(),
                 original_ref: "main".to_string(),
                 resolved_hash: "1111222233334444555566667777888899990000".to_string(),
+                original_index: 0,
             },
             Installed::Git {
                 name: "repo2.git".to_string(),
@@ -147,6 +155,7 @@ upstreams:
                 uri: Url::parse("https://github.com/example/repo2.git").unwrap(),
                 original_ref: "main".to_string(),
                 resolved_hash: "aaaa1111bbbb2222cccc3333dddd4444eeee5555".to_string(),
+                original_index: 1,
             },
             Installed::Git {
                 name: "repo3.git".to_string(),
@@ -155,6 +164,7 @@ upstreams:
                 uri: Url::parse("https://github.com/example/repo3.git").unwrap(),
                 original_ref: "abcd1234567890abcdef1234567890abcdef1234".to_string(),
                 resolved_hash: "abcd1234567890abcdef1234567890abcdef1234".to_string(),
+                original_index: 2,
             },
             Installed::Git {
                 name: "repo4.git".to_string(),
@@ -163,6 +173,7 @@ upstreams:
                 uri: Url::parse("https://github.com/example/repo4.git").unwrap(),
                 original_ref: "abc123d".to_string(),
                 resolved_hash: "abc123d567890abcdef1234567890abcdef12345".to_string(),
+                original_index: 3,
             },
             Installed::Plain {
                 name: "file.tar.gz".to_string(),
@@ -212,6 +223,7 @@ upstreams:
                 uri: Url::parse("https://github.com/example/repo3.git").unwrap(),
                 original_ref: "abcd1234567890abcdef1234567890abcdef1234".to_string(),
                 resolved_hash: "abcd1234567890abcdef1234567890abcdef1234".to_string(),
+                original_index: 0,
             },
             Installed::Plain {
                 name: "file.tar.gz".to_string(),

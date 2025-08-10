@@ -29,7 +29,8 @@ pub fn sync(recipe: &Recipe, paths: &Paths) -> Result<(), Error> {
         .upstreams
         .iter()
         .cloned()
-        .map(Upstream::from_recipe)
+        .enumerate()
+        .map(|(index, upstream)| Upstream::from_recipe(upstream, index))
         .collect::<Result<Vec<_>, _>>()?;
 
     println!();
@@ -121,6 +122,7 @@ pub(crate) enum Installed {
         uri: Url,
         original_ref: String,
         resolved_hash: String,
+        original_index: usize,
     },
 }
 
@@ -162,7 +164,7 @@ pub enum Upstream {
 }
 
 impl Upstream {
-    pub fn from_recipe(upstream: stone_recipe::Upstream) -> Result<Self, Error> {
+    pub fn from_recipe(upstream: stone_recipe::Upstream, original_index: usize) -> Result<Self, Error> {
         match upstream {
             stone_recipe::Upstream::Plain { uri, hash, rename, .. } => Ok(Self::Plain(Plain {
                 uri,
@@ -171,7 +173,12 @@ impl Upstream {
             })),
             stone_recipe::Upstream::Git {
                 uri, ref_id, staging, ..
-            } => Ok(Self::Git(Git { uri, ref_id, staging })),
+            } => Ok(Self::Git(Git {
+                uri,
+                ref_id,
+                staging,
+                original_index,
+            })),
         }
     }
 
@@ -316,6 +323,7 @@ pub struct Git {
     uri: Url,
     ref_id: String,
     staging: bool,
+    original_index: usize,
 }
 
 impl Git {
@@ -382,6 +390,7 @@ impl Git {
                 uri: self.uri.clone(),
                 original_ref: self.ref_id.clone(),
                 resolved_hash,
+                original_index: self.original_index,
             });
         }
 
@@ -420,6 +429,7 @@ impl Git {
             uri: self.uri.clone(),
             original_ref: self.ref_id.clone(),
             resolved_hash,
+            original_index: self.original_index,
         })
     }
 
