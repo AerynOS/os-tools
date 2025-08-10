@@ -92,6 +92,7 @@ pub enum Subcommand {
         #[arg(
             long,
             default_value = "false",
+            requires = "build",
             help = "Move successfully built package to local repository for testing."
         )]
         local: bool,
