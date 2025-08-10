@@ -247,6 +247,16 @@ upstreams:
             .args(["init"])
             .output()
             .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir.path())
+            .args(["config", "user.email", "test@test.com"])
+            .output()
+            .unwrap();
+        Command::new("git")
+            .current_dir(temp_dir.path())
+            .args(["config", "user.name", "Test"])
+            .output()
+            .unwrap();
 
         // Create the first commit
         fs::write(temp_dir.path().join("file"), "content").unwrap();
