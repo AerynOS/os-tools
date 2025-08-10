@@ -60,8 +60,6 @@ impl Builder {
     ) -> Result<Self, Error> {
         let recipe = Recipe::load(recipe_path)?;
 
-        git::update_git_upstream_refs(&recipe, recipe_path)?;
-
         let macros = Macros::load(&env)?;
 
         let paths = Paths::new(&recipe, &env.cache_dir, "/mason", output_dir)?;
