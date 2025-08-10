@@ -83,6 +83,18 @@ pub enum Subcommand {
         overwrite: bool,
         #[arg(long, default_value = "false", help = "Don't increment the release number")]
         no_bump: bool,
+        #[arg(
+            long,
+            default_value = "false",
+            help = "Build the package after a successful stone.yaml update."
+        )]
+        build: bool,
+        #[arg(
+            long,
+            default_value = "false",
+            help = "Move successfully built package to local repository for testing."
+        )]
+        local: bool,
     },
     #[command(about = "Print macro definitions")]
     Macros {
@@ -114,7 +126,9 @@ pub fn handle(command: Command, env: Env) -> Result<(), Error> {
             version,
             upstreams,
             no_bump,
-        } => update(recipe, overwrite, version, upstreams, no_bump),
+            build,
+            local,
+        } => update(recipe, overwrite, version, upstreams, no_bump, build, local),
         Subcommand::Macros { _macro } => macros(_macro, env),
     }
 }
@@ -173,6 +187,8 @@ fn update(
     version: String,
     upstreams: Vec<Upstream>,
     no_bump: bool,
+    build: bool,
+    local: bool,
 ) -> Result<(), Error> {
     if overwrite && recipe.is_none() {
         return Err(Error::OverwriteRecipeRequired);
@@ -282,6 +298,58 @@ fn update(
         println!("{} updated", recipe.display());
     } else {
         print!("{updated}");
+    }
+
+    if build {
+        use std::io::{BufRead, BufReader};
+        use std::process::{Command as Cmd, Stdio};
+
+        let mut just_build = Cmd::new("boulder")
+            .args(["build", "-u", "stone.yaml"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("Failed to run boulder build command!");
+
+        let build_stdout = just_build.stdout.take().expect("Failed to open build process stdout");
+        let build_reader = BufReader::new(build_stdout);
+
+        // Stream the build process output
+        build_reader.lines().for_each(|line| {
+            if let Ok(line) = line {
+                println!("{line}");
+            }
+        });
+
+        let build_status = just_build
+            .wait_with_output()
+            .expect("Failed to wait for build to complete");
+
+        if build_status.status.success() {
+            println!("Successfully built package!");
+
+            // If local was set, move the package to the local repository
+            if local {
+                let just_mv_local = std::process::Command::new("just").arg("mv-local").output();
+
+                match just_mv_local {
+                    Ok(mv) => {
+                        if mv.status.success() {
+                            println!("Successfully moved packed to local repository!");
+                        } else {
+                            println!(
+                                "Moving package failed with error: {}",
+                                String::from_utf8_lossy(&mv.stdout)
+                            )
+                        }
+                    }
+                    Err(e) => eprintln!("Move command failed with error: {e}"),
+                }
+            }
+        } else {
+            let code = build_status.status.code().expect("Failed to get status code");
+            eprintln!("Build failed with status code: {code}");
+        }
     }
 
     Ok(())
