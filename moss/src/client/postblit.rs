@@ -18,6 +18,7 @@ use container::Container;
 use itertools::Itertools;
 use serde::Deserialize;
 use thiserror::Error;
+use tracing::{error, warn};
 use triggers::format::{CompiledHandler, Handler, Trigger};
 
 use super::PendingFile;
@@ -202,12 +203,21 @@ fn execute_trigger_directly(trigger: &CompiledHandler) -> Result<(), Error> {
                     let stdout = String::from_utf8_lossy(&cmd.stdout);
                     let stderr = String::from_utf8_lossy(&cmd.stderr);
 
-                    eprintln!("Trigger exited with non-zero status code: {run} {args:?}");
-                    eprintln!("   Stdout: {stdout}");
-                    eprintln!("   Stderr: {stderr}");
+                    warn!(
+                        command = %run,
+                        args = ?args,
+                        exit_code = code,
+                        stdout = %stdout,
+                        stderr = %stderr,
+                        "Trigger exited with non-zero status code"
+                    );
                 }
             } else {
-                eprintln!("Failed to execute trigger: {run} {args:?}");
+                error!(
+                    command = %run,
+                    args = ?args,
+                    "Failed to execute trigger"
+                );
             }
         }
         Handler::Delete { .. } => todo!(),

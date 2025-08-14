@@ -4,6 +4,7 @@
 
 use std::error::Error;
 
+use tracing::error;
 use tui::Styled;
 
 mod cli;
@@ -19,8 +20,9 @@ fn main() {
 /// Report an execution error to the user
 fn report_error(error: cli::Error) {
     let sources = sources(&error);
-    let error = sources.join(": ");
-    eprintln!("{}: {error}", "Error".red());
+    let error_msg = sources.join(": ");
+    error!(error = %error_msg, "Command execution failed");
+    println!("{}: {error_msg}", "Error".red());
 }
 
 /// Accumulate sources through error chains
