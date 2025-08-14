@@ -12,7 +12,7 @@ use clap_complete::{
 use clap_mangen::Man;
 use moss::{Installation, installation, runtime};
 use thiserror::Error;
-use tracing_common::{self, LogConfig};
+use tracing_common::{self, logging::LogConfig, logging::init_log_with_config};
 
 mod boot;
 mod extract;
@@ -162,7 +162,7 @@ pub fn process() -> Result<(), Error> {
     }
 
     if let Some(log_config) = matches.get_one::<LogConfig>("log") {
-        tracing_common::init_with_config(log_config.clone());
+        init_log_with_config(log_config.clone());
     }
 
     if let Some(dir) = matches.get_one::<String>("generate-manpages") {
