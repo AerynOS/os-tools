@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 use clap::{ArgMatches, Command, arg, value_parser};
 use moss::{Installation, client::Client, environment};
+use tracing::instrument;
 
 pub use moss::client::install::Error;
 
@@ -27,6 +28,7 @@ pub fn command() -> Command {
 }
 
 /// Handle execution of `moss install`
+#[instrument(skip(installation))]
 pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
     let pkgs = args
         .get_many::<String>("NAME")

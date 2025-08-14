@@ -7,6 +7,7 @@
 use std::time::{Duration, Instant};
 
 use thiserror::Error;
+use tracing::{debug, info, instrument};
 use tui::{
     dialoguer::{Confirm, theme::ColorfulTheme},
     pretty::autoprint_columns,
@@ -25,12 +26,14 @@ use crate::{
 ///
 /// If this call is successful a new State is recorded into the [`super::db::state::Database`].
 /// Upon completion the `/usr` tree is "hot swapped" with the staging tree through `renameat2` call.
+#[instrument(skip(client), fields(ephemeral = client.is_ephemeral()))]
 pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, Error> {
     let mut timing = Timing::default();
     let mut instant = Instant::now();
 
     // Resolve input packages
     let input = resolve_input(pkgs, client)?;
+    debug!(resolved_packages = input.len(), "Resolved input packages");
 
     // Add all inputs
     let mut tx = client.registry.transaction(transaction::Lookup::PreferInstalled)?;
@@ -54,6 +57,13 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
         .collect::<Vec<_>>();
 
     timing.resolve = instant.elapsed();
+    info!(
+        total_resolved = resolved.len(),
+        missing_packages = missing.len(),
+        already_installed = resolved.len() - missing.len(),
+        resolve_time_ms = timing.resolve.as_millis(),
+        "Package resolution completed"
+    );
 
     // If no new packages exist, exit and print
     // packages already installed
@@ -96,9 +106,11 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
     instant = Instant::now();
 
     // Cache packages
+    info!(packages_to_cache = missing.len(), "Starting package fetch");
     runtime::block_on(client.cache_packages(&missing))?;
 
     timing.fetch = instant.elapsed();
+    info!(fetch_time_ms = timing.fetch.as_millis(), "Package fetch completed");
     instant = Instant::now();
 
     // Calculate the new state of packages (old_state + missing)
@@ -120,15 +132,22 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
     };
 
     // Perfect, apply state.
+    info!(state_packages = new_state_pkgs.len(), "Applying new system state");
     client.new_state(&new_state_pkgs, "Install")?;
 
     timing.blit = instant.elapsed();
+    info!(
+        blit_time_ms = timing.blit.as_millis(),
+        total_time_ms = (timing.resolve + timing.fetch + timing.blit).as_millis(),
+        "Installation completed successfully"
+    );
 
     Ok(timing)
 }
 
 /// Resolves the package arguments as valid input packages. Returns an error
 /// if any args are invalid.
+#[instrument(skip(client), fields(package_count = pkgs.len()))]
 fn resolve_input(pkgs: &[&str], client: &Client) -> Result<Vec<package::Id>, Error> {
     // Parse pkg args into valid / invalid sets
     let queried = pkgs.iter().map(|p| find_packages(p, client));
