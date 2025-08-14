@@ -50,7 +50,7 @@ pub fn init(format: OutputFormat, level: LevelFilter, destination: OutputDestina
                 .unwrap_or_else(|e| panic!("Failed to open log file {}: {}", path, e));
             tracing_subscriber::registry()
                 .with(filter)
-                .with(fmt::layer().with_writer(file))
+                .with(fmt::layer().with_writer(file).with_ansi(false))
                 .init();
         }
         (OutputFormat::Json, OutputDestination::File(path)) => {
