@@ -42,6 +42,7 @@ use crate::{
     repository, runtime, signal,
     state::{self, Selection},
 };
+use tracing_common::progress;
 
 pub mod boot;
 pub mod cache;
@@ -535,6 +536,12 @@ impl Client {
                     // Inc total progress by 1
                     total_progress.inc(1);
 
+                    progress::progress_update(
+                        total_progress.position() as usize,
+                        total_progress.length().unwrap_or(0) as usize,
+                        &format!("Cached {}", package_name),
+                    );
+
                     Ok((package, unpacked)) as Result<(Package, cache::UnpackedAsset), Error>
                 })
                 .await
@@ -688,6 +695,13 @@ impl Client {
         let mut stats = BlitStats::default();
 
         progress.inc(1);
+
+        progress::progress_update(
+            progress.position() as usize,
+            progress.length().unwrap_or(0) as usize,
+            "Installing files",
+        );
+
         match element {
             Element::Directory(name, item, children) => {
                 // Construct within the parent

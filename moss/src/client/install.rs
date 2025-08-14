@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 
 use thiserror::Error;
 use tracing::{debug, info, instrument};
+use tracing_common::progress;
 use tui::{
     dialoguer::{Confirm, theme::ColorfulTheme},
     pretty::autoprint_columns,
@@ -105,12 +106,16 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
 
     instant = Instant::now();
 
+    let cache_packages_span = progress::create_progress_span("cache_packages");
+    let _cache_packages_guard = cache_packages_span.enter();
+    progress::progress_start("cache_packages", missing.len());
+
     // Cache packages
-    info!(packages_to_cache = missing.len(), "Starting package fetch");
     runtime::block_on(client.cache_packages(&missing))?;
 
     timing.fetch = instant.elapsed();
-    info!(fetch_time_ms = timing.fetch.as_millis(), "Package fetch completed");
+    progress::progress_completed("cache_packages", timing.fetch.as_millis(), missing.len());
+    drop(_cache_packages_guard);
     instant = Instant::now();
 
     // Calculate the new state of packages (old_state + missing)
@@ -131,11 +136,17 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
         missing_selections.chain(previous_selections).collect::<Vec<_>>()
     };
 
+    let install_span = progress::create_progress_span("installation");
+    let _install_guard = install_span.enter();
+    progress::progress_start("installation", new_state_pkgs.len());
+
     // Perfect, apply state.
-    info!(state_packages = new_state_pkgs.len(), "Applying new system state");
     client.new_state(&new_state_pkgs, "Install")?;
 
     timing.blit = instant.elapsed();
+    progress::progress_completed("installation", timing.blit.as_millis(), new_state_pkgs.len());
+    drop(_install_guard);
+
     info!(
         blit_time_ms = timing.blit.as_millis(),
         total_time_ms = (timing.resolve + timing.fetch + timing.blit).as_millis(),
