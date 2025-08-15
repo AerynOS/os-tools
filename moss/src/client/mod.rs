@@ -315,6 +315,13 @@ impl Client {
     /// Apply all triggers with the given scope, wrapping with a progressbar.
     fn apply_triggers(scope: TriggerScope<'_>, fstree: &vfs::Tree<PendingFile>) -> Result<(), postblit::Error> {
         let triggers = postblit::triggers(scope, fstree)?;
+        let phase_name = match &scope {
+            TriggerScope::Transaction(_, _) => "Running transaction-scope triggers",
+            TriggerScope::System(_, _) => "Running system-scope triggers",
+        };
+        let timer = Instant::now();
+
+        progress::progress_start(phase_name, triggers.len());
 
         let progress = ProgressBar::new(triggers.len() as u64).with_style(
             ProgressStyle::with_template("\n|{bar:20.green/blue}| {pos}/{len} {msg}")
@@ -322,14 +329,19 @@ impl Client {
                 .progress_chars("■≡=- "),
         );
 
-        match &scope {
-            TriggerScope::Transaction(_, _) => progress.set_message("Running transaction-scope triggers"),
-            TriggerScope::System(_, _) => progress.set_message("Running system-scope triggers"),
-        };
+        progress.set_message(phase_name);
 
-        for trigger in progress.wrap_iter(triggers.iter()) {
+        for (i, trigger) in progress.wrap_iter(triggers.iter()).enumerate() {
             trigger.execute()?;
+
+            let trigger_command = match trigger.handler() {
+                triggers::format::Handler::Run { run, .. } => run.clone(),
+                triggers::format::Handler::Delete { .. } => "delete operation".to_owned(),
+            };
+            progress::progress_update(i + 1, triggers.len(), &format!("Executing {trigger_command}"));
         }
+
+        progress::progress_completed(phase_name, timer.elapsed().as_millis(), triggers.len());
 
         progress.finish_and_clear();
 
@@ -493,6 +505,11 @@ impl Client {
                 // Download and update progress
                 let download = cache::fetch(&package.meta, &self.installation, |progress| {
                     progress_bar.inc(progress.delta);
+                    progress::progress_update(
+                        progress.completed as usize,
+                        progress.total as usize,
+                        &format!("Downloading {}", package.meta.name),
+                    );
                 })
                 .await?;
                 let is_cached = download.was_cached;
@@ -503,8 +520,10 @@ impl Client {
                 let total_progress = total_progress.clone();
                 let unpacking_in_progress = unpacking_in_progress.clone();
                 let package = (*package).clone();
+                let current_span = tracing::Span::current();
 
                 runtime::unblock(move || {
+                    let _guard = current_span.enter();
                     let package_name = package.meta.name.to_string();
 
                     // Set progress to unpacking
@@ -515,9 +534,15 @@ impl Client {
                     // Unpack and update progress
                     let unpacked = download.unpack(unpacking_in_progress.clone(), {
                         let progress_bar = progress_bar.clone();
+                        let package_name = package_name.clone();
 
                         move |progress| {
                             progress_bar.set_position((progress.pct() * 1000.0) as u64);
+                            progress::progress_update(
+                                progress.completed as usize,
+                                progress.total as usize,
+                                &format!("Unpacking {package_name}"),
+                            );
                         }
                     })?;
 
@@ -539,7 +564,7 @@ impl Client {
                     progress::progress_update(
                         total_progress.position() as usize,
                         total_progress.length().unwrap_or(0) as usize,
-                        &format!("Cached {}", package_name),
+                        &format!("Cached {package_name}"),
                     );
 
                     Ok((package, unpacked)) as Result<(Package, cache::UnpackedAsset), Error>
@@ -656,10 +681,14 @@ impl Client {
             let root_dir = fcntl::open(&blit_target, OFlag::O_DIRECTORY | OFlag::O_RDONLY, Mode::empty())?;
 
             if let Element::Directory(_, _, children) = root {
+                let current_span = tracing::Span::current();
                 stats = stats.merge(
                     children
                         .into_par_iter()
-                        .map(|child| self.blit_element(root_dir, cache_fd, child, &progress))
+                        .map(|child| {
+                            let _guard = current_span.enter();
+                            self.blit_element(root_dir, cache_fd, child, &progress)
+                        })
                         .try_reduce(BlitStats::default, |a, b| Ok(a.merge(b)))?,
                 );
             }
@@ -696,10 +725,15 @@ impl Client {
 
         progress.inc(1);
 
+        let (_, item) = match &element {
+            Element::Directory(_, item, _) => ("directory", item),
+            Element::Child(_, item) => ("file", item),
+        };
+
         progress::progress_update(
             progress.position() as usize,
             progress.length().unwrap_or(0) as usize,
-            "Installing files",
+            &format!("Installing {}", item.path()),
         );
 
         match element {
@@ -710,10 +744,14 @@ impl Client {
                 // open the new dir
                 let newdir = fcntl::openat(parent, name, OFlag::O_RDONLY | OFlag::O_DIRECTORY, Mode::empty())?;
 
+                let current_span = tracing::Span::current();
                 stats = stats.merge(
                     children
                         .into_par_iter()
-                        .map(|child| self.blit_element(newdir, cache, child, progress))
+                        .map(|child| {
+                            let _guard = current_span.enter();
+                            self.blit_element(newdir, cache, child, progress)
+                        })
                         .try_reduce(BlitStats::default, |a, b| Ok(a.merge(b)))?,
                 );
 

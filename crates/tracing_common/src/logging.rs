@@ -49,7 +49,7 @@ pub fn init_log(format: OutputFormat, level: LevelFilter, destination: OutputDes
                 .create(true)
                 .append(true)
                 .open(&path)
-                .unwrap_or_else(|e| panic!("Failed to open log file {}: {}", path, e));
+                .unwrap_or_else(|e| panic!("Failed to open log file {path}: {e}"));
             tracing_subscriber::registry()
                 .with(filter)
                 .with(fmt::layer().with_writer(file).with_ansi(false))
@@ -60,7 +60,7 @@ pub fn init_log(format: OutputFormat, level: LevelFilter, destination: OutputDes
                 .create(true)
                 .append(true)
                 .open(&path)
-                .unwrap_or_else(|e| panic!("Failed to open log file {}: {}", path, e));
+                .unwrap_or_else(|e| panic!("Failed to open log file {path}: {e}"));
             tracing_subscriber::registry()
                 .with(filter)
                 .with(fmt::layer().json().with_writer(file))
@@ -83,7 +83,7 @@ impl FromStr for LogConfig {
         let parts: Vec<&str> = s.split(':').collect();
 
         if parts.is_empty() || parts.len() > 3 {
-            return Err("Invalid log format. Expected: <level>[:<format>][:<destination>]".to_string());
+            return Err("Invalid log format. Expected: <level>[:<format>][:<destination>]".to_owned());
         }
 
         let level = match parts[0].to_lowercase().as_str() {
@@ -114,7 +114,7 @@ impl FromStr for LogConfig {
             if parts[2] == "stderr" {
                 OutputDestination::Stderr
             } else {
-                OutputDestination::File(parts[2].to_string())
+                OutputDestination::File(parts[2].to_owned())
             }
         } else {
             OutputDestination::Stderr
