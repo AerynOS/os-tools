@@ -322,6 +322,8 @@ fn update(
             }
         });
 
+        let build_stderr = just_build.stderr.take().expect("Failed to get boulder build stderr");
+
         let build_status = just_build
             .wait_with_output()
             .expect("Failed to wait for build to complete");
@@ -331,25 +333,94 @@ fn update(
 
             // If local was set, move the package to the local repository
             if local {
-                let just_mv_local = std::process::Command::new("just").arg("mv-local").output();
+                let local_repo = dirs::home_dir()
+                    .expect("Failed to get home directory")
+                    .join(".cache/local_repo/x86_64")
+                    .to_string_lossy()
+                    .to_string();
 
-                match just_mv_local {
-                    Ok(mv) => {
-                        if mv.status.success() {
-                            println!("Successfully moved packed to local repository!");
-                        } else {
-                            println!(
-                                "Moving package failed with error: {}",
-                                String::from_utf8_lossy(&mv.stdout)
-                            )
+                let cwd = PathBuf::from(".");
+                let stone_ext = "stone";
+
+                // Create local repo directory if it doesn't exist
+                fs::create_dir_all(&local_repo).expect("Failed to create local repo directories");
+                match fs::read_dir(&cwd) {
+                    Ok(dir) => {
+                        for pkg_file in dir {
+                            let pkg_file = pkg_file.expect("Failed to get package file to move");
+                            let path = pkg_file.path();
+
+                            if path.is_file() && let Some(ext) = path.extension().and_then(|ext| ext.to_str()) {
+                                if ext == stone_ext {
+                                    let file_name = path.file_name().ok_or("Invalid package file name").expect("Failed to get package file name");
+                                    let dest_path = PathBuf::from(&local_repo).join(file_name);
+
+                                    println!("Moving {:?} to {:?}", &path, &dest_path);
+                                    match fs::rename(&path, &dest_path) {
+                                        Ok(_) => {
+                                            println!("Successfully moved {:?} to {:?}", &path, &dest_path);
+
+                                            let mut moss_cmd = Cmd::new("moss")
+                                                .args(["index", &local_repo])
+                                                .stdout(Stdio::piped())
+                                                .stderr(Stdio::piped())
+                                                .spawn()
+                                                .expect("Failed to index new packages in local repo");
+
+                                            let moss_cmd_output = moss_cmd
+                                                .stdout
+                                                .take()
+                                                .expect("Failed to get stdout from moss index command");
+                                            let moss_stderr = moss_cmd
+                                                .stderr
+                                                .take()
+                                                .expect("Failed to get stderr from moss index command");
+
+                                            let moss_output = BufReader::new(moss_cmd_output);
+
+                                            moss_output.lines().for_each(|line| {
+                                                if let Ok(output) = line {
+                                                    println!("{output}");
+                                                }
+                                            });
+
+                                            let moss_status = moss_cmd
+                                                .wait_with_output()
+                                                .expect("Failed to wait for moss index command to completed");
+
+                                            if moss_status.status.success() {
+                                                println!("Successfully indexed local repo!");
+                                            } else {
+                                                let err_output = BufReader::new(moss_stderr);
+                                                err_output.lines().for_each(|line| {
+                                                    if let Ok(err) = line {
+                                                        eprintln!("{err}");
+                                                    }
+                                                });
+                                                eprintln!("Failed to index built package files after move to local repo");
+                                            }
+                                        },
+                                        Err(e) => {
+                                            eprintln!("Failed to move {:?} to {:?}: {e}", &path, &dest_path);
+                                        }
+                                    }
+                                }
+                            }
                         }
+                    },
+                    Err(e) => {
+                        eprintln!("Failed to read directory: {e}");
                     }
-                    Err(e) => eprintln!("Move command failed with error: {e}"),
                 }
             }
         } else {
-            let code = build_status.status.code().expect("Failed to get status code");
-            eprintln!("Build failed with status code: {code}");
+            let build_err_output = BufReader::new(build_stderr);
+
+            build_err_output.lines().for_each(|err_line| {
+                if let Ok(err_output) = err_line {
+                    eprintln!("{err_output}");
+                }
+            });
         }
     }
 
