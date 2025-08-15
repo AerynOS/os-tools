@@ -30,6 +30,8 @@ futures-util.workspace = true
 hex.workspace = true
 itertools.workspace = true
 nix.workspace = true
+rapidfuzz = "0.5.0"
+rayon.workspace = true
 regex.workspace = true
 reqwest.workspace = true
 serde.workspace = true
@@ -43,6 +45,7 @@ tokio.workspace = true
 url.workspace = true
 mailparse.workspace = true
 infer.workspace = true
+walkdir = "2.5.0"
 zstd.workspace = true
 
 [dev-dependencies]

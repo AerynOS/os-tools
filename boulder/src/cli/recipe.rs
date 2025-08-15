@@ -107,7 +107,7 @@ fn parse_upstream(s: &str) -> Result<Upstream, String> {
 pub fn handle(command: Command, env: Env) -> Result<(), Error> {
     match command.subcommand {
         Subcommand::Bump { recipe, release } => bump(recipe, release),
-        Subcommand::New { output, upstreams } => new(output, upstreams),
+        Subcommand::New { output, upstreams } => new(output, upstreams, env),
         Subcommand::Update {
             recipe,
             overwrite,
@@ -145,14 +145,14 @@ fn bump(recipe: PathBuf, release: Option<u64>) -> Result<(), Error> {
     Ok(())
 }
 
-fn new(output: PathBuf, upstreams: Vec<Url>) -> Result<(), Error> {
+fn new(output: PathBuf, upstreams: Vec<Url>, env: Env) -> Result<(), Error> {
     // We use async to fetch upstreams
     let _guard = runtime::init();
 
     const RECIPE_FILE: &str = "stone.yaml";
     const MONITORING_FILE: &str = "monitoring.yaml";
 
-    let drafter = Drafter::new(upstreams);
+    let drafter = Drafter::new(upstreams, env.data_dir);
     let draft = drafter.run()?;
 
     if !output.is_dir() {
