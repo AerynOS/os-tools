@@ -66,7 +66,7 @@ git clone https://github.com/aerynos/os-tools.git
 cd tools/
 
 # Install a few prerequisites (this how you'd do it on AerynOS)
-sudo moss it binutils glibc-devel linux-headers clang bsdtar-static cpio
+sudo moss it binutils glibc-devel linux-headers clang bsdtar-static cpio mold
 
 # remember to add ~/.cargo/bin to your $PATH if this is how you installed rustfmt
 cargo install rustfmt
