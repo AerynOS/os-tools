@@ -154,6 +154,10 @@ pub(super) fn triggers<'a>(
 }
 
 impl TriggerRunner<'_> {
+    pub fn handler(&self) -> &Handler {
+        self.trigger.handler()
+    }
+
     /// Execute a trigger, taking care to account for the transaction scope and client scope
     ///
     /// All transaction triggers are run via sandboxing ([`container::Container`]) to limit their

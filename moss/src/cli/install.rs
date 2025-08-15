@@ -28,7 +28,7 @@ pub fn command() -> Command {
 }
 
 /// Handle execution of `moss install`
-#[instrument(skip(installation))]
+#[instrument(skip(args, installation))]
 pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
     let pkgs = args
         .get_many::<String>("NAME")
