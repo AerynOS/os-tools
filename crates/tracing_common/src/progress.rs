@@ -7,7 +7,7 @@
 use tracing::{Span, info, info_span};
 
 pub fn create_progress_span(name: &str) -> Span {
-    info_span!("progress", phase = name, event_type = "progress_created")
+    info_span!("progress", phase = name, event_type = "progress")
 }
 
 pub fn progress_start(phase_name: &str, total_items: usize) {
