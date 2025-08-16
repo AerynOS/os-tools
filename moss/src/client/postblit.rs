@@ -208,7 +208,7 @@ fn execute_trigger_directly(trigger: &CompiledHandler) -> Result<(), Error> {
                     let stderr = String::from_utf8_lossy(&cmd.stderr);
 
                     warn!(
-                        command = %run,
+                        command = run,
                         args = ?args,
                         exit_code = code,
                         stdout = %stdout,
@@ -218,7 +218,7 @@ fn execute_trigger_directly(trigger: &CompiledHandler) -> Result<(), Error> {
                 }
             } else {
                 error!(
-                    command = %run,
+                    command = run,
                     args = ?args,
                     "Failed to execute trigger"
                 );
