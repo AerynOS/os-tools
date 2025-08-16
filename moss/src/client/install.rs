@@ -7,6 +7,7 @@
 use std::time::{Duration, Instant};
 
 use thiserror::Error;
+use tracing::{debug, info, info_span, instrument};
 use tui::{
     dialoguer::{Confirm, theme::ColorfulTheme},
     pretty::autoprint_columns,
@@ -25,12 +26,14 @@ use crate::{
 ///
 /// If this call is successful a new State is recorded into the [`super::db::state::Database`].
 /// Upon completion the `/usr` tree is "hot swapped" with the staging tree through `renameat2` call.
+#[instrument(skip(client), fields(ephemeral = client.is_ephemeral()))]
 pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, Error> {
     let mut timing = Timing::default();
     let mut instant = Instant::now();
 
     // Resolve input packages
     let input = resolve_input(pkgs, client)?;
+    debug!(resolved_packages = input.len(), "Resolved input packages");
 
     // Add all inputs
     let mut tx = client.registry.transaction(transaction::Lookup::PreferInstalled)?;
@@ -54,6 +57,13 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
         .collect::<Vec<_>>();
 
     timing.resolve = instant.elapsed();
+    info!(
+        total_resolved = resolved.len(),
+        missing_packages = missing.len(),
+        already_installed = resolved.len() - missing.len(),
+        resolve_time_ms = timing.resolve.as_millis(),
+        "Package resolution completed"
+    );
 
     // If no new packages exist, exit and print
     // packages already installed
@@ -95,10 +105,27 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
 
     instant = Instant::now();
 
+    let cache_packages_span = info_span!("progress", phase = "cache_packages", event_type = "progress");
+    let _cache_packages_guard = cache_packages_span.enter();
+    info!(
+        phase = "cache_packages",
+        total_items = missing.len(),
+        progress = 0.0,
+        event_type = "progress_start"
+    );
+
     // Cache packages
     runtime::block_on(client.cache_packages(&missing))?;
 
     timing.fetch = instant.elapsed();
+    info!(
+        phase = "cache_packages",
+        duration_ms = timing.fetch.as_millis(),
+        items_processed = missing.len(),
+        progress = 1.0,
+        event_type = "progress_completed",
+    );
+    drop(_cache_packages_guard);
     instant = Instant::now();
 
     // Calculate the new state of packages (old_state + missing)
@@ -119,16 +146,40 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
         missing_selections.chain(previous_selections).collect::<Vec<_>>()
     };
 
+    let install_span = info_span!("progress", phase = "installation", event_type = "progress");
+    let _install_guard = install_span.enter();
+    info!(
+        phase = "installation",
+        total_items = new_state_pkgs.len(),
+        progress = 0.0,
+        event_type = "progress_start",
+    );
+
     // Perfect, apply state.
     client.new_state(&new_state_pkgs, "Install")?;
 
     timing.blit = instant.elapsed();
+    info!(
+        phase = "installation",
+        duration_ms = timing.blit.as_millis(),
+        items_processed = new_state_pkgs.len(),
+        progress = 1.0,
+        event_type = "progress_completed",
+    );
+    drop(_install_guard);
+
+    info!(
+        blit_time_ms = timing.blit.as_millis(),
+        total_time_ms = (timing.resolve + timing.fetch + timing.blit).as_millis(),
+        "Installation completed successfully"
+    );
 
     Ok(timing)
 }
 
 /// Resolves the package arguments as valid input packages. Returns an error
 /// if any args are invalid.
+#[instrument(skip(client))]
 fn resolve_input(pkgs: &[&str], client: &Client) -> Result<Vec<package::Id>, Error> {
     // Parse pkg args into valid / invalid sets
     let queried = pkgs.iter().map(|p| find_packages(p, client));

@@ -10,6 +10,7 @@ container = { path = "../crates/container" }
 dag = { path = "../crates/dag" }
 tools_buildinfo = { path = "../crates/tools_buildinfo" }
 stone = { path = "../crates/stone" }
+tracing_common = { path = "../crates/tracing_common" }
 triggers = { path = "../crates/triggers" }
 tui = { path = "../crates/tui" }
 vfs = { path = "../crates/vfs" }

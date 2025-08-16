@@ -42,6 +42,7 @@ use crate::{
     repository, runtime, signal,
     state::{self, Selection},
 };
+use tracing::info;
 
 pub mod boot;
 pub mod cache;
@@ -321,14 +322,50 @@ impl Client {
                 .progress_chars("■≡=- "),
         );
 
-        match &scope {
-            TriggerScope::Transaction(_, _) => progress.set_message("Running transaction-scope triggers"),
-            TriggerScope::System(_, _) => progress.set_message("Running system-scope triggers"),
+        let phase_name = match &scope {
+            TriggerScope::Transaction(_, _) => {
+                progress.set_message("Running transaction-scope triggers");
+                "transaction-scope-triggers"
+            }
+            TriggerScope::System(_, _) => {
+                progress.set_message("Running system-scope triggers");
+                "system-scope-triggers"
+            }
         };
 
-        for trigger in progress.wrap_iter(triggers.iter()) {
+        let timer = Instant::now();
+
+        info!(
+            phase = phase_name,
+            total_items = triggers.len(),
+            progress = 0.0,
+            event_type = "progress_start",
+        );
+
+        for (i, trigger) in progress.wrap_iter(triggers.iter()).enumerate() {
             trigger.execute()?;
+
+            let trigger_command = match trigger.handler() {
+                triggers::format::Handler::Run { run, .. } => run.clone(),
+                triggers::format::Handler::Delete { .. } => "delete operation".to_owned(),
+            };
+            info!(
+                progress = (i + 1) as f32 / triggers.len() as f32,
+                current = i + 1,
+                total = triggers.len(),
+                event_type = "progress_update",
+                "Executing {}",
+                trigger_command
+            );
         }
+
+        info!(
+            phase = phase_name,
+            duration_ms = timer.elapsed().as_millis(),
+            items_processed = triggers.len(),
+            progress = 1.0,
+            event_type = "progress_completed",
+        );
 
         progress.finish_and_clear();
 
@@ -492,6 +529,14 @@ impl Client {
                 // Download and update progress
                 let download = cache::fetch(&package.meta, &self.installation, |progress| {
                     progress_bar.inc(progress.delta);
+                    info!(
+                        progress = progress.completed as f32 / progress.total as f32,
+                        current = progress.completed as usize,
+                        total = progress.total as usize,
+                        event_type = "progress_update",
+                        "Downloading {}",
+                        package.meta.name
+                    );
                 })
                 .await?;
                 let is_cached = download.was_cached;
@@ -502,8 +547,10 @@ impl Client {
                 let total_progress = total_progress.clone();
                 let unpacking_in_progress = unpacking_in_progress.clone();
                 let package = (*package).clone();
+                let current_span = tracing::Span::current();
 
                 runtime::unblock(move || {
+                    let _guard = current_span.enter();
                     let package_name = package.meta.name.to_string();
 
                     // Set progress to unpacking
@@ -514,9 +561,18 @@ impl Client {
                     // Unpack and update progress
                     let unpacked = download.unpack(unpacking_in_progress.clone(), {
                         let progress_bar = progress_bar.clone();
+                        let package_name = package_name.clone();
 
                         move |progress| {
                             progress_bar.set_position((progress.pct() * 1000.0) as u64);
+                            info!(
+                                progress = progress.completed as f32 / progress.total as f32,
+                                current = progress.completed as usize,
+                                total = progress.total as usize,
+                                event_type = "progress_update",
+                                "Unpacking {}",
+                                package_name
+                            );
                         }
                     })?;
 
@@ -534,6 +590,15 @@ impl Client {
 
                     // Inc total progress by 1
                     total_progress.inc(1);
+
+                    info!(
+                        progress = total_progress.position() as f32 / total_progress.length().unwrap_or(1) as f32,
+                        current = total_progress.position() as usize,
+                        total = total_progress.length().unwrap_or(0) as usize,
+                        event_type = "progress_update",
+                        "Cached {}",
+                        package_name
+                    );
 
                     Ok((package, unpacked)) as Result<(Package, cache::UnpackedAsset), Error>
                 })
@@ -649,10 +714,14 @@ impl Client {
             let root_dir = fcntl::open(&blit_target, OFlag::O_DIRECTORY | OFlag::O_RDONLY, Mode::empty())?;
 
             if let Element::Directory(_, _, children) = root {
+                let current_span = tracing::Span::current();
                 stats = stats.merge(
                     children
                         .into_par_iter()
-                        .map(|child| self.blit_element(root_dir, cache_fd, child, &progress))
+                        .map(|child| {
+                            let _guard = current_span.enter();
+                            self.blit_element(root_dir, cache_fd, child, &progress)
+                        })
                         .try_reduce(BlitStats::default, |a, b| Ok(a.merge(b)))?,
                 );
             }
@@ -688,6 +757,21 @@ impl Client {
         let mut stats = BlitStats::default();
 
         progress.inc(1);
+
+        let (_, item) = match &element {
+            Element::Directory(_, item, _) => ("directory", item),
+            Element::Child(_, item) => ("file", item),
+        };
+
+        info!(
+            progress = progress.position() as f32 / progress.length().unwrap_or(1) as f32,
+            current = progress.position() as usize,
+            total = progress.length().unwrap_or(0) as usize,
+            event_type = "progress_update",
+            "Installing {}",
+            item.path()
+        );
+
         match element {
             Element::Directory(name, item, children) => {
                 // Construct within the parent
@@ -696,10 +780,14 @@ impl Client {
                 // open the new dir
                 let newdir = fcntl::openat(parent, name, OFlag::O_RDONLY | OFlag::O_DIRECTORY, Mode::empty())?;
 
+                let current_span = tracing::Span::current();
                 stats = stats.merge(
                     children
                         .into_par_iter()
-                        .map(|child| self.blit_element(newdir, cache, child, progress))
+                        .map(|child| {
+                            let _guard = current_span.enter();
+                            self.blit_element(newdir, cache, child, progress)
+                        })
                         .try_reduce(BlitStats::default, |a, b| Ok(a.merge(b)))?,
                 );
 

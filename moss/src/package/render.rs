@@ -44,7 +44,7 @@ impl ColumnDisplay for &Package {
         );
 
         if self.meta.build_release > 1 {
-            _ = write!(writer, "-{}", self.meta.source_release.to_string().dim());
+            _ = write!(writer, "-{}", self.meta.build_release.to_string().dim());
         }
 
         if col != Column::Last {

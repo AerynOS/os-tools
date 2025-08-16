@@ -16,6 +16,7 @@ use moss::{
 };
 use thiserror::Error;
 
+use tracing::debug;
 use tui::dialoguer::Confirm;
 use tui::dialoguer::theme::ColorfulTheme;
 use tui::pretty::autoprint_columns;
@@ -38,7 +39,7 @@ pub fn command() -> Command {
         )
 }
 
-pub fn handle(args: &ArgMatches, installation: Installation, debug: bool) -> Result<(), Error> {
+pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
     let yes_all = *args.get_one::<bool>("yes").unwrap();
     let update = *args.get_one::<bool>("update").unwrap();
     let upgrade_only = *args.get_one::<bool>("upgrade-only").unwrap();
@@ -66,11 +67,15 @@ pub fn handle(args: &ArgMatches, installation: Installation, debug: bool) -> Res
 
     // Resolve the final state of packages after considering sync updates
     let finalized = resolve_with_sync(&client, upgrade_only, &installed)?;
-    if debug {
-        println!("Full package list after sync: ");
-        println!();
-        autoprint_columns(&finalized);
-        println!();
+    debug!(count = finalized.len(), "Full package list after sync");
+    for package in &finalized {
+        debug!(
+            name = %package.meta.name,
+            version = %package.meta.version_identifier,
+            source_release = package.meta.source_release,
+            build_release = package.meta.build_release,
+            "Package in finalized list"
+        );
     }
 
     // Synced are packages are:
