@@ -158,7 +158,7 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
 
 /// Resolves the package arguments as valid input packages. Returns an error
 /// if any args are invalid.
-#[instrument(skip(client), fields(package_count = pkgs.len()))]
+#[instrument(skip(client))]
 fn resolve_input(pkgs: &[&str], client: &Client) -> Result<Vec<package::Id>, Error> {
     // Parse pkg args into valid / invalid sets
     let queried = pkgs.iter().map(|p| find_packages(p, client));
