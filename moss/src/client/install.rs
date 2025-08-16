@@ -7,8 +7,7 @@
 use std::time::{Duration, Instant};
 
 use thiserror::Error;
-use tracing::{debug, info, instrument};
-use tracing_common::progress;
+use tracing::{debug, info, info_span, instrument};
 use tui::{
     dialoguer::{Confirm, theme::ColorfulTheme},
     pretty::autoprint_columns,
@@ -106,15 +105,26 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
 
     instant = Instant::now();
 
-    let cache_packages_span = progress::create_progress_span("cache_packages");
+    let cache_packages_span = info_span!("progress", phase = "cache_packages", event_type = "progress");
     let _cache_packages_guard = cache_packages_span.enter();
-    progress::progress_start("cache_packages", missing.len());
+    info!(
+        phase = "cache_packages",
+        total_items = missing.len(),
+        progress = 0.0,
+        event_type = "progress_start"
+    );
 
     // Cache packages
     runtime::block_on(client.cache_packages(&missing))?;
 
     timing.fetch = instant.elapsed();
-    progress::progress_completed("cache_packages", timing.fetch.as_millis(), missing.len());
+    info!(
+        phase = "cache_packages",
+        duration_ms = timing.fetch.as_millis(),
+        items_processed = missing.len(),
+        progress = 1.0,
+        event_type = "progress_completed",
+    );
     drop(_cache_packages_guard);
     instant = Instant::now();
 
@@ -136,15 +146,26 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
         missing_selections.chain(previous_selections).collect::<Vec<_>>()
     };
 
-    let install_span = progress::create_progress_span("installation");
+    let install_span = info_span!("progress", phase = "installation", event_type = "progress");
     let _install_guard = install_span.enter();
-    progress::progress_start("installation", new_state_pkgs.len());
+    info!(
+        phase = "installation",
+        total_items = new_state_pkgs.len(),
+        progress = 0.0,
+        event_type = "progress_start",
+    );
 
     // Perfect, apply state.
     client.new_state(&new_state_pkgs, "Install")?;
 
     timing.blit = instant.elapsed();
-    progress::progress_completed("installation", timing.blit.as_millis(), new_state_pkgs.len());
+    info!(
+        phase = "installation",
+        duration_ms = timing.blit.as_millis(),
+        items_processed = new_state_pkgs.len(),
+        progress = 1.0,
+        event_type = "progress_completed",
+    );
     drop(_install_guard);
 
     info!(

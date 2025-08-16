@@ -5,4 +5,3 @@
 //! Common tracing utilities for moss and related tools
 
 pub mod logging;
-pub mod progress;
