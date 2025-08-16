@@ -42,7 +42,7 @@ use crate::{
     repository, runtime, signal,
     state::{self, Selection},
 };
-use tracing_common::progress;
+use tracing::info;
 
 pub mod boot;
 pub mod cache;
@@ -315,13 +315,6 @@ impl Client {
     /// Apply all triggers with the given scope, wrapping with a progressbar.
     fn apply_triggers(scope: TriggerScope<'_>, fstree: &vfs::Tree<PendingFile>) -> Result<(), postblit::Error> {
         let triggers = postblit::triggers(scope, fstree)?;
-        let phase_name = match &scope {
-            TriggerScope::Transaction(_, _) => "Running transaction-scope triggers",
-            TriggerScope::System(_, _) => "Running system-scope triggers",
-        };
-        let timer = Instant::now();
-
-        progress::progress_start(phase_name, triggers.len());
 
         let progress = ProgressBar::new(triggers.len() as u64).with_style(
             ProgressStyle::with_template("\n|{bar:20.green/blue}| {pos}/{len} {msg}")
@@ -329,7 +322,25 @@ impl Client {
                 .progress_chars("■≡=- "),
         );
 
-        progress.set_message(phase_name);
+        let phase_name = match &scope {
+            TriggerScope::Transaction(_, _) => {
+                progress.set_message("Running transaction-scope triggers");
+                "transaction-scope-triggers"
+            }
+            TriggerScope::System(_, _) => {
+                progress.set_message("Running system-scope triggers");
+                "system-scope-triggers"
+            }
+        };
+
+        let timer = Instant::now();
+
+        info!(
+            phase = phase_name,
+            total_items = triggers.len(),
+            progress = 0.0,
+            event_type = "progress_start",
+        );
 
         for (i, trigger) in progress.wrap_iter(triggers.iter()).enumerate() {
             trigger.execute()?;
@@ -338,10 +349,23 @@ impl Client {
                 triggers::format::Handler::Run { run, .. } => run.clone(),
                 triggers::format::Handler::Delete { .. } => "delete operation".to_owned(),
             };
-            progress::progress_update(i + 1, triggers.len(), &format!("Executing {trigger_command}"));
+            info!(
+                progress = (i + 1) as f32 / triggers.len() as f32,
+                current = i + 1,
+                total = triggers.len(),
+                event_type = "progress_update",
+                "Executing {}",
+                trigger_command
+            );
         }
 
-        progress::progress_completed(phase_name, timer.elapsed().as_millis(), triggers.len());
+        info!(
+            phase = phase_name,
+            duration_ms = timer.elapsed().as_millis(),
+            items_processed = triggers.len(),
+            progress = 1.0,
+            event_type = "progress_completed",
+        );
 
         progress.finish_and_clear();
 
@@ -505,10 +529,13 @@ impl Client {
                 // Download and update progress
                 let download = cache::fetch(&package.meta, &self.installation, |progress| {
                     progress_bar.inc(progress.delta);
-                    progress::progress_update(
-                        progress.completed as usize,
-                        progress.total as usize,
-                        &format!("Downloading {}", package.meta.name),
+                    info!(
+                        progress = progress.completed as f32 / progress.total as f32,
+                        current = progress.completed as usize,
+                        total = progress.total as usize,
+                        event_type = "progress_update",
+                        "Downloading {}",
+                        package.meta.name
                     );
                 })
                 .await?;
@@ -538,10 +565,13 @@ impl Client {
 
                         move |progress| {
                             progress_bar.set_position((progress.pct() * 1000.0) as u64);
-                            progress::progress_update(
-                                progress.completed as usize,
-                                progress.total as usize,
-                                &format!("Unpacking {package_name}"),
+                            info!(
+                                progress = progress.completed as f32 / progress.total as f32,
+                                current = progress.completed as usize,
+                                total = progress.total as usize,
+                                event_type = "progress_update",
+                                "Unpacking {}",
+                                package_name
                             );
                         }
                     })?;
@@ -561,10 +591,13 @@ impl Client {
                     // Inc total progress by 1
                     total_progress.inc(1);
 
-                    progress::progress_update(
-                        total_progress.position() as usize,
-                        total_progress.length().unwrap_or(0) as usize,
-                        &format!("Cached {package_name}"),
+                    info!(
+                        progress = total_progress.position() as f32 / total_progress.length().unwrap_or(1) as f32,
+                        current = total_progress.position() as usize,
+                        total = total_progress.length().unwrap_or(0) as usize,
+                        event_type = "progress_update",
+                        "Cached {}",
+                        package_name
                     );
 
                     Ok((package, unpacked)) as Result<(Package, cache::UnpackedAsset), Error>
@@ -730,10 +763,13 @@ impl Client {
             Element::Child(_, item) => ("file", item),
         };
 
-        progress::progress_update(
-            progress.position() as usize,
-            progress.length().unwrap_or(0) as usize,
-            &format!("Installing {}", item.path()),
+        info!(
+            progress = progress.position() as f32 / progress.length().unwrap_or(1) as f32,
+            current = progress.position() as usize,
+            total = progress.length().unwrap_or(0) as usize,
+            event_type = "progress_update",
+            "Installing {}",
+            item.path()
         );
 
         match element {
