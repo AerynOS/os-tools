@@ -34,7 +34,7 @@ impl Rule {
         Pattern::new(&self.pattern)
                 .map(|pattern| pattern.matches(&escaped_path))
                 .unwrap_or_default()
-            // If the supplied pattern is for a directory we want to match anything that's inside said directory, 
+            // If the supplied pattern is for a directory we want to match anything that's inside said directory,
             // Do this by creating a recursive glob pattern by appending `**` if the pattern already ends in a `/` or `/**` if not
             || Pattern::new(format!("{}/**", &self.pattern.strip_suffix("/").unwrap_or(&self.pattern)).as_str())
                 .map(|pattern| pattern.matches(&escaped_path))
@@ -100,10 +100,11 @@ impl Collector {
         let mut paths = vec![];
 
         let dir = subdir.as_ref().map(|t| t.0.as_path()).unwrap_or(&self.root);
-        let entries = fs::read_dir(dir)?;
+        let mut entries: Vec<_> = fs::read_dir(dir)?.collect::<Result<Vec<_>, _>>()?;
 
-        for result in entries {
-            let entry = result?;
+        entries.sort_by_key(|entry| entry.file_name());
+
+        for entry in entries {
             let metadata = entry.metadata()?;
 
             let host_path = entry.path();
