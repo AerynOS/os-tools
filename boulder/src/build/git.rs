@@ -140,43 +140,43 @@ upstreams:
 
         let installed = vec![
             Installed::Git {
-                name: "repo1.git".to_string(),
+                name: "repo1.git".to_owned(),
                 path: "/tmp/repo1".into(),
                 was_cached: false,
                 uri: Url::parse("https://github.com/example/repo1.git").unwrap(),
-                original_ref: "main".to_string(),
-                resolved_hash: "1111222233334444555566667777888899990000".to_string(),
+                original_ref: "main".to_owned(),
+                resolved_hash: "1111222233334444555566667777888899990000".to_owned(),
                 original_index: 0,
             },
             Installed::Git {
-                name: "repo2.git".to_string(),
+                name: "repo2.git".to_owned(),
                 path: "/tmp/repo2".into(),
                 was_cached: false,
                 uri: Url::parse("https://github.com/example/repo2.git").unwrap(),
-                original_ref: "main".to_string(),
-                resolved_hash: "aaaa1111bbbb2222cccc3333dddd4444eeee5555".to_string(),
+                original_ref: "main".to_owned(),
+                resolved_hash: "aaaa1111bbbb2222cccc3333dddd4444eeee5555".to_owned(),
                 original_index: 1,
             },
             Installed::Git {
-                name: "repo3.git".to_string(),
+                name: "repo3.git".to_owned(),
                 path: "/tmp/repo3".into(),
                 was_cached: false,
                 uri: Url::parse("https://github.com/example/repo3.git").unwrap(),
-                original_ref: "abcd1234567890abcdef1234567890abcdef1234".to_string(),
-                resolved_hash: "abcd1234567890abcdef1234567890abcdef1234".to_string(),
+                original_ref: "abcd1234567890abcdef1234567890abcdef1234".to_owned(),
+                resolved_hash: "abcd1234567890abcdef1234567890abcdef1234".to_owned(),
                 original_index: 2,
             },
             Installed::Git {
-                name: "repo4.git".to_string(),
+                name: "repo4.git".to_owned(),
                 path: "/tmp/repo4".into(),
                 was_cached: false,
                 uri: Url::parse("https://github.com/example/repo4.git").unwrap(),
-                original_ref: "abc123d".to_string(),
-                resolved_hash: "abc123d567890abcdef1234567890abcdef12345".to_string(),
+                original_ref: "abc123d".to_owned(),
+                resolved_hash: "abc123d567890abcdef1234567890abcdef12345".to_owned(),
                 original_index: 3,
             },
             Installed::Plain {
-                name: "file.tar.gz".to_string(),
+                name: "file.tar.gz".to_owned(),
                 path: "/tmp/file.tar.gz".into(),
                 was_cached: false,
             },
@@ -217,16 +217,16 @@ upstreams:
 
         let installed = vec![
             Installed::Git {
-                name: "repo3.git".to_string(),
+                name: "repo3.git".to_owned(),
                 path: "/tmp/repo3".into(),
                 was_cached: false,
                 uri: Url::parse("https://github.com/example/repo3.git").unwrap(),
-                original_ref: "abcd1234567890abcdef1234567890abcdef1234".to_string(),
-                resolved_hash: "abcd1234567890abcdef1234567890abcdef1234".to_string(),
+                original_ref: "abcd1234567890abcdef1234567890abcdef1234".to_owned(),
+                resolved_hash: "abcd1234567890abcdef1234567890abcdef1234".to_owned(),
                 original_index: 0,
             },
             Installed::Plain {
-                name: "file.tar.gz".to_string(),
+                name: "file.tar.gz".to_owned(),
                 path: "/tmp/file.tar.gz".into(),
                 was_cached: false,
             },
@@ -284,7 +284,7 @@ upstreams:
             .args(["rev-parse", "HEAD"])
             .output()
             .unwrap();
-        let commit_hash = String::from_utf8(output.stdout).unwrap().trim().to_string();
+        let commit_hash = String::from_utf8(output.stdout).unwrap().trim().to_owned();
 
         (temp_dir, commit_hash)
     }
