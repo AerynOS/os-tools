@@ -36,7 +36,7 @@ pub struct Command {
         global = true,
         help = "Build the recipe after successful completion of the subcommand"
     )]
-    build: bool,
+    pub(crate) build: bool,
     #[command(subcommand)]
     subcommand: Subcommand,
 }
