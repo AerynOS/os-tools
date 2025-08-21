@@ -29,6 +29,14 @@ use url::Url;
 #[derive(Debug, Parser)]
 #[command(about = "Utilities to create and manipulate stone recipe files")]
 pub struct Command {
+    #[arg(
+        long,
+        required = false,
+        default_value_t = false,
+        global = true,
+        help = "Build the recipe after successful completion of the subcommand"
+    )]
+    build: bool,
     #[command(subcommand)]
     subcommand: Subcommand,
 }
@@ -118,7 +126,7 @@ fn parse_upstream(s: &str) -> Result<Upstream, String> {
 }
 
 pub fn handle(command: Command, env: Env) -> Result<(), Error> {
-    match command.subcommand {
+    let run_cmd = match command.subcommand {
         Subcommand::Bump { recipe, release } => bump(recipe, release),
         Subcommand::New { output, upstreams } => new(output, upstreams, env),
         Subcommand::Update {
@@ -131,7 +139,54 @@ pub fn handle(command: Command, env: Env) -> Result<(), Error> {
             local,
         } => update(recipe, overwrite, version, upstreams, no_bump, build, local),
         Subcommand::Macros { _macro } => macros(_macro, env),
+    };
+
+    if command.build
+        && let Ok(_) = run_cmd
+    {
+        use std::io::{BufRead, BufReader};
+        use std::process::{Command as Cmd, Stdio};
+
+        let mut boulder_build = Cmd::new("boulder")
+            .args(["build", "-u", "stone.yaml"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("Failed to run boulder build command!");
+
+        let build_stdout = boulder_build.stdout.take().expect("Failed to get build process stdout");
+        let build_reader = BufReader::new(build_stdout);
+
+        let build_stderr = boulder_build.stderr.take().expect("Failed to get build process stderr");
+
+        // Stream the build process output
+        build_reader.lines().for_each(|line| {
+            if let Ok(stdout) = line {
+                println!("{stdout}");
+            }
+        });
+
+        let status = boulder_build
+            .wait()
+            .expect("boulder build command failed to wait to complete");
+
+        if !status.success() {
+            let err_reader = BufReader::new(build_stderr);
+            let mut err_str = String::new();
+            err_reader.lines().for_each(|err_line| {
+                if let Ok(err) = err_line {
+                    eprintln!("{err}");
+                    err_str = format!("{err_str}\n{err}");
+                }
+            });
+
+            return Err(Error::BuildErr(err_str));
+        } else {
+            println!("Successfully built package!");
+        }
     }
+
+    run_cmd
 }
 
 fn bump(recipe: PathBuf, release: Option<u64>) -> Result<(), Error> {
@@ -573,4 +628,6 @@ pub enum Error {
     Utf8(#[from] std::string::FromUtf8Error),
     #[error("draft")]
     Draft(#[from] draft::Error),
+    #[error("Recipe auto-build error")]
+    BuildErr(String),
 }
