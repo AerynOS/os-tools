@@ -37,6 +37,7 @@ impl Repository {
                         .uri
                         .and_then(|relative| self.active.repository.uri.join(&relative).ok())
                         .map(|url| url.to_string()),
+                    origin: Some(self.active.id.to_string()),
                     ..meta
                 },
                 flags: package::Flags::new().with_available(),

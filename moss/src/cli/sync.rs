@@ -118,7 +118,7 @@ pub fn handle(args: &ArgMatches, installation: Installation, debug: bool) -> Res
         return Err(Error::Cancelled);
     }
 
-    runtime::block_on(client.cache_packages(&synced))?;
+    runtime::block_on(client.cache_packages(&synced, None))?;
 
     // Map finalized state to a [`Selection`] by referencing
     // it's value from the previous state
@@ -157,7 +157,7 @@ pub fn handle(args: &ArgMatches, installation: Installation, debug: bool) -> Res
     };
 
     // Perfect, apply state.
-    client.new_state(&new_selections, "Sync")?;
+    client.new_state(&new_selections, "Sync", None)?;
 
     Ok(())
 }

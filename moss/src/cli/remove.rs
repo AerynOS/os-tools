@@ -127,7 +127,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     };
 
     // Apply state
-    client.new_state(&new_state_pkgs, "Remove")?;
+    client.new_state(&new_state_pkgs, "Remove", None)?;
 
     Ok(())
 }
