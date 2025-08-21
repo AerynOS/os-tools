@@ -123,6 +123,7 @@ pub fn process() -> Result<(), Error> {
         Some(Subcommand::Build(command)) => build::handle(command, env)?,
         Some(Subcommand::Chroot(command)) => chroot::handle(command, env)?,
         Some(Subcommand::Profile(command)) => profile::handle(command, env)?,
+        // Recipe takes into account the global.build flag
         Some(Subcommand::Recipe(command)) => recipe::handle(command, env)?,
         Some(Subcommand::Version(command)) => version::handle(command),
         None => (),
