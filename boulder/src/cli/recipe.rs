@@ -29,6 +29,14 @@ use url::Url;
 #[derive(Debug, Parser)]
 #[command(about = "Utilities to create and manipulate stone recipe files")]
 pub struct Command {
+    #[arg(
+        long,
+        required = false,
+        default_value_t = false,
+        global = true,
+        help = "Build the recipe after successful completion of the subcommand"
+    )]
+    pub(crate) build: bool,
     #[command(subcommand)]
     subcommand: Subcommand,
 }
@@ -118,7 +126,7 @@ fn parse_upstream(s: &str) -> Result<Upstream, String> {
 }
 
 pub fn handle(command: Command, env: Env) -> Result<(), Error> {
-    match command.subcommand {
+    let run_cmd = match command.subcommand {
         Subcommand::Bump { recipe, release } => bump(recipe, release),
         Subcommand::New { output, upstreams } => new(output, upstreams),
         Subcommand::Update {
@@ -131,7 +139,34 @@ pub fn handle(command: Command, env: Env) -> Result<(), Error> {
             local,
         } => update(recipe, overwrite, version, upstreams, no_bump, build, local),
         Subcommand::Macros { _macro } => macros(_macro, env),
+    };
+
+    if command.build
+        && let Ok(_) = run_cmd
+    {
+        use std::process::{Command as Cmd, Stdio};
+
+        let mut boulder_build = Cmd::new("boulder")
+            .args(["build", "-u", "stone.yaml"])
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .spawn()
+            .expect("Failed to run boulder build command!");
+
+        let status = boulder_build
+            .wait()
+            .expect(&format!("{}", "boulder build command failed to wait to complete".red()));
+
+        if !status.success() {
+            let err_str = "Failed to build package".red().to_string();
+            return Err(Error::BuildErr(err_str));
+        } else {
+            let success_msg = "Successfully updated and built package!".green().to_string();
+            println!("{success_msg}");
+        }
     }
+
+    run_cmd
 }
 
 fn bump(recipe: PathBuf, release: Option<u64>) -> Result<(), Error> {
@@ -177,7 +212,7 @@ fn new(output: PathBuf, upstreams: Vec<Url>) -> Result<(), Error> {
     fs::write(PathBuf::from(&output).join(RECIPE_FILE), draft.stone).map_err(Error::Write)?;
     fs::write(PathBuf::from(&output).join(MONITORING_FILE), draft.monitoring).map_err(Error::Write)?;
 
-    println!("Saved {RECIPE_FILE} & {MONITORING_FILE} to {output:?}");
+    println!("{}", "Saved {RECIPE_FILE} & {MONITORING_FILE} to {output:?}".green());
 
     Ok(())
 }
@@ -296,9 +331,9 @@ fn update(
     if overwrite {
         let recipe = recipe.expect("checked above");
         fs::write(&recipe, updated.as_bytes()).map_err(Error::Write)?;
-        println!("{} updated", recipe.display());
+        println!("{} {}", recipe.display().to_string().green(), "updated".green());
     } else {
-        print!("{updated}");
+        print!("{}", updated.green());
     }
 
     if build {
@@ -573,4 +608,6 @@ pub enum Error {
     Utf8(#[from] std::string::FromUtf8Error),
     #[error("draft")]
     Draft(#[from] draft::Error),
+    #[error("Recipe auto-build error")]
+    BuildErr(String),
 }
