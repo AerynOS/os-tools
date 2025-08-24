@@ -12,6 +12,7 @@ use clap_complete::{
 use clap_mangen::Man;
 use fs_err::{self as fs, File};
 use thiserror::Error;
+use tui::Styled;
 
 mod build;
 mod chroot;
@@ -51,6 +52,22 @@ pub struct Global {
     pub generate_manpages: Option<PathBuf>,
     #[arg(long, global = true, hide = true)]
     pub generate_completions: Option<PathBuf>,
+    #[arg(
+        long,
+        require_equals = true,
+        value_parser = clap::builder::PossibleValuesParser::new(["local", "unstable", "volatile"]),
+        global = true,
+        help = "Move newly built .stone package files to the given repo"
+    )]
+    pub mv_to_repo: Option<String>,
+    #[arg(
+        long,
+        default_value_t = false,
+        requires = "mv-to-repo",
+        global = true,
+        help = "Auto re-index the repo after a successful build and move"
+    )]
+    pub re_index: bool,
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -106,6 +123,21 @@ pub fn process() -> Result<(), Error> {
         return Ok(());
     }
 
+    if global.mv_to_repo.is_some() {
+        match subcommand {
+            Some(Subcommand::Build(_)) | Some(Subcommand::Recipe(_)) => {}
+            _ => {
+                eprintln!(
+                    "{}",
+                    "The `--mv-to-repo` flag must be used with either the build or recipe subcommand"
+                        .red()
+                        .to_string()
+                );
+                std::process::exit(1);
+            }
+        }
+    }
+
     let env = Env::new(global.cache_dir, global.config_dir, global.data_dir, global.moss_root)?;
 
     if global.verbose {
@@ -120,10 +152,73 @@ pub fn process() -> Result<(), Error> {
     }
 
     match subcommand {
-        Some(Subcommand::Build(command)) => build::handle(command, env)?,
+        Some(Subcommand::Build(command)) => {
+            match build::handle(command, env) {
+                Ok(_) => {
+                    if let Some(repo) = global.mv_to_repo {
+                        match mv_to_repo(&repo) {
+                            Ok(repo) => {
+                                if global.re_index && !repo.is_empty() {
+                                    if let Err(err) = re_index_repo(&repo) {
+                                        eprintln!("{} {}", "Error:".red(), err.to_string().red());
+                                        return Err(err);
+                                    }
+                                } else {
+                                    eprintln!("{}", "Error: Cannot re-index, returned repo name was empty!".red());
+                                    return Err(Error::Reindex(
+                                        "Cannot re-index, move operation returned an invalid repo name"
+                                            .red()
+                                            .to_string(),
+                                    ));
+                                }
+                            }
+                            Err(err) => {
+                                eprintln!("{} {}", "Error:".red(), err.to_string().red());
+                                return Err(err);
+                            }
+                        }
+                    }
+                }
+                Err(e) => {
+                    let err_str = e.to_string().red();
+                    eprintln!("{err_str}");
+                    return Err(Error::Build(e));
+                }
+            };
+        }
         Some(Subcommand::Chroot(command)) => chroot::handle(command, env)?,
         Some(Subcommand::Profile(command)) => profile::handle(command, env)?,
-        Some(Subcommand::Recipe(command)) => recipe::handle(command, env)?,
+        // Recipe takes into account the global.build flag
+        Some(Subcommand::Recipe(command)) => {
+            // Give an error message and exit without running the command
+            // if the --mv-to-repo flag was give without the --build flag.
+            if global.mv_to_repo.is_some() && !command.build {
+                eprintln!("Error: Cannot use `--mv-to-repo` without the `--build` flag");
+                std::process::exit(1);
+            }
+            recipe::handle(command, env)?;
+
+            if let Some(repo) = global.mv_to_repo {
+                match mv_to_repo(&repo) {
+                    Ok(repo) => {
+                        if global.re_index {
+                            if let Err(err) = re_index_repo(&repo) {
+                                eprintln!("{} {}", "Error:".red(), err.to_string().red());
+                                return Err(Error::Reindex(
+                                    "Cannot re-index, move operation returned an invalid repo name"
+                                        .red()
+                                        .to_string(),
+                                ));
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        eprintln!("{} {}", "Error:".red(), err.to_string().red());
+                        return Err(err);
+                    }
+                }
+            }
+        }
         Some(Subcommand::Version(command)) => version::handle(command),
         None => (),
     }
@@ -160,6 +255,105 @@ fn replace_aliases(args: std::env::Args) -> Vec<String> {
     args
 }
 
+fn mv_to_repo(repo: &String) -> Result<String, Error> {
+    let repo_path = if repo == "local" {
+        dirs::home_dir()
+            .expect(&format!("{}", "Failed to get home directory".red()))
+            .join(".cache/local_repo/x86_64")
+            .to_string_lossy()
+            .to_string()
+    } else if repo == "volatile" {
+        println!("TODO: Move to volatile repo");
+        String::new()
+    } else {
+        println!("TODO: Move to unstable repo");
+        String::new()
+    };
+
+    if !repo_path.is_empty() {
+        let cwd = PathBuf::from(".");
+        let manifest_ext = "stone";
+
+        // Create repo directory if it doesn't exist
+        fs::create_dir_all(&repo_path).expect("Failed to create local repo directories");
+        match fs::read_dir(&cwd) {
+            Ok(dir) => {
+                for (_, pkg_file) in dir.enumerate() {
+                    let pkg_file = pkg_file.expect("Failed to get package file to move");
+                    let path = pkg_file.path();
+
+                    if path.is_file()
+                        && let Some(ext) = path.extension().and_then(|ext| ext.to_str())
+                    {
+                        if ext == manifest_ext {
+                            let file_name = path
+                                .file_name()
+                                .ok_or("Invalid package file name")
+                                .expect("Failed to get package file name");
+                            let dest_path = PathBuf::from(&repo_path).join(file_name);
+
+                            println!(
+                                "{} {} {} {}\n",
+                                "Moving".blue(),
+                                &path.to_string_lossy().to_string().blue().italic().bold(),
+                                "to".blue(),
+                                &dest_path.to_string_lossy().to_string().blue().italic().bold()
+                            );
+                            match fs::rename(&path, &dest_path) {
+                                Ok(_) => {
+                                    println!(
+                                        "{} {} {} {}\n",
+                                        "Successfully moved".green(),
+                                        &path.to_string_lossy().to_string().green().italic().bold(),
+                                        "to".green(),
+                                        &dest_path.to_string_lossy().to_string().green().italic().bold()
+                                    );
+                                    return Ok(repo_path.to_string());
+                                }
+                                Err(e) => {
+                                    eprintln!(
+                                        "{}",
+                                        &format!(
+                                            "{} {} {} {} {} {}",
+                                            "Failed to move".red(),
+                                            &path.to_string_lossy().to_string().red(),
+                                            "to".red(),
+                                            &dest_path.to_string_lossy().to_string().red(),
+                                            ":".red(),
+                                            e.to_string().red()
+                                        )
+                                    );
+                                    return Err(Error::Io(e));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                eprintln!("Failed to read directory: {e}");
+                return Err(Error::Io(e));
+            }
+        }
+    }
+
+    Ok(String::new())
+}
+
+fn re_index_repo(repo: &str) -> Result<(), Error> {
+    use std::process::{Command as Cmd, Stdio};
+
+    let mut moss_cmd = Cmd::new("moss")
+        .args(["index", repo])
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()?;
+
+    let _index_status = moss_cmd.wait()?;
+
+    Ok(())
+}
+
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("build")]
@@ -174,4 +368,6 @@ pub enum Error {
     Recipe(#[from] recipe::Error),
     #[error("io error")]
     Io(#[from] std::io::Error),
+    #[error("reindex")]
+    Reindex(String),
 }
