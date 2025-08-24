@@ -55,11 +55,19 @@ pub struct Global {
     #[arg(
         long,
         require_equals = true,
-        value_parser = clap::builder::PossibleValuesParser::new(["local", "unstable", "volatile"]
-        ),
+        value_parser = clap::builder::PossibleValuesParser::new(["local", "unstable", "volatile"]),
+        global = true,
         help = "Move newly built .stone package files to the given repo"
     )]
     pub mv_to_repo: Option<String>,
+    #[arg(
+        long,
+        default_value_t = false,
+        requires = "mv-to-repo",
+        global = true,
+        help = "Auto re-index the repo after a successful build and move"
+    )]
+    pub re_index: bool,
 }
 
 #[derive(Debug, clap::Subcommand)]
@@ -148,9 +156,26 @@ pub fn process() -> Result<(), Error> {
             match build::handle(command, env) {
                 Ok(_) => {
                     if let Some(repo) = global.mv_to_repo {
-                        if let Err(err) = mv_to_repo(&repo) {
-                            eprintln!("{} {}", "Error:".red(), err.to_string().red());
-                            return Err(err);
+                        match mv_to_repo(&repo) {
+                            Ok(repo) => {
+                                if global.re_index && !repo.is_empty() {
+                                    if let Err(err) = re_index_repo(&repo) {
+                                        eprintln!("{} {}", "Error:".red(), err.to_string().red());
+                                        return Err(err);
+                                    }
+                                } else {
+                                    eprintln!("{}", "Error: Cannot re-index, returned repo name was empty!".red());
+                                    return Err(Error::Reindex(
+                                        "Cannot re-index, move operation returned an invalid repo name"
+                                            .red()
+                                            .to_string(),
+                                    ));
+                                }
+                            }
+                            Err(err) => {
+                                eprintln!("{} {}", "Error:".red(), err.to_string().red());
+                                return Err(err);
+                            }
                         }
                     }
                 }
@@ -174,9 +199,23 @@ pub fn process() -> Result<(), Error> {
             recipe::handle(command, env)?;
 
             if let Some(repo) = global.mv_to_repo {
-                if let Err(err) = mv_to_repo(&repo) {
-                    eprintln!("{} {}", "Error:".red(), err.to_string().red());
-                    return Err(err);
+                match mv_to_repo(&repo) {
+                    Ok(repo) => {
+                        if global.re_index {
+                            if let Err(err) = re_index_repo(&repo) {
+                                eprintln!("{} {}", "Error:".red(), err.to_string().red());
+                                return Err(Error::Reindex(
+                                    "Cannot re-index, move operation returned an invalid repo name"
+                                        .red()
+                                        .to_string(),
+                                ));
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        eprintln!("{} {}", "Error:".red(), err.to_string().red());
+                        return Err(err);
+                    }
                 }
             }
         }
@@ -216,7 +255,7 @@ fn replace_aliases(args: std::env::Args) -> Vec<String> {
     args
 }
 
-fn mv_to_repo(repo: &String) -> Result<(), Error> {
+fn mv_to_repo(repo: &String) -> Result<String, Error> {
     let repo_path = if repo == "local" {
         dirs::home_dir()
             .expect(&format!("{}", "Failed to get home directory".red()))
@@ -239,7 +278,7 @@ fn mv_to_repo(repo: &String) -> Result<(), Error> {
         fs::create_dir_all(&repo_path).expect("Failed to create local repo directories");
         match fs::read_dir(&cwd) {
             Ok(dir) => {
-                for pkg_file in dir {
+                for (_, pkg_file) in dir.enumerate() {
                     let pkg_file = pkg_file.expect("Failed to get package file to move");
                     let path = pkg_file.path();
 
@@ -253,11 +292,23 @@ fn mv_to_repo(repo: &String) -> Result<(), Error> {
                                 .expect("Failed to get package file name");
                             let dest_path = PathBuf::from(&repo_path).join(file_name);
 
-                            println!("Moving {:?} to {:?}", &path, &dest_path);
+                            println!(
+                                "{} {} {} {}\n",
+                                "Moving".blue(),
+                                &path.to_string_lossy().to_string().blue().italic().bold(),
+                                "to".blue(),
+                                &dest_path.to_string_lossy().to_string().blue().italic().bold()
+                            );
                             match fs::rename(&path, &dest_path) {
                                 Ok(_) => {
-                                    println!("Successfully moved {:?} to {:?}", &path, &dest_path);
-                                    return Ok(());
+                                    println!(
+                                        "{} {} {} {}\n",
+                                        "Successfully moved".green(),
+                                        &path.to_string_lossy().to_string().green().italic().bold(),
+                                        "to".green(),
+                                        &dest_path.to_string_lossy().to_string().green().italic().bold()
+                                    );
+                                    return Ok(repo_path.to_string());
                                 }
                                 Err(e) => {
                                     eprintln!(
@@ -286,6 +337,20 @@ fn mv_to_repo(repo: &String) -> Result<(), Error> {
         }
     }
 
+    Ok(String::new())
+}
+
+fn re_index_repo(repo: &str) -> Result<(), Error> {
+    use std::process::{Command as Cmd, Stdio};
+
+    let mut moss_cmd = Cmd::new("moss")
+        .args(["index", repo])
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()?;
+
+    let _index_status = moss_cmd.wait()?;
+
     Ok(())
 }
 
@@ -303,4 +368,6 @@ pub enum Error {
     Recipe(#[from] recipe::Error),
     #[error("io error")]
     Io(#[from] std::io::Error),
+    #[error("reindex")]
+    Reindex(String),
 }
