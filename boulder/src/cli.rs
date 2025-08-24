@@ -12,6 +12,7 @@ use clap_complete::{
 use clap_mangen::Man;
 use fs_err::{self as fs, File};
 use thiserror::Error;
+use tui::Styled;
 
 mod build;
 mod chroot;
@@ -118,7 +119,12 @@ pub fn process() -> Result<(), Error> {
         match subcommand {
             Some(Subcommand::Build(_)) | Some(Subcommand::Recipe(_)) => {}
             _ => {
-                eprintln!("The `--mv-to-repo` flag must be used with either the build or recipe subcommand");
+                eprintln!(
+                    "{}",
+                    "The `--mv-to-repo` flag must be used with either the build or recipe subcommand"
+                        .red()
+                        .to_string()
+                );
                 std::process::exit(1);
             }
         }
@@ -143,12 +149,16 @@ pub fn process() -> Result<(), Error> {
                 Ok(_) => {
                     if let Some(repo) = global.mv_to_repo {
                         if let Err(err) = mv_to_repo(&repo) {
-                            eprintln!("Error: {err}");
+                            eprintln!("{} {}", "Error:".red(), err.to_string().red());
                             return Err(err);
                         }
                     }
                 }
-                Err(e) => return Err(Error::Build(e)),
+                Err(e) => {
+                    let err_str = e.to_string().red();
+                    eprintln!("{err_str}");
+                    return Err(Error::Build(e));
+                }
             };
         }
         Some(Subcommand::Chroot(command)) => chroot::handle(command, env)?,
@@ -162,6 +172,13 @@ pub fn process() -> Result<(), Error> {
                 std::process::exit(1);
             }
             recipe::handle(command, env)?;
+
+            if let Some(repo) = global.mv_to_repo {
+                if let Err(err) = mv_to_repo(&repo) {
+                    eprintln!("{} {}", "Error:".red(), err.to_string().red());
+                    return Err(err);
+                }
+            }
         }
         Some(Subcommand::Version(command)) => version::handle(command),
         None => (),
@@ -202,7 +219,7 @@ fn replace_aliases(args: std::env::Args) -> Vec<String> {
 fn mv_to_repo(repo: &String) -> Result<(), Error> {
     let repo_path = if repo == "local" {
         dirs::home_dir()
-            .expect("Failed to get home directory")
+            .expect(&format!("{}", "Failed to get home directory".red()))
             .join(".cache/local_repo/x86_64")
             .to_string_lossy()
             .to_string()
@@ -239,11 +256,22 @@ fn mv_to_repo(repo: &String) -> Result<(), Error> {
                             println!("Moving {:?} to {:?}", &path, &dest_path);
                             match fs::rename(&path, &dest_path) {
                                 Ok(_) => {
-                                    println!("Successfully move {:?} to {:?}", &path, &dest_path);
+                                    println!("Successfully moved {:?} to {:?}", &path, &dest_path);
                                     return Ok(());
                                 }
                                 Err(e) => {
-                                    eprintln!("Failed to move {:?} to {:?}: {e}", &path, &dest_path);
+                                    eprintln!(
+                                        "{}",
+                                        &format!(
+                                            "{} {} {} {} {} {}",
+                                            "Failed to move".red(),
+                                            &path.to_string_lossy().to_string().red(),
+                                            "to".red(),
+                                            &dest_path.to_string_lossy().to_string().red(),
+                                            ":".red(),
+                                            e.to_string().red()
+                                        )
+                                    );
                                     return Err(Error::Io(e));
                                 }
                             }

@@ -129,45 +129,25 @@ pub fn handle(command: Command, env: Env) -> Result<(), Error> {
     if command.build
         && let Ok(_) = run_cmd
     {
-        use std::io::{BufRead, BufReader};
         use std::process::{Command as Cmd, Stdio};
 
         let mut boulder_build = Cmd::new("boulder")
             .args(["build", "-u", "stone.yaml"])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
             .spawn()
             .expect("Failed to run boulder build command!");
 
-        let build_stdout = boulder_build.stdout.take().expect("Failed to get build process stdout");
-        let build_reader = BufReader::new(build_stdout);
-
-        let build_stderr = boulder_build.stderr.take().expect("Failed to get build process stderr");
-
-        // Stream the build process output
-        build_reader.lines().for_each(|line| {
-            if let Ok(stdout) = line {
-                println!("{stdout}");
-            }
-        });
-
         let status = boulder_build
             .wait()
-            .expect("boulder build command failed to wait to complete");
+            .expect(&format!("{}", "boulder build command failed to wait to complete".red()));
 
         if !status.success() {
-            let err_reader = BufReader::new(build_stderr);
-            let mut err_str = String::new();
-            err_reader.lines().for_each(|err_line| {
-                if let Ok(err) = err_line {
-                    eprintln!("{err}");
-                    err_str = format!("{err_str}\n{err}");
-                }
-            });
-
+            let err_str = "Failed to build package".red().to_string();
             return Err(Error::BuildErr(err_str));
         } else {
-            println!("Successfully built package!");
+            let success_msg = "Successfully updated and built package!".green().to_string();
+            println!("{success_msg}");
         }
     }
 
@@ -217,7 +197,7 @@ fn new(output: PathBuf, upstreams: Vec<Url>) -> Result<(), Error> {
     fs::write(PathBuf::from(&output).join(RECIPE_FILE), draft.stone).map_err(Error::Write)?;
     fs::write(PathBuf::from(&output).join(MONITORING_FILE), draft.monitoring).map_err(Error::Write)?;
 
-    println!("Saved {RECIPE_FILE} & {MONITORING_FILE} to {output:?}");
+    println!("{}", "Saved {RECIPE_FILE} & {MONITORING_FILE} to {output:?}".green());
 
     Ok(())
 }
@@ -334,9 +314,9 @@ fn update(
     if overwrite {
         let recipe = recipe.expect("checked above");
         fs::write(&recipe, updated.as_bytes()).map_err(Error::Write)?;
-        println!("{} updated", recipe.display());
+        println!("{} {}", recipe.display().to_string().green(), "updated".green());
     } else {
-        print!("{updated}");
+        print!("{}", updated.green());
     }
 
     Ok(())
