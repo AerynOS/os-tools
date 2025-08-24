@@ -19,17 +19,18 @@ use tokio::io::AsyncWriteExt;
 use tui::{MultiProgress, ProgressBar, ProgressStyle, Styled};
 use url::Url;
 
-use crate::{Paths, Recipe, util};
+use crate::{Paths, Recipe, build::git, util};
 
-/// Cache all upstreams from the provided [`Recipe`] and make them available
-/// in the guest rootfs.
+/// Cache all upstreams from the provided [`Recipe`], make them available
+/// in the guest rootfs, and update the stone.yaml with resolved git upstream hashes.
 pub fn sync(recipe: &Recipe, paths: &Paths) -> Result<(), Error> {
     let upstreams = recipe
         .parsed
         .upstreams
         .iter()
         .cloned()
-        .map(Upstream::from_recipe)
+        .enumerate()
+        .map(|(index, upstream)| Upstream::from_recipe(upstream, index))
         .collect::<Result<Vec<_>, _>>()?;
 
     println!();
@@ -48,7 +49,7 @@ pub fn sync(recipe: &Recipe, paths: &Paths) -> Result<(), Error> {
     let upstream_dir = paths.guest_host_path(&paths.upstreams());
     util::ensure_dir_exists(&upstream_dir)?;
 
-    runtime::block_on(
+    let installed_upstreams = runtime::block_on(
         stream::iter(&upstreams)
             .map(|upstream| async {
                 let pb = mp.insert_before(
@@ -87,11 +88,19 @@ pub fn sync(recipe: &Recipe, paths: &Paths) -> Result<(), Error> {
                 mp.suspend(|| println!("{} {}{cached_tag}", "Shared".green(), upstream.name().bold()));
                 tp.inc(1);
 
-                Ok(()) as Result<_, Error>
+                Ok(install) as Result<_, Error>
             })
             .buffer_unordered(moss::environment::MAX_NETWORK_CONCURRENCY)
-            .try_collect::<()>(),
+            .try_collect::<Vec<_>>(),
     )?;
+
+    if let Some(updated_yaml) = git::update_git_upstream_refs(&recipe.source, &installed_upstreams)? {
+        fs::write(&recipe.path, updated_yaml)?;
+        println!(
+            "{} | Git references resolved to commit hashes and saved to stone.yaml. This ensures reproducible builds since tags and branches can move over time.",
+            "Warning".yellow()
+        );
+    }
 
     mp.clear()?;
     println!();
@@ -100,7 +109,7 @@ pub fn sync(recipe: &Recipe, paths: &Paths) -> Result<(), Error> {
 }
 
 #[derive(Clone)]
-enum Installed {
+pub(crate) enum Installed {
     Plain {
         name: String,
         path: PathBuf,
@@ -110,6 +119,10 @@ enum Installed {
         name: String,
         path: PathBuf,
         was_cached: bool,
+        uri: Url,
+        original_ref: String,
+        resolved_hash: String,
+        original_index: usize,
     },
 }
 
@@ -151,7 +164,7 @@ pub enum Upstream {
 }
 
 impl Upstream {
-    pub fn from_recipe(upstream: stone_recipe::Upstream) -> Result<Self, Error> {
+    pub fn from_recipe(upstream: stone_recipe::Upstream, original_index: usize) -> Result<Self, Error> {
         match upstream {
             stone_recipe::Upstream::Plain { uri, hash, rename, .. } => Ok(Self::Plain(Plain {
                 uri,
@@ -160,7 +173,12 @@ impl Upstream {
             })),
             stone_recipe::Upstream::Git {
                 uri, ref_id, staging, ..
-            } => Ok(Self::Git(Git { uri, ref_id, staging })),
+            } => Ok(Self::Git(Git {
+                uri,
+                ref_id,
+                staging,
+                original_index,
+            })),
         }
     }
 
@@ -305,6 +323,7 @@ pub struct Git {
     uri: Url,
     ref_id: String,
     staging: bool,
+    original_index: usize,
 }
 
 impl Git {
@@ -357,10 +376,21 @@ impl Git {
 
         if self.ref_exists(&final_path).await? {
             self.reset_to_ref(&final_path).await?;
+            let resolved_hash = runtime::unblock({
+                let final_path = final_path.clone();
+                let ref_id = self.ref_id.clone();
+                let uri = self.uri.clone();
+                move || git::resolve_git_ref(&final_path, &ref_id, &uri)
+            })
+            .await?;
             return Ok(Installed::Git {
                 name: self.name().to_owned(),
                 path: final_path,
                 was_cached: true,
+                uri: self.uri.clone(),
+                original_ref: self.ref_id.clone(),
+                resolved_hash,
+                original_index: self.original_index,
             });
         }
 
@@ -384,10 +414,22 @@ impl Git {
 
         self.reset_to_ref(&final_path).await?;
 
+        let resolved_hash = runtime::unblock({
+            let final_path = final_path.clone();
+            let ref_id = self.ref_id.clone();
+            let uri = self.uri.clone();
+            move || git::resolve_git_ref(&final_path, &ref_id, &uri)
+        })
+        .await?;
+
         Ok(Installed::Git {
             name: self.name().to_owned(),
             path: final_path,
             was_cached: false,
+            uri: self.uri.clone(),
+            original_ref: self.ref_id.clone(),
+            resolved_hash,
+            original_index: self.original_index,
         })
     }
 
@@ -460,4 +502,6 @@ pub enum Error {
     Request(#[from] moss::request::Error),
     #[error("io")]
     Io(#[from] io::Error),
+    #[error("git")]
+    Git(#[from] git::GitError),
 }

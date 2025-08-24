@@ -12,8 +12,7 @@ use clap_complete::{
 use clap_mangen::Man;
 use moss::{Installation, installation, runtime};
 use thiserror::Error;
-use tracing::level_filters::LevelFilter;
-use tracing_subscriber::{layer::SubscriberExt as _, util::SubscriberInitExt as _};
+use tracing_common::{self, logging::LogConfig, logging::init_log_with_config};
 
 mod boot;
 mod extract;
@@ -69,10 +68,12 @@ fn command() -> Command {
                 .value_parser(clap::value_parser!(PathBuf)),
         )
         .arg(
-            Arg::new("debug")
-                .long("debug")
-                .help("Enable debug logging")
-                .action(ArgAction::SetTrue),
+            Arg::new("log")
+                .long("log")
+                .help("Logging configuration: <level>[:<format>][:<destination>]\nLevels: trace, debug, info, warn, error\nFormats: text, json\nDestinations: stderr, <file>")
+                .action(ArgAction::Set)
+                .global(true)
+                .value_parser(clap::value_parser!(LogConfig)),
         )
         .arg(
             Arg::new("yes")
@@ -160,21 +161,8 @@ pub fn process() -> Result<(), Error> {
         println!("moss {}", tools_buildinfo::get_full_version());
     }
 
-    let debug = matches.get_flag("debug");
-    if debug {
-        tracing_subscriber::registry()
-            .with(
-                tracing_subscriber::filter::Targets::new()
-                    .with_default(LevelFilter::DEBUG)
-                    // these log a lot of stuff when downloading.
-                    // it's very rare to need to debug HTTP issues, and then it might often be more
-                    // helpful to set up tcpdump or wireshark anyways.
-                    .with_target("h2", LevelFilter::INFO)
-                    .with_target("hyper", LevelFilter::INFO)
-                    .with_target("hyper_util", LevelFilter::INFO),
-            )
-            .with(tracing_subscriber::fmt::layer())
-            .init();
+    if let Some(log_config) = matches.get_one::<LogConfig>("log") {
+        init_log_with_config(log_config.clone());
     }
 
     if let Some(dir) = matches.get_one::<String>("generate-manpages") {
@@ -221,7 +209,7 @@ pub fn process() -> Result<(), Error> {
         Some(("search", args)) => search::handle(args, installation).map_err(Error::Search),
         Some(("search-file", args)) => search_file::handle(args, installation).map_err(Error::SearchFile),
         Some(("state", args)) => state::handle(args, installation).map_err(Error::State),
-        Some(("sync", args)) => sync::handle(args, installation, debug).map_err(Error::Sync),
+        Some(("sync", args)) => sync::handle(args, installation).map_err(Error::Sync),
         Some(("version", args)) => {
             version::handle(args);
             Ok(())

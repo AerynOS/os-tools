@@ -73,7 +73,7 @@ mod test {
 
     #[test]
     fn test_normalization() {
-        assert_eq!(pep_503_normalize(&"PyThOn-_-foo".to_owned()).unwrap(), "python-foo");
-        assert_eq!(pep_503_normalize(&"PyThOn.-f-oo".to_owned()).unwrap(), "python-f-oo");
+        assert_eq!(pep_503_normalize("PyThOn-_-foo").unwrap(), "python-foo");
+        assert_eq!(pep_503_normalize("PyThOn.-f-oo").unwrap(), "python-f-oo");
     }
 }
