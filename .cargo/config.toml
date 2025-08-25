@@ -1,0 +1,19 @@
+[target."x86_64-unknown-linux-gnu"]
+# - Compressing debug symbols with zstd shrinks the dev profile boulder binary from 206.03MB to 81.44MB, a 124.59MB
+# or ~60% savings. It doesn't affect the binary size for packaging builds since we strip those, but the debug symbols
+# are reduced in size from 113.16MB to 34.63MB.
+# - The new symbol mangling format (https://doc.rust-lang.org/rustc/symbol-mangling/v0.html) improves the backtrace
+# shown by RUST_BACKTRACE=1 and other debug utilities. It should also be helpful once we have ABI reports. Upstream
+# hasn't switched to it yet by default due to stable distros not having new enough tools, but that doesn't matter for us
+rustflags = [
+    "-Clink-arg=-fuse-ld=mold",
+    "-Clink-arg=-Wl,--compress-debug-sections=zstd",
+    "-Csymbol-mangling-version=v0",
+]
+
+[target."aarch64-unknown-linux-gnu"]
+rustflags = [
+    "-Clink-arg=-fuse-ld=mold",
+    "-Clink-arg=-Wl,--compress-debug-sections=zstd",
+    "-Csymbol-mangling-version=v0",
+]
