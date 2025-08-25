@@ -19,6 +19,10 @@ help:
 build package:
   cargo build --profile {{build-mode}} -p {{package}}
 
+[private]
+licenses:
+    bash licenses.sh
+
 # Compile boulder
 boulder: (build "boulder")
 
@@ -26,15 +30,16 @@ boulder: (build "boulder")
 moss: (build "moss")
 
 # Onboarding replacement
-get-started: (build "boulder") (build "moss")
+get-started: (build "boulder") (build "moss") (licenses)
   @echo ""
   @echo "Installing boulder and moss to {{xdg-bin-home}}/ ..."
   @mkdir -p "{{xdg-bin-home}}/"
   @cp "{{root-dir}}/target/{{build-mode}}"/boulder "{{xdg-bin-home}}/"
   @cp "{{root-dir}}/target/{{build-mode}}"/moss "{{xdg-bin-home}}/"
   @rm -rf "{{xdg-data-home}}/boulder"
-  @mkdir -p "{{xdg-data-home}}/boulder/"
+  @mkdir -p "{{xdg-data-home}}/boulder/licenses"
   @cp -R "{{root-dir}}/boulder/data"/* "{{xdg-data-home}}/boulder/"
+  @cp "{{root-dir}}/license-list-data/text"/* "{{xdg-data-home}}/boulder/licenses"
   @echo ""
   @echo "Listing installed files..."
   @ls -hlF "{{xdg-bin-home}}"/boulder "{{xdg-bin-home}}"/moss "{{xdg-data-home}}/boulder"
