@@ -9,7 +9,8 @@ use clap::{ArgAction, ArgMatches, Command, arg};
 use moss::{
     Installation, State,
     client::{self, Client, prune},
-    environment, package,
+    environment,
+    package::{self, Id},
     state::Selection,
 };
 use thiserror::Error;
@@ -223,6 +224,7 @@ fn print_state_selections(state: State, client: &Client) {
         .filter_map(|s| {
             client.registry.by_id(&s.package).next().map(|pkg| Format {
                 name: pkg.meta.name.to_string(),
+                id: pkg.id,
                 revision: Revision {
                     version: pkg.meta.version_identifier,
                     release: pkg.meta.source_release,
@@ -255,33 +257,48 @@ fn print_diff_selections(state_a: State, client: &Client, state_b: State) {
     let selections_to_map = |s: Selection| {
         client.registry.by_id(&s.package).next().map(|pkg| {
             let name = pkg.meta.name.to_string();
-            let revision = Revision {
-                version: pkg.meta.version_identifier,
-                release: pkg.meta.source_release,
+            let format = Format {
+                name: name.clone(),
+                id: pkg.id,
+                revision: Revision {
+                    version: pkg.meta.version_identifier,
+                    release: pkg.meta.source_release,
+                },
+                explicit: s.explicit,
             };
-            (name, (revision, s.explicit))
+            (name, format)
         })
     };
 
-    let pkgs_a: HashMap<String, (Revision, bool)> =
-        state_a.selections.into_iter().filter_map(selections_to_map).collect();
+    let pkgs_a: HashMap<String, Format> = state_a.selections.into_iter().filter_map(selections_to_map).collect();
+    let pkgs_b: HashMap<String, Format> = state_b.selections.into_iter().filter_map(selections_to_map).collect();
 
-    let pkgs_b: HashMap<String, (Revision, bool)> =
-        state_b.selections.into_iter().filter_map(selections_to_map).collect();
+    let mut all_names = pkgs_a.keys().collect::<Vec<_>>();
+    all_names.extend(pkgs_b.keys().collect::<Vec<_>>());
 
-    // Get the union of all package names from both states
-    let mut all_names: std::collections::HashSet<_> = pkgs_a.keys().cloned().collect();
-    all_names.extend(pkgs_b.keys().cloned());
-    let mut sorted_names: Vec<_> = all_names.into_iter().collect();
-    sorted_names.sort();
+    let max_length = all_names
+        .iter()
+        .map(|s| {
+            std::cmp::max(
+                pkgs_a.get(s.to_owned()).map(|e| e.size()).unwrap_or_default(),
+                pkgs_b.get(s.to_owned()).map(|e| e.size()).unwrap_or_default(),
+            )
+        })
+        .max()
+        .unwrap_or_default()
+        + 2;
 
-    let max_length = sorted_names.iter().map(|s| s.len()).max().unwrap_or_default() + 2;
     print_selections_header(state_a.id.into(), state_b.id.into(), max_length);
 
     // Iterate through all unique package names and print the differences
-    for name in sorted_names {
-        let width = max_length - name.len();
-        let explicit = pkgs_a.get(&name).is_some_and(|(_, e)| *e) || pkgs_b.get(&name).is_some_and(|(_, e)| *e);
+    for name in all_names {
+        let width = max_length
+            - std::cmp::max(
+                pkgs_a.get(&name.to_owned()).map(|e| e.size()).unwrap_or_default(),
+                pkgs_b.get(&name.to_owned()).map(|e| e.size()).unwrap_or_default(),
+            );
+        let explicit = pkgs_a.get(&name.to_owned()).is_some_and(|e| e.explicit)
+            || pkgs_b.get(&name.to_owned()).is_some_and(|e| e.explicit);
         let name_styled = if explicit {
             name.clone().bold()
         } else {
@@ -296,55 +313,51 @@ fn print_diff_selections(state_a: State, client: &Client, state_b: State) {
             .map(|r| r.meta.source_release)
             .unwrap_or(0);
 
-        match (pkgs_a.get(&name), pkgs_b.get(&name)) {
+        match (pkgs_a.get(&name.to_owned()), pkgs_b.get(&name.to_owned())) {
             // Case 1: Package is in both states. Check if it was modified.
-            (Some((rev_a, _)), Some((rev_b, _))) => {
-                if rev_a.release != rev_b.release || rev_a.version != rev_b.version {
+            (Some(a), Some(b)) => {
+                if a.id != b.id {
                     print!("{name_styled} {:width$} ", " ");
-                    let comparison = if rev_a.release > rev_b.release {
+                    let comparison = if a.revision.release > b.revision.release {
                         ComparisonResult::Greater
-                    } else if rev_a.release < rev_b.release {
+                    } else if a.revision.release < b.revision.release {
                         ComparisonResult::Less
                     } else {
                         ComparisonResult::Equal
                     };
 
-                    let status = match (latest_release == rev_a.release, latest_release == rev_b.release) {
+                    let status = match (
+                        latest_release == a.revision.release,
+                        latest_release == b.revision.release,
+                    ) {
                         (true, false) => VersionStatus::Latest,
                         (false, true) => VersionStatus::Other,
                         (true, true) => VersionStatus::Equal,
                         _ => VersionStatus::Outdated,
                     };
 
-                    format_version_comparison(
-                        &rev_a.version,
-                        rev_a.release,
-                        &rev_b.version,
-                        rev_b.release,
-                        comparison,
-                        status,
-                    );
+                    format_version_comparison(a.revision.clone(), b.revision.clone(), comparison, status);
                     println!();
                 }
             }
             // Case 2: Package in A, not in B
-            (Some((rev_a, _)), None) => {
+            (Some(a), None) => {
                 print!("{name_styled} {:width$} ", " ");
                 println!(
                     "{}-{}   {}",
-                    rev_a.version.clone().magenta(),
-                    rev_a.release.to_string().dim(),
+                    a.revision.version.clone().magenta(),
+                    a.revision.release.to_string().dim(),
                     "(n/a)".dim()
                 );
             }
             // Case 3: Package in B, not in A
-            (None, Some((rev_b, _))) => {
+            (None, Some(b)) => {
                 print!("{name_styled} {:width$} ", " ");
                 println!(
-                    "{}   {}-{}",
-                    "(n/a)".dim(),
-                    rev_b.version.clone().magenta(),
-                    rev_b.release.to_string().dim()
+                    "{}-{}   {}",
+                    b.revision.version.clone().magenta(),
+                    b.revision.release.to_string().dim(),
+                    "(n/a)".dim()
                 );
             }
             (None, None) => unreachable!(),
@@ -381,25 +394,39 @@ fn get_version_colors(status: VersionStatus) -> (&'static str, &'static str) {
 }
 
 fn format_version_comparison(
-    current_version: &str,
-    current_release: u64,
-    other_version: &str,
-    other_release: u64,
+    current_rev: Revision,
+    other_rev: Revision,
     comparison: ComparisonResult,
     status: VersionStatus,
 ) {
     let (current_color, other_color) = get_version_colors(status);
 
     let current_formatted = match current_color {
-        "green" => format!("{}-{}", current_version.green(), current_release.to_string().dim()),
-        "yellow" => format!("{}-{}", current_version.yellow(), current_release.to_string().dim()),
-        _ => format!("{}-{}", current_version.magenta(), current_release.to_string().dim()),
+        "green" => format!(
+            "{}-{}",
+            current_rev.version.green(),
+            current_rev.release.to_string().dim()
+        ),
+        "yellow" => format!(
+            "{}-{}",
+            current_rev.version.yellow(),
+            current_rev.release.to_string().dim()
+        ),
+        _ => format!(
+            "{}-{}",
+            current_rev.version.magenta(),
+            current_rev.release.to_string().dim()
+        ),
     };
 
     let other_formatted = match other_color {
-        "green" => format!("{}-{}", other_version.green(), other_release.to_string().dim()),
-        "yellow" => format!("{}-{}", other_version.yellow(), other_release.to_string().dim()),
-        _ => format!("{}-{}", other_version.magenta(), other_release.to_string().dim()),
+        "green" => format!("{}-{}", other_rev.version.green(), other_rev.release.to_string().dim()),
+        "yellow" => format!("{}-{}", other_rev.version.yellow(), other_rev.release.to_string().dim()),
+        _ => format!(
+            "{}-{}",
+            other_rev.version.magenta(),
+            other_rev.release.to_string().dim()
+        ),
     };
 
     let operator = match comparison {
@@ -429,6 +456,7 @@ enum ComparisonResult {
 #[derive(Clone, Debug)]
 struct Format {
     name: String,
+    id: Id,
     revision: Revision,
     explicit: bool,
 }
