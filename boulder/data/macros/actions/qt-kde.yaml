@@ -53,42 +53,6 @@ actions:
             }
             qt_user_facing_links
 
-    - qml_cache_qt5:
-        description: Pre-compile .qml files for Qt5 applications
-        example: |
-            %qml_cache_qt5
-        command: |
-            function generate_cache() {
-                pushd %(installroot)
-                find . -type f -name "*.qml" -print0 | while IFS= read -r -d '' i; do
-                    if ! [ -a "${i}"c ]; then
-                        qmlcachegen -o "${i}"c "${i}" $*
-                    fi
-                done
-                popd
-            }
-            generate_cache
-        dependencies:
-            - binary(qmlcachegen)
-
-    - qml_cache_qt6:
-        description: Pre-compile .qml files for Qt6 applications
-        example: |
-            %qml_cache_qt6
-        command: |
-            function generate_qt6_cache() {
-                pushd %(installroot)
-                find . -type f -name "*.qml" -print0 | while IFS= read -r -d '' i; do
-                    if ! [ -a "${i}"c ]; then
-                        qmlcachegen6 -o "${i}"c "${i}" $*
-                    fi
-                done
-                popd
-            }
-            generate_qt6_cache
-        dependencies:
-            - binary(qmlcachegen6)
-
 definitions:
     - options_qmake_qt5: |
         CONFIG+=release \
