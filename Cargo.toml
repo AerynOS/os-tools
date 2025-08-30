@@ -16,7 +16,7 @@ chrono = "0.4.38"
 clap = { version = "4.5.8", features = ["derive", "string"] }
 clap_complete = "4.5.37"
 clap_mangen = "0.2.24"
-criterion = { version = "0.6.0", features = ["html_reports"] }
+criterion = { version = "0.7.0", features = ["html_reports"] }
 crossterm = "0.29.0"
 derive_more = { version = "2.0.1", features = [
     "as_ref",
