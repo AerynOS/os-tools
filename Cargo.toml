@@ -33,7 +33,7 @@ diesel = { version = "2.2.1", features = [
 diesel_migrations = "2.2.0"
 dirs = "6.0.0"
 elf = "0.8.0"
-indicatif = "0.17.8"
+indicatif = "0.18.0"
 itertools = "0.14.0"
 filetime = "0.2.24"
 fs-err = { version = "3.1.0", features = ["tokio"] }
