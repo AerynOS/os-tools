@@ -25,7 +25,7 @@ derive_more = { version = "2.0.1", features = [
     "from",
     "into",
 ] }
-dialoguer = "0.11.0"
+dialoguer = "0.12.0"
 diesel = { version = "2.2.1", features = [
     "sqlite",
     "returning_clauses_for_sqlite_3_35",
