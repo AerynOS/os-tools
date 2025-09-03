@@ -184,7 +184,6 @@ pub fn process() -> Result<(), Error> {
                             .filter_map(|line| {
                                 if line.contains(&repo) {
                                     let mut ret_map = HashMap::new();
-                                    println!("{}: {line}", "DEBUG".yellow());
                                     let uri = line
                                         .split_whitespace()
                                         .filter(|line| line.contains("//"))
@@ -219,33 +218,26 @@ pub fn process() -> Result<(), Error> {
                         match mv_to_repo(&repo, &mv_repo) {
                             Ok(repo) => {
                                 if global.re_index && repo.is_some() {
-                                    if let Err(err) =
-                                        re_index_repo(&repo.expect(
-                                            format!("{}: Repo was supposed to be Some", "Error".red()).as_str(),
-                                        ))
-                                    {
-                                        eprintln!("{} {}", "Error:".red(), err.to_string().red());
+                                    if let Err(err) = re_index_repo(&repo.expect("Repo was supposed to be Some")) {
+                                        eprintln!("Error: {err}");
                                         return Err(err);
                                     }
                                 } else if global.re_index && repo.is_none() {
-                                    eprintln!("{}", "Error: Cannot re-index, returned repo name was empty!".red());
+                                    eprintln!("Error: Cannot re-index, returned repo name was empty!");
                                     return Err(Error::Reindex(
-                                        "Cannot re-index, move operation returned an invalid repo name"
-                                            .red()
-                                            .to_string(),
+                                        "Cannot re-index, move operation returned an invalid repo name".to_string(),
                                     ));
                                 }
                             }
                             Err(err) => {
-                                eprintln!("{} {}", "Error:".red(), err.to_string().red());
+                                eprintln!("Error: {err}");
                                 return Err(err);
                             }
                         }
                     }
                 }
                 Err(e) => {
-                    let err_str = e.to_string().red();
-                    eprintln!("{err_str}");
+                    eprintln!("{e}");
                     return Err(Error::Build(e));
                 }
             };
@@ -267,7 +259,7 @@ pub fn process() -> Result<(), Error> {
                     .output()
                     .expect("Couldn't get a list of moss repos");
 
-                let repos = String::from_utf8(moss_cmd.stdout).expect("Could get the repo list from moss");
+                let repos = String::from_utf8(moss_cmd.stdout).expect("Could not get the repo list from moss");
 
                 let mv_repo = repos
                     .lines()
@@ -286,7 +278,7 @@ pub fn process() -> Result<(), Error> {
                                         Some(uri.to_string())
                                     }
                                 })
-                                .expect("Couldn't get URI from repo string".red().to_string().as_str());
+                                .expect("Could not get URI from repo string");
 
                             let _ = ret_map.insert(&repo, Some(uri.clone()));
 
@@ -299,7 +291,7 @@ pub fn process() -> Result<(), Error> {
                     .unwrap_or_else(|| HashMap::new());
 
                 if mv_repo.get(&repo).is_none() {
-                    eprintln!("{} {}", &repo, "is not a valid repo registered with moss");
+                    eprintln!("{} is not a valid repo registered with moss", &repo);
                     return Err(Error::Build(build::Error::Build(boulder::build::Error::InvalidRepo)));
                 }
 
@@ -309,27 +301,23 @@ pub fn process() -> Result<(), Error> {
                     Ok(repo) => {
                         // Ok to re-index as there is a value use
                         if global.re_index && repo.is_some() {
-                            if let Err(err) = re_index_repo(&repo.clone().expect(
-                                format!("{}: Returned repo should've been Some", "Error".red().to_string()).as_str(),
-                            )) {
-                                eprintln!("{} {}", "Error:".red(), err.to_string().red());
+                            if let Err(err) =
+                                re_index_repo(&repo.clone().expect("Error: Returned repo should've been Some"))
+                            {
+                                eprintln!("Error {err}");
                                 return Err(Error::Reindex(
-                                    "Cannot re-index, move operation returned an invalid repo name"
-                                        .red()
-                                        .to_string(),
+                                    "Cannot re-index, move operation returned an invalid repo name".to_string(),
                                 ));
                             }
                         } else if global.re_index && repo.is_none() {
-                            eprintln!("{}", "Error: Cannot re-index, returned repo name was empty!".red());
+                            eprintln!("Error: Cannot re-index, returned repo name was empty!");
                             return Err(Error::Reindex(
-                                "Cannot re-index, move operation returned an invalid repo name"
-                                    .red()
-                                    .to_string(),
+                                "Cannot re-index, move operation returned an invalid repo name".to_string(),
                             ));
                         }
                     }
                     Err(err) => {
-                        eprintln!("{} {}", "Error:".red(), err.to_string().red());
+                        eprintln!("Error: {err}");
                         return Err(err);
                     }
                 }
@@ -385,8 +373,6 @@ fn mv_to_repo(repo_key: &String, repo_map: &HashMap<&String, Option<String>>) ->
             repo_path.to_string().replacen("stone.index", "", 1)
         });
 
-        println!("{}: {repo_path:?}", "Debug".yellow());
-
         // Create repo directory if it doesn't exist
         if !repo_path.exists() {
             fs::create_dir_all(&repo_path).expect("Failed to create {repo_key} repo directories");
@@ -409,34 +395,23 @@ fn mv_to_repo(repo_key: &String, repo_map: &HashMap<&String, Option<String>>) ->
                             let dest_path = PathBuf::from(&repo_path).join(file_name);
 
                             println!(
-                                "{} {} {} {}\n",
-                                "Moving".blue(),
-                                &path.to_string_lossy().to_string().blue().italic().bold(),
-                                "to".blue(),
-                                &dest_path.to_string_lossy().to_string().blue().italic().bold()
+                                "Moving {} to {}",
+                                &path.to_string_lossy().to_string(),
+                                &dest_path.to_string_lossy().to_string()
                             );
                             match fs::rename(&path, &dest_path) {
                                 Ok(_) => {
                                     println!(
-                                        "{} {} {} {}\n",
-                                        "Successfully moved".green(),
-                                        &path.to_string_lossy().to_string().green().italic().bold(),
-                                        "to".green(),
-                                        &dest_path.to_string_lossy().to_string().green().italic().bold()
+                                        "Successfully moved {} to {}",
+                                        &path.to_string_lossy().to_string(),
+                                        &dest_path.to_string_lossy().to_string()
                                     );
                                 }
                                 Err(e) => {
                                     eprintln!(
-                                        "{}",
-                                        &format!(
-                                            "{} {} {} {} {} {}",
-                                            "Failed to move".red(),
-                                            &path.to_string_lossy().to_string().red(),
-                                            "to".red(),
-                                            &dest_path.to_string_lossy().to_string().red(),
-                                            ":".red(),
-                                            e.to_string().red()
-                                        )
+                                        "Failed to move {} to {}: {e}",
+                                        &path.to_string_lossy().to_string(),
+                                        &dest_path.to_string_lossy().to_string(),
                                     );
                                 }
                             }
@@ -458,7 +433,7 @@ fn mv_to_repo(repo_key: &String, repo_map: &HashMap<&String, Option<String>>) ->
     } else {
         Err(Error::Io(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            format!("{}: {repo_key} doesn't have a valid path", "Error".red()).as_str(),
+            format!("Error: {repo_key} doesn't have a valid path").as_str(),
         )))
     }
 }

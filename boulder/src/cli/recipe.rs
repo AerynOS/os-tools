@@ -91,19 +91,6 @@ pub enum Subcommand {
         overwrite: bool,
         #[arg(long, default_value = "false", help = "Don't increment the release number")]
         no_bump: bool,
-        #[arg(
-            long,
-            default_value = "false",
-            help = "Build the package after a successful stone.yaml update."
-        )]
-        build: bool,
-        #[arg(
-            long,
-            default_value = "false",
-            requires = "build",
-            help = "Move successfully built package to local repository for testing."
-        )]
-        local: bool,
     },
     #[command(about = "Print macro definitions")]
     Macros {
@@ -135,9 +122,7 @@ pub fn handle(command: Command, env: Env) -> Result<(), Error> {
             version,
             upstreams,
             no_bump,
-            build,
-            local,
-        } => update(recipe, overwrite, version, upstreams, no_bump, build, local),
+        } => update(recipe, overwrite, version, upstreams, no_bump),
         Subcommand::Macros { _macro } => macros(_macro, env),
     };
 
@@ -223,8 +208,6 @@ fn update(
     version: String,
     upstreams: Vec<Upstream>,
     no_bump: bool,
-    build: bool,
-    local: bool,
 ) -> Result<(), Error> {
     if overwrite && recipe.is_none() {
         return Err(Error::OverwriteRecipeRequired);
@@ -334,129 +317,6 @@ fn update(
         println!("{} {}", recipe.display().to_string().green(), "updated".green());
     } else {
         print!("{}", updated.green());
-    }
-
-    if build {
-        use std::io::{BufRead, BufReader};
-        use std::process::{Command as Cmd, Stdio};
-
-        let mut just_build = Cmd::new("boulder")
-            .args(["build", "-u", "stone.yaml"])
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .expect("Failed to run boulder build command!");
-
-        let build_stdout = just_build.stdout.take().expect("Failed to open build process stdout");
-        let build_reader = BufReader::new(build_stdout);
-
-        // Stream the build process output
-        build_reader.lines().for_each(|line| {
-            if let Ok(line) = line {
-                println!("{line}");
-            }
-        });
-
-        let build_stderr = just_build.stderr.take().expect("Failed to get boulder build stderr");
-
-        let build_status = just_build
-            .wait_with_output()
-            .expect("Failed to wait for build to complete");
-
-        if build_status.status.success() {
-            println!("Successfully built package!");
-
-            // If local was set, move the package to the local repository
-            if local {
-                let local_repo = dirs::home_dir()
-                    .expect("Failed to get home directory")
-                    .join(".cache/local_repo/x86_64")
-                    .to_string_lossy()
-                    .to_string();
-
-                let cwd = PathBuf::from(".");
-                let stone_ext = "stone";
-
-                // Create local repo directory if it doesn't exist
-                fs::create_dir_all(&local_repo).expect("Failed to create local repo directories");
-                match fs::read_dir(&cwd) {
-                    Ok(dir) => {
-                        for pkg_file in dir {
-                            let pkg_file = pkg_file.expect("Failed to get package file to move");
-                            let path = pkg_file.path();
-
-                            if path.is_file() && let Some(ext) = path.extension().and_then(|ext| ext.to_str()) {
-                                if ext == stone_ext {
-                                    let file_name = path.file_name().ok_or("Invalid package file name").expect("Failed to get package file name");
-                                    let dest_path = PathBuf::from(&local_repo).join(file_name);
-
-                                    println!("Moving {:?} to {:?}", &path, &dest_path);
-                                    match fs::rename(&path, &dest_path) {
-                                        Ok(_) => {
-                                            println!("Successfully moved {:?} to {:?}", &path, &dest_path);
-
-                                            let mut moss_cmd = Cmd::new("moss")
-                                                .args(["index", &local_repo])
-                                                .stdout(Stdio::piped())
-                                                .stderr(Stdio::piped())
-                                                .spawn()
-                                                .expect("Failed to index new packages in local repo");
-
-                                            let moss_cmd_output = moss_cmd
-                                                .stdout
-                                                .take()
-                                                .expect("Failed to get stdout from moss index command");
-                                            let moss_stderr = moss_cmd
-                                                .stderr
-                                                .take()
-                                                .expect("Failed to get stderr from moss index command");
-
-                                            let moss_output = BufReader::new(moss_cmd_output);
-
-                                            moss_output.lines().for_each(|line| {
-                                                if let Ok(output) = line {
-                                                    println!("{output}");
-                                                }
-                                            });
-
-                                            let moss_status = moss_cmd
-                                                .wait_with_output()
-                                                .expect("Failed to wait for moss index command to completed");
-
-                                            if moss_status.status.success() {
-                                                println!("Successfully indexed local repo!");
-                                            } else {
-                                                let err_output = BufReader::new(moss_stderr);
-                                                err_output.lines().for_each(|line| {
-                                                    if let Ok(err) = line {
-                                                        eprintln!("{err}");
-                                                    }
-                                                });
-                                                eprintln!("Failed to index built package files after move to local repo");
-                                            }
-                                        },
-                                        Err(e) => {
-                                            eprintln!("Failed to move {:?} to {:?}: {e}", &path, &dest_path);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    Err(e) => {
-                        eprintln!("Failed to read directory: {e}");
-                    }
-                }
-            }
-        } else {
-            let build_err_output = BufReader::new(build_stderr);
-
-            build_err_output.lines().for_each(|err_line| {
-                if let Ok(err_output) = err_line {
-                    eprintln!("{err_output}");
-                }
-            });
-        }
     }
 
     Ok(())
