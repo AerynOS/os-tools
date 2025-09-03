@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: Copyright © 2020-2025 Serpent OS Developers
 //
 // SPDX-License-Identifier: MPL-2.0
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 use boulder::{Env, env};
 use clap::{Args, CommandFactory, Parser};
@@ -55,7 +55,6 @@ pub struct Global {
     #[arg(
         long,
         require_equals = true,
-        value_parser = clap::builder::PossibleValuesParser::new(["local", "unstable", "volatile"]),
         global = true,
         help = "Move newly built .stone package files to the given repo"
     )]
@@ -123,19 +122,33 @@ pub fn process() -> Result<(), Error> {
         return Ok(());
     }
 
-    if global.mv_to_repo.is_some() {
-        match subcommand {
-            Some(Subcommand::Build(_)) | Some(Subcommand::Recipe(_)) => {}
-            _ => {
+    match subcommand {
+        Some(Subcommand::Build(_)) | Some(Subcommand::Recipe(_)) => { /* do nothing, the flags were passed in appropriately. */
+        }
+        _ => match (global.mv_to_repo.clone(), global.re_index) {
+            (Some(_), false) => {
                 eprintln!(
-                    "{}",
-                    "The `--mv-to-repo` flag must be used with either the build or recipe subcommand"
-                        .red()
-                        .to_string()
+                    "{}: The `--mv-to-repo` flag cannot be used with anything but the `build` or `recipe` subcommands",
+                    "Error".red()
                 );
                 std::process::exit(1);
             }
-        }
+            (None, true) => {
+                eprintln!(
+                    "{}: The `--re-index` cannot be used with anything but the `build` or `recipe` subcommands and requires `--mv-to-repo`",
+                    "Error".red()
+                );
+                std::process::exit(1);
+            }
+            (Some(_), true) => {
+                eprintln!(
+                    "{}: The ``--mv-to-repo` and ``--re-index` flags can only be used with the `build` or `recipe` subcommands",
+                    "Error".red()
+                );
+                std::process::exit(1);
+            }
+            (None, false) => { /* do nothing, the flags weren't passed in. */ }
+        },
     }
 
     let env = Env::new(global.cache_dir, global.config_dir, global.data_dir, global.moss_root)?;
@@ -156,14 +169,65 @@ pub fn process() -> Result<(), Error> {
             match build::handle(command, env) {
                 Ok(_) => {
                     if let Some(repo) = global.mv_to_repo {
-                        match mv_to_repo(&repo) {
+                        // Check to see if the repo is in moss
+                        let moss_cmd = std::process::Command::new("moss")
+                            .args(["repo", "list"])
+                            .stdout(std::process::Stdio::piped())
+                            .output()
+                            .expect("Couldn't get a list of moss repos");
+
+                        // Convert the output to a String
+                        let repos = String::from_utf8(moss_cmd.stdout).expect("Could get the repo list from moss");
+
+                        let mv_repo = repos
+                            .lines()
+                            .filter_map(|line| {
+                                if line.contains(&repo) {
+                                    let mut ret_map = HashMap::new();
+                                    println!("{}: {line}", "DEBUG".yellow());
+                                    let uri = line
+                                        .split_whitespace()
+                                        .filter(|line| line.contains("//"))
+                                        .last()
+                                        .and_then(|uri| {
+                                            if uri.contains("file:///") {
+                                                Some(uri.to_string().replace("file://", ""))
+                                            } else {
+                                                Some(uri.to_string())
+                                            }
+                                        })
+                                        .expect("Couldn't get URI from repo string".red().to_string().as_str());
+
+                                    let _ = ret_map.insert(&repo, Some(uri.clone()));
+
+                                    Some(ret_map)
+                                } else {
+                                    None
+                                }
+                            })
+                            .last()
+                            .unwrap_or_else(|| HashMap::new());
+
+                        // Check to ensure that the repo has a URI;
+                        // return Err if there isn't.
+                        if mv_repo.get(&repo).is_none() {
+                            eprintln!("{} {}", &repo, "is not a valid repo registered with moss");
+                            return Err(Error::Build(build::Error::Build(boulder::build::Error::InvalidRepo)));
+                        }
+
+                        // Move the newly built .stone files
+                        match mv_to_repo(&repo, &mv_repo) {
                             Ok(repo) => {
-                                if global.re_index && !repo.is_empty() {
-                                    if let Err(err) = re_index_repo(&repo) {
+                                if global.re_index && repo.is_some() {
+                                    if let Err(err) =
+                                        re_index_repo(&repo.expect(
+                                            format!("{}: Repo was supposed to be Some", "Error".red()).as_str(),
+                                        ))
+                                    {
                                         eprintln!("{} {}", "Error:".red(), err.to_string().red());
                                         return Err(err);
                                     }
-                                } else {
+                                } else if global.re_index && repo.is_none() {
                                     eprintln!("{}", "Error: Cannot re-index, returned repo name was empty!".red());
                                     return Err(Error::Reindex(
                                         "Cannot re-index, move operation returned an invalid repo name"
@@ -196,13 +260,58 @@ pub fn process() -> Result<(), Error> {
                 eprintln!("Error: Cannot use `--mv-to-repo` without the `--build` flag");
                 std::process::exit(1);
             }
-            recipe::handle(command, env)?;
-
             if let Some(repo) = global.mv_to_repo {
-                match mv_to_repo(&repo) {
+                // Check to see if the repo is in moss
+                let moss_cmd = std::process::Command::new("moss")
+                    .args(["repo", "list"])
+                    .output()
+                    .expect("Couldn't get a list of moss repos");
+
+                let repos = String::from_utf8(moss_cmd.stdout).expect("Could get the repo list from moss");
+
+                let mv_repo = repos
+                    .lines()
+                    .filter_map(|line| {
+                        if line.contains(&repo) {
+                            let mut ret_map = HashMap::new();
+
+                            let uri = line
+                                .split_whitespace()
+                                .filter(|line| line.contains("//"))
+                                .last()
+                                .and_then(|uri| {
+                                    if uri.contains("file:///") {
+                                        Some(uri.to_string().replace("file://", ""))
+                                    } else {
+                                        Some(uri.to_string())
+                                    }
+                                })
+                                .expect("Couldn't get URI from repo string".red().to_string().as_str());
+
+                            let _ = ret_map.insert(&repo, Some(uri.clone()));
+
+                            Some(ret_map)
+                        } else {
+                            None
+                        }
+                    })
+                    .last()
+                    .unwrap_or_else(|| HashMap::new());
+
+                if mv_repo.get(&repo).is_none() {
+                    eprintln!("{} {}", &repo, "is not a valid repo registered with moss");
+                    return Err(Error::Build(build::Error::Build(boulder::build::Error::InvalidRepo)));
+                }
+
+                recipe::handle(command, env)?;
+
+                match mv_to_repo(&repo, &mv_repo) {
                     Ok(repo) => {
-                        if global.re_index {
-                            if let Err(err) = re_index_repo(&repo) {
+                        // Ok to re-index as there is a value use
+                        if global.re_index && repo.is_some() {
+                            if let Err(err) = re_index_repo(&repo.clone().expect(
+                                format!("{}: Returned repo should've been Some", "Error".red().to_string()).as_str(),
+                            )) {
                                 eprintln!("{} {}", "Error:".red(), err.to_string().red());
                                 return Err(Error::Reindex(
                                     "Cannot re-index, move operation returned an invalid repo name"
@@ -210,6 +319,13 @@ pub fn process() -> Result<(), Error> {
                                         .to_string(),
                                 ));
                             }
+                        } else if global.re_index && repo.is_none() {
+                            eprintln!("{}", "Error: Cannot re-index, returned repo name was empty!".red());
+                            return Err(Error::Reindex(
+                                "Cannot re-index, move operation returned an invalid repo name"
+                                    .red()
+                                    .to_string(),
+                            ));
                         }
                     }
                     Err(err) => {
@@ -217,6 +333,8 @@ pub fn process() -> Result<(), Error> {
                         return Err(err);
                     }
                 }
+            } else {
+                recipe::handle(command, env)?;
             }
         }
         Some(Subcommand::Version(command)) => version::handle(command),
@@ -255,27 +373,25 @@ fn replace_aliases(args: std::env::Args) -> Vec<String> {
     args
 }
 
-fn mv_to_repo(repo: &String) -> Result<String, Error> {
-    let repo_path = if repo == "local" {
-        dirs::home_dir()
-            .expect(&format!("{}", "Failed to get home directory".red()))
-            .join(".cache/local_repo/x86_64")
-            .to_string_lossy()
-            .to_string()
-    } else if repo == "volatile" {
-        println!("TODO: Move to volatile repo");
-        String::new()
-    } else {
-        println!("TODO: Move to unstable repo");
-        String::new()
-    };
-
-    if !repo_path.is_empty() {
+fn mv_to_repo(repo_key: &String, repo_map: &HashMap<&String, Option<String>>) -> Result<Option<String>, Error> {
+    let repo_path = repo_map.get(repo_key).unwrap_or_else(|| &None);
+    if let Some(repo_path) = repo_path {
         let cwd = PathBuf::from(".");
         let manifest_ext = "stone";
 
+        let repo_path = PathBuf::from(if repo_path.contains("file://") {
+            repo_path.replacen("file://", "", 1).replacen("stone.index", "", 1)
+        } else {
+            repo_path.to_string().replacen("stone.index", "", 1)
+        });
+
+        println!("{}: {repo_path:?}", "Debug".yellow());
+
         // Create repo directory if it doesn't exist
-        fs::create_dir_all(&repo_path).expect("Failed to create local repo directories");
+        if !repo_path.exists() {
+            fs::create_dir_all(&repo_path).expect("Failed to create {repo_key} repo directories");
+        }
+
         match fs::read_dir(&cwd) {
             Ok(dir) => {
                 for (_, pkg_file) in dir.enumerate() {
@@ -308,7 +424,6 @@ fn mv_to_repo(repo: &String) -> Result<String, Error> {
                                         "to".green(),
                                         &dest_path.to_string_lossy().to_string().green().italic().bold()
                                     );
-                                    return Ok(repo_path.to_string());
                                 }
                                 Err(e) => {
                                     eprintln!(
@@ -323,12 +438,13 @@ fn mv_to_repo(repo: &String) -> Result<String, Error> {
                                             e.to_string().red()
                                         )
                                     );
-                                    return Err(Error::Io(e));
                                 }
                             }
                         }
                     }
                 }
+
+                return Ok(Some(repo_path.to_string_lossy().to_string()));
             }
             Err(e) => {
                 eprintln!("Failed to read directory: {e}");
@@ -337,7 +453,14 @@ fn mv_to_repo(repo: &String) -> Result<String, Error> {
         }
     }
 
-    Ok(String::new())
+    if let Some(repo_path) = repo_path {
+        Ok(Some(repo_path.clone()))
+    } else {
+        Err(Error::Io(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("{}: {repo_key} doesn't have a valid path", "Error".red()).as_str(),
+        )))
+    }
 }
 
 fn re_index_repo(repo: &str) -> Result<(), Error> {
