@@ -1,12 +1,31 @@
 actions:
-
-    # NOTE: If required we can add support for the deprecated Module::Build buildsystem in the future.
-    #       However, let's just support ExtUtils::MakeMaker for now to vastly simply these macros.
-
     - perl_setup:
-        description: Setup perl with ExtUtils::MakeMaker from stdlib
+        description: Create a Makefile with ExtUtils::MakeMaker from stdlib to be used with %make and %make_install macros
         command: |
             perl Makefile.PL PREFIX="%(prefix)" NO_PACKLIST=1 NO_PERLLOCAL=1 INSTALLDIRS=vendor DESTDIR="%(installroot)"
         dependencies:
             - binary(perl)
 
+    - perl_module_setup:
+        description: Create a build script with Module::Build as an alternative to ExtUtils::MakeMaker for projects that use it
+        command: |
+            perl Build.PL installdirs=vendor create_packlist=0
+        dependencies:
+            - binary(perl)
+            - perl-module-build
+
+    - perl_module_build:
+        description: Build a perl module with Module::Build
+        command: |
+            perl Build installdirs=vendor create_packlist=0
+        dependencies:
+            - binary(perl)
+            - perl-module-build
+
+    - perl_module_install:
+        description: Install a perl module with Module::Build
+        command: |
+            perl Build destdir="%(installroot)" install
+        dependencies:
+            - binary(perl)
+            - perl-module-build
