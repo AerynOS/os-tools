@@ -8,6 +8,7 @@ use super::Upstream;
 
 mod basic;
 mod github;
+mod metacpan;
 mod pypi;
 
 #[derive(Default)]
@@ -35,6 +36,7 @@ impl Metadata {
                     Matcher::Basic => basic::source(&upstream.uri),
                     Matcher::Github => github::source(&upstream.uri),
                     Matcher::Pypi => pypi::source(&upstream.uri),
+                    Matcher::Metacpan => metacpan::source(&upstream.uri),
                 } {
                     source = matched;
                     break;
@@ -65,8 +67,9 @@ enum Matcher {
     Basic,
     Github,
     Pypi,
+    Metacpan,
 }
 
 impl Matcher {
-    const ALL: &'static [Self] = &[Self::Github, Self::Pypi, Self::Basic];
+    const ALL: &'static [Self] = &[Self::Github, Self::Pypi, Self::Metacpan, Self::Basic];
 }
