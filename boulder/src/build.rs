@@ -462,4 +462,6 @@ pub enum Error {
     RecreateArtefactsDir(#[source] io::Error),
     #[error("git upstream processing")]
     Git(#[from] git::GitError),
+    #[error("invalid repo in mv-to-repo flag")]
+    InvalidRepo,
 }
