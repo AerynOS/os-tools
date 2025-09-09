@@ -40,7 +40,6 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
             .push((package, file));
     }
 
-    let mut issues = vec![];
     let mut hasher = digest::Hasher::new();
 
     let pb = ProgressBar::new(unique_assets.len() as u64)
@@ -53,57 +52,61 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
     pb.tick();
 
     // For each asset, ensure it exists in the content store and isn't corrupt (hash is correct)
-    for (hash, meta) in unique_assets {
-        let display_hash = format!("{hash:0>32}");
+    let issues = unique_assets
+        .into_iter()
+        .try_fold(Vec::new(), |mut acc, (hash, meta)| -> io::Result<_> {
+            let display_hash = format!("{hash:0>32}");
 
-        let path = cache::asset_path(&client.installation, &hash);
+            let path = cache::asset_path(&client.installation, &hash);
 
-        let files = meta.iter().map(|(_, file)| file).cloned().collect::<BTreeSet<_>>();
+            let files = meta.iter().map(|(_, file)| file).cloned().collect::<BTreeSet<_>>();
 
-        pb.set_message(format!("Verifying {display_hash}"));
+            pb.set_message(format!("Verifying {display_hash}"));
 
-        if !path.exists() {
+            if !path.exists() {
+                pb.inc(1);
+                if verbose {
+                    pb.suspend(|| println!(" {} {display_hash} - {files:?}", "×".yellow()));
+                }
+                acc.push(Issue::MissingAsset {
+                    hash: display_hash,
+                    files,
+                    packages: meta.into_iter().map(|(package, _)| package).collect(),
+                });
+                return Ok(acc);
+            }
+
+            hasher.reset();
+
+            let mut digest_writer = digest::Writer::new(io::sink(), &mut hasher);
+            let mut file = fs::File::open(&path)?;
+
+            // Copy bytes to null sink so we don't
+            // explode memory
+            io::copy(&mut file, &mut digest_writer)?;
+
+            let verified_hash = format!("{:02x}", hasher.digest128());
+
+            if verified_hash != hash {
+                pb.inc(1);
+                if verbose {
+                    pb.suspend(|| println!(" {} {display_hash} - {files:?}", "×".yellow()));
+                }
+                acc.push(Issue::CorruptAsset {
+                    hash: display_hash,
+                    files,
+                    packages: meta.into_iter().map(|(package, _)| package).collect(),
+                });
+                return Ok(acc);
+            }
+
             pb.inc(1);
             if verbose {
-                pb.suspend(|| println!(" {} {display_hash} - {files:?}", "×".yellow()));
+                pb.suspend(|| println!(" {} {display_hash} - {files:?}", "»".green()));
             }
-            issues.push(Issue::MissingAsset {
-                hash: display_hash,
-                files,
-                packages: meta.into_iter().map(|(package, _)| package).collect(),
-            });
-            continue;
-        }
 
-        hasher.reset();
-
-        let mut digest_writer = digest::Writer::new(io::sink(), &mut hasher);
-        let mut file = fs::File::open(&path)?;
-
-        // Copy bytes to null sink so we don't
-        // explode memory
-        io::copy(&mut file, &mut digest_writer)?;
-
-        let verified_hash = format!("{:02x}", hasher.digest128());
-
-        if verified_hash != hash {
-            pb.inc(1);
-            if verbose {
-                pb.suspend(|| println!(" {} {display_hash} - {files:?}", "×".yellow()));
-            }
-            issues.push(Issue::CorruptAsset {
-                hash: display_hash,
-                files,
-                packages: meta.into_iter().map(|(package, _)| package).collect(),
-            });
-            continue;
-        }
-
-        pb.inc(1);
-        if verbose {
-            pb.suspend(|| println!(" {} {display_hash} - {files:?}", "»".green()));
-        }
-    }
+            Ok(acc)
+        })?;
 
     // Get all states
     let states = client.state_db.all()?;
@@ -115,7 +118,7 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
     });
 
     // Check the VFS of each state exists properly on the FS
-    for state in &states {
+    let issues = states.iter().try_fold(issues, |mut acc, state| {
         pb.set_message(format!("Verifying state #{}", state.id));
 
         let is_active = client.installation.active_state == Some(state.id);
@@ -128,34 +131,37 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
             client.installation.root_path(state.id.to_string()).join("usr")
         };
 
-        let files = vfs.iter().collect::<Vec<_>>();
+        let state_issues: Vec<_> = vfs
+            .iter()
+            .filter_map(|file| {
+                let path = base.join(file.path().strip_prefix("/usr/").unwrap_or_default());
 
-        let mut num_issues = 0;
-
-        for file in files {
-            let path = base.join(file.path().strip_prefix("/usr/").unwrap_or_default());
-
-            // All symlinks for non-active states are broken
-            // since they resolve to the active state path
-            //
-            // Use try_exists to ensure we only check if symlink
-            // itself is missing
-            match path.try_exists() {
-                Ok(true) => {}
-                Ok(false) if path.is_symlink() => {}
-                _ => {
-                    num_issues += 1;
-                    issues.push(Issue::MissingVFSPath { path, state: state.id });
+                // All symlinks for non-active states are broken
+                // since they resolve to the active state path
+                //
+                // Use try_exists to ensure we only check if symlink
+                // itself is missing
+                match path.try_exists() {
+                    Ok(true) => None,
+                    Ok(false) if path.is_symlink() => None,
+                    _ => Some(Issue::MissingVFSPath { path, state: state.id }),
                 }
-            }
-        }
+            })
+            .collect();
 
         pb.inc(1);
         if verbose {
-            let mark = if num_issues > 0 { "×".yellow() } else { "»".green() };
+            let mark = if !state_issues.is_empty() {
+                "×".yellow()
+            } else {
+                "»".green()
+            };
             pb.suspend(|| println!(" {mark} state #{}", state.id));
         }
-    }
+
+        acc.extend(state_issues);
+        Ok::<_, super::Error>(acc)
+    })?;
 
     pb.finish_and_clear();
 
