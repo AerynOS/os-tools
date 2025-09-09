@@ -2,9 +2,11 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-use std::{collections::BTreeSet, fmt, io, path::PathBuf};
-
-use itertools::Itertools;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt, io,
+    path::PathBuf,
+};
 
 use fs_err as fs;
 use stone::{payload::layout, write::digest};
@@ -27,16 +29,16 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
     let layouts = client.layout_db.all()?;
 
     // Group by unique assets (hash)
-    let unique_assets = layouts
-        .into_iter()
-        .filter_map(|(package, layout)| {
-            if let layout::Entry::Regular(hash, file) = layout.entry {
-                Some((format!("{hash:02x}"), (package, file)))
-            } else {
-                None
-            }
-        })
-        .into_group_map();
+    let mut unique_assets = BTreeMap::new();
+    for (package, layout) in layouts {
+        let layout::Entry::Regular(hash, file) = layout.entry else {
+            continue;
+        };
+        unique_assets
+            .entry(format!("{hash:02x}"))
+            .or_insert_with(Vec::new)
+            .push((package, file));
+    }
 
     let mut issues = vec![];
     let mut hasher = digest::Hasher::new();
@@ -51,10 +53,7 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
     pb.tick();
 
     // For each asset, ensure it exists in the content store and isn't corrupt (hash is correct)
-    for (hash, meta) in unique_assets
-        .into_iter()
-        .sorted_by_key(|(key, _)| format!("{key:0>32}"))
-    {
+    for (hash, meta) in unique_assets {
         let display_hash = format!("{hash:0>32}");
 
         let path = cache::asset_path(&client.installation, &hash);
