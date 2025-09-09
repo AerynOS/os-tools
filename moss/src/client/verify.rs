@@ -9,6 +9,7 @@ use std::{
 };
 
 use fs_err as fs;
+use rayon::iter::{IntoParallelIterator as _, IntoParallelRefIterator as _, ParallelIterator as _};
 use stone::{payload::layout, write::digest};
 use tui::{
     ProgressBar, ProgressStyle, Styled,
@@ -40,8 +41,6 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
             .push((package, file));
     }
 
-    let mut hasher = digest::Hasher::new();
-
     let pb = ProgressBar::new(unique_assets.len() as u64)
         .with_message("Verifying")
         .with_style(
@@ -52,9 +51,9 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
     pb.tick();
 
     // For each asset, ensure it exists in the content store and isn't corrupt (hash is correct)
-    let issues = unique_assets
-        .into_iter()
-        .try_fold(Vec::new(), |mut acc, (hash, meta)| -> io::Result<_> {
+    let mut issues = unique_assets
+        .into_par_iter()
+        .try_fold(Vec::new, |mut acc, (hash, meta)| -> io::Result<_> {
             let display_hash = format!("{hash:0>32}");
 
             let path = cache::asset_path(&client.installation, &hash);
@@ -76,8 +75,7 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
                 return Ok(acc);
             }
 
-            hasher.reset();
-
+            let mut hasher = digest::Hasher::new();
             let mut digest_writer = digest::Writer::new(io::sink(), &mut hasher);
             let mut file = fs::File::open(&path)?;
 
@@ -106,7 +104,8 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
             }
 
             Ok(acc)
-        })?;
+        })
+        .try_reduce(Vec::new, try_reduce_vec_concat)?;
 
     // Get all states
     let states = client.state_db.all()?;
@@ -118,50 +117,54 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
     });
 
     // Check the VFS of each state exists properly on the FS
-    let issues = states.iter().try_fold(issues, |mut acc, state| {
-        pb.set_message(format!("Verifying state #{}", state.id));
+    let states_issues = states
+        .par_iter()
+        .try_fold(Vec::new, |mut acc, state| {
+            pb.set_message(format!("Verifying state #{}", state.id));
 
-        let is_active = client.installation.active_state == Some(state.id);
+            let is_active = client.installation.active_state == Some(state.id);
 
-        let vfs = client.vfs(state.selections.iter().map(|s| &s.package))?;
+            let vfs = client.vfs(state.selections.iter().map(|s| &s.package))?;
 
-        let base = if is_active {
-            client.installation.root.join("usr")
-        } else {
-            client.installation.root_path(state.id.to_string()).join("usr")
-        };
-
-        let state_issues: Vec<_> = vfs
-            .iter()
-            .filter_map(|file| {
-                let path = base.join(file.path().strip_prefix("/usr/").unwrap_or_default());
-
-                // All symlinks for non-active states are broken
-                // since they resolve to the active state path
-                //
-                // Use try_exists to ensure we only check if symlink
-                // itself is missing
-                match path.try_exists() {
-                    Ok(true) => None,
-                    Ok(false) if path.is_symlink() => None,
-                    _ => Some(Issue::MissingVFSPath { path, state: state.id }),
-                }
-            })
-            .collect();
-
-        pb.inc(1);
-        if verbose {
-            let mark = if !state_issues.is_empty() {
-                "×".yellow()
+            let base = if is_active {
+                client.installation.root.join("usr")
             } else {
-                "»".green()
+                client.installation.root_path(state.id.to_string()).join("usr")
             };
-            pb.suspend(|| println!(" {mark} state #{}", state.id));
-        }
 
-        acc.extend(state_issues);
-        Ok::<_, super::Error>(acc)
-    })?;
+            let state_issues: Vec<_> = vfs
+                .iter()
+                .filter_map(|file| {
+                    let path = base.join(file.path().strip_prefix("/usr/").unwrap_or_default());
+
+                    // All symlinks for non-active states are broken
+                    // since they resolve to the active state path
+                    //
+                    // Use try_exists to ensure we only check if symlink
+                    // itself is missing
+                    match path.try_exists() {
+                        Ok(true) => None,
+                        Ok(false) if path.is_symlink() => None,
+                        _ => Some(Issue::MissingVFSPath { path, state: state.id }),
+                    }
+                })
+                .collect();
+
+            pb.inc(1);
+            if verbose {
+                let mark = if !state_issues.is_empty() {
+                    "×".yellow()
+                } else {
+                    "»".green()
+                };
+                pb.suspend(|| println!(" {mark} state #{}", state.id));
+            }
+
+            acc.extend(state_issues);
+            Ok::<_, super::Error>(acc)
+        })
+        .try_reduce(Vec::new, try_reduce_vec_concat)?;
+    issues.extend(states_issues);
 
     pb.finish_and_clear();
 
@@ -332,4 +335,9 @@ impl fmt::Display for Issue {
             Issue::MissingVFSPath { path, state } => write!(f, "Missing path {} in state #{state}", path.display()),
         }
     }
+}
+
+fn try_reduce_vec_concat<T, E>(mut a: Vec<T>, mut b: Vec<T>) -> Result<Vec<T>, E> {
+    a.append(&mut b);
+    Ok(a)
 }
