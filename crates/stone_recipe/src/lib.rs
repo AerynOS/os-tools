@@ -99,6 +99,8 @@ pub struct Options {
     pub networking: bool,
     #[serde(default, deserialize_with = "stringy_bool")]
     pub compressman: bool,
+    #[serde(default = "default_true", deserialize_with = "stringy_bool")]
+    pub lastrip: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
