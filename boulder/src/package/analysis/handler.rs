@@ -24,7 +24,7 @@ pub fn include_any(_bucket: &mut BucketMut<'_>, _info: &mut PathInfo) -> Result<
     Ok(Decision::IncludeFile.into())
 }
 
-pub fn ignore_blocked(_bucket: &mut BucketMut<'_>, info: &mut PathInfo) -> Result<Response, BoxError> {
+pub fn ignore_blocked(bucket: &mut BucketMut<'_>, info: &mut PathInfo) -> Result<Response, BoxError> {
     // non-/usr = bad
     if !info.target_path.starts_with("/usr") {
         return Ok(Decision::IgnoreFile {
@@ -33,9 +33,10 @@ pub fn ignore_blocked(_bucket: &mut BucketMut<'_>, info: &mut PathInfo) -> Resul
         .into());
     }
 
-    // libtool files break the world
+    // libtool files break the world but very rarely a package will need them to function correctly
     if info.file_name().ends_with(".la")
         && (info.target_path.starts_with("/usr/lib") || info.target_path.starts_with("/usr/lib32"))
+        && bucket.recipe.parsed.options.lastrip
     {
         return Ok(Decision::IgnoreFile {
             reason: "libtool file".into(),
