@@ -139,7 +139,7 @@ impl Builder {
         // I ran boulder 100 times w/ and w/out this delay
         // and the deadlock never occurred w/ it, but w/out
         // it occurred within 10 attempts.
-        thread::sleep(Duration::from_millis(50));
+        thread::sleep(Duration::from_millis(250));
 
         Ok(())
     }
