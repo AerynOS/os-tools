@@ -2963,9 +2963,9 @@ dependencies = [
 
 [[package]]
 name = "thread-priority"
-version = "2.1.1"
+version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98bb0223d20b98ed7205d68ee55e3fe9f1970c17359f5ecd62e128051b5278cb"
+checksum = "2210811179577da3d54eb69ab0b50490ee40491a25d95b8c6011ba40771cb721"
 dependencies = [
  "bitflags",
  "cfg-if",
