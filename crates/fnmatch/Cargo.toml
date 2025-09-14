@@ -8,7 +8,7 @@ rust-version.workspace = true
 
 [dependencies]
 regex.workspace = true
-serde.workspace = true
+serde_core.workspace = true
 snafu.workspace = true
 
 [lints]

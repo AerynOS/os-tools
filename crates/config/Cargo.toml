@@ -9,7 +9,7 @@ rust-version.workspace = true
 [dependencies]
 dirs.workspace = true
 fs-err.workspace = true
-serde.workspace = true
+serde_core.workspace = true
 serde_yaml.workspace = true
 thiserror.workspace = true
 

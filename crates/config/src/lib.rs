@@ -8,7 +8,7 @@ use std::{
 };
 
 use fs_err as fs;
-use serde::{Serialize, de::DeserializeOwned};
+use serde_core::{Serialize, de::DeserializeOwned};
 use thiserror::Error;
 
 const EXTENSION: &str = "yaml";

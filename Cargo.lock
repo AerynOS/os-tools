@@ -644,7 +644,7 @@ version = "0.25.6"
 dependencies = [
  "dirs",
  "fs-err",
- "serde",
+ "serde_core",
  "serde_yaml",
  "thiserror",
 ]
@@ -1171,7 +1171,7 @@ name = "fnmatch"
 version = "0.25.6"
 dependencies = [
  "regex",
- "serde",
+ "serde_core",
  "snafu",
 ]
 
