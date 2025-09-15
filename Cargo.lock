@@ -3425,7 +3425,7 @@ name = "vfs"
 version = "0.1.0"
 dependencies = [
  "indextree",
- "thiserror",
+ "snafu",
 ]
 
 [[package]]
