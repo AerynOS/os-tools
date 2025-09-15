@@ -11,7 +11,7 @@ dirs.workspace = true
 fs-err.workspace = true
 serde_core.workspace = true
 serde_yaml.workspace = true
-thiserror.workspace = true
+snafu.workspace = true
 
 [lints]
 workspace = true
