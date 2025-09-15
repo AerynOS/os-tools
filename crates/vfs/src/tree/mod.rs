@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::vec;
 
 use indextree::{Arena, Descendants, NodeId};
-use thiserror::Error;
+use snafu::Snafu;
 
 use crate::path;
 
@@ -113,7 +113,9 @@ impl<T: BlitFile> Tree<T> {
     fn add_child_to_node(&mut self, node_id: NodeId, parent: &str) -> Result<(), Error> {
         let node = self.arena.get(node_id).unwrap();
         let Some(parent_node) = self.map.get(parent) else {
-            return Err(Error::MissingParent(parent.to_owned()));
+            return Err(Error::MissingParent {
+                parent: parent.to_owned(),
+            });
         };
 
         let others = parent_node
@@ -128,22 +130,17 @@ impl<T: BlitFile> Tree<T> {
             })
             .collect::<Vec<_>>();
         if !others.is_empty() {
+            let e = Error::Duplicate {
+                node_path: node.get().path.clone(),
+                node_id: node.get().id.clone(),
+                other_id: others.first().unwrap().id.clone(),
+            };
+
             // TODO: Reenable
-            // Err(Error::Duplicate(
-            //     node.get().path(),
-            //     node.get().id(),
-            //     others.first().unwrap().id(),
-            // ))
+            // return Err(e)
 
             // Report duplicate and skip for now
-            eprintln!(
-                "error: {}",
-                Error::Duplicate(
-                    node.get().path.clone(),
-                    node.get().id.clone(),
-                    others.first().unwrap().id.clone()
-                )
-            );
+            eprintln!("error: {e}");
         } else {
             parent_node.append(node_id, &mut self.arena);
         }
@@ -253,11 +250,15 @@ impl<'a, T: BlitFile> Iterator for TreeIterator<'a, T> {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Snafu)]
 pub enum Error {
-    #[error("missing parent: {0}")]
-    MissingParent(String),
+    #[snafu(display("missing parent: {parent}"))]
+    MissingParent { parent: String },
 
-    #[error("duplicate entry: {0} {1} attempts to overwrite {2}")]
-    Duplicate(String, String, String),
+    #[snafu(display("duplicate entry: {node_path} {node_id} attempts to overwrite {other_id}"))]
+    Duplicate {
+        node_path: String,
+        node_id: String,
+        other_id: String,
+    },
 }
