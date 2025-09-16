@@ -12,6 +12,7 @@ mod autotools;
 mod cargo;
 mod cmake;
 mod meson;
+mod perl;
 mod python;
 mod ruby;
 
@@ -29,6 +30,8 @@ pub enum System {
     PythonSetupTools,
     RubyGem,
     RubyTarball,
+    PerlExtutilsMakefile,
+    PerlModuleBuild,
 }
 
 impl System {
@@ -41,6 +44,8 @@ impl System {
         Self::PythonSetupTools,
         Self::RubyGem,
         Self::RubyTarball,
+        Self::PerlExtutilsMakefile,
+        Self::PerlModuleBuild,
     ];
 
     pub fn environment(&self) -> Option<&'static str> {
@@ -53,6 +58,8 @@ impl System {
             System::PythonSetupTools => None,
             System::RubyGem => None,
             System::RubyTarball => None,
+            System::PerlExtutilsMakefile => None,
+            System::PerlModuleBuild => None,
         }
     }
 
@@ -66,6 +73,8 @@ impl System {
             System::PythonSetupTools => python::setup_tools::phases(),
             System::RubyGem => ruby::gemfile::phases(),
             System::RubyTarball => ruby::tarball::phases(),
+            System::PerlExtutilsMakefile => perl::extutils_makefile::phases(),
+            System::PerlModuleBuild => perl::module_build::phases(),
         }
     }
 
@@ -87,6 +96,8 @@ impl System {
             System::PythonSetupTools => python::setup_tools::process(state, file),
             System::RubyGem => ruby::gemfile::process(state, file),
             System::RubyTarball => ruby::tarball::process(state, file),
+            System::PerlExtutilsMakefile => perl::extutils_makefile::process(state, file),
+            System::PerlModuleBuild => perl::module_build::process(state, file),
         }
     }
 }
