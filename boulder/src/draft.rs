@@ -91,7 +91,7 @@ impl Drafter {
         #[rustfmt::skip]
         let template = format!(
 "#
-# SPDX-FileCopyrightText: © 2020-2025 Serpent OS Developers
+# SPDX-FileCopyrightText: © 2025- AerynOS Developers
 #
 # SPDX-License-Identifier: MPL-2.0
 #
