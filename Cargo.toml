@@ -4,7 +4,7 @@ default-members = ["moss"]
 resolver = "2"
 
 [workspace.package]
-version = "0.25.6"
+version = "0.25.7"
 edition = "2024"
 rust-version = "1.85"
 
