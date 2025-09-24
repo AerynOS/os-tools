@@ -18,7 +18,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::str::FromStr;
 
 use regex::Regex;
-use serde::{Deserialize, de};
+use serde_core::{Deserialize, de};
 use snafu::{ResultExt as _, Snafu};
 
 #[derive(Debug)]
@@ -259,7 +259,7 @@ impl FromStr for Pattern {
 impl<'de> Deserialize<'de> for Pattern {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>,
+        D: serde_core::Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
         FromStr::from_str(&s).map_err(de::Error::custom)
