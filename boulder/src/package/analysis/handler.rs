@@ -2,7 +2,7 @@ use filetime::FileTime;
 use itertools::Itertools;
 use std::{
     fs::File,
-    io::{BufReader, BufWriter, Write},
+    io::{BufRead, BufReader, BufWriter, Write},
     os::unix::fs::symlink,
     path::{Component, Path, PathBuf},
     process::Command,
@@ -60,6 +60,41 @@ pub fn binary(bucket: &mut BucketMut<'_>, info: &mut PathInfo) -> Result<Respons
             name: info.file_name().to_owned(),
         };
         bucket.providers.insert(provider);
+    }
+
+    Ok(Decision::NextHandler.into())
+}
+
+// Parse the 'package' value from a .pm file e.g. package Foo::Bar;
+pub fn perl(bucket: &mut BucketMut<'_>, info: &mut PathInfo) -> Result<Response, BoxError> {
+    let file_path = info.path.clone().into_os_string().into_string().unwrap_or_default();
+    let is_pm_file = file_path.contains("perl") && info.file_name().ends_with(".pm");
+
+    if !is_pm_file {
+        return Ok(Decision::NextHandler.into());
+    }
+
+    let reader = BufReader::new(File::open(&info.path)?);
+
+    for line in reader.lines() {
+        match line {
+            Ok(line) => {
+                if line.starts_with("package") {
+                    let perl_module = line
+                        .strip_prefix("package")
+                        .unwrap()
+                        .trim_start()
+                        .strip_suffix(";")
+                        .unwrap_or_default();
+                    bucket.providers.insert(Provider {
+                        kind: dependency::Kind::Perl,
+                        name: perl_module.to_owned(),
+                    });
+                    break;
+                }
+            }
+            Err(e) => println!("ERROR: {e}"),
+        }
     }
 
     Ok(Decision::NextHandler.into())
