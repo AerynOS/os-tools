@@ -55,7 +55,7 @@ actions:
             # If you need to override the default -p1, add it after the patch file
             %patch %(pkgdir)/some.patch -p3
         command: |
-            patch --batch --remove-empty-files --no-backup-if-mismatch -p1 -i
+            patch --force --forward --remove-empty-files --no-backup-if-mismatch -p1 -i
         dependencies:
             - binary(patch)
 
