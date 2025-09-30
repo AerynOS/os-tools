@@ -121,6 +121,7 @@ defaultTuningGroups :
     - optimize
     - relr
     - symbolic
+    - version-allow-undefined
 
 tuning              :
     # A set of groups we can toggle from the "tune" key
@@ -320,6 +321,10 @@ tuning              :
     - relr:
         enabled: relr
 
+    # Whether or not symbols in version scripts are allowed to be undefined
+    - version-allow-undefined:
+        enabled: version-allow-undefined
+        disabled: version-no-undefined
 flags               :
 
     # Needs overriding with -march/mtune values.
@@ -655,6 +660,14 @@ flags               :
     # Toggle relr (ON)
     - relr:
         ld        : "-Wl,-z,pack-relative-relocs"
+
+    # Allow undefined symbols in version scripts (ON)
+    - version-allow-undefined:
+        ld        : "-Wl,--undefined-version"
+
+    # Don't allow undefined symbols in version scripts (OFF)
+    - version-no-undefined:
+        ld        : "-Wl,--no-undefined-version"
 
 # Template packages
 packages          :
