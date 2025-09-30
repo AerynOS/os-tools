@@ -4,6 +4,7 @@
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 use clap::{ArgMatches, Command, arg, value_parser};
 use moss::registry::transaction;
@@ -16,7 +17,7 @@ use moss::{
 };
 use thiserror::Error;
 
-use tracing::debug;
+use tracing::{debug, info, info_span, instrument};
 use tui::dialoguer::Confirm;
 use tui::dialoguer::theme::ColorfulTheme;
 use tui::pretty::autoprint_columns;
@@ -39,7 +40,11 @@ pub fn command() -> Command {
         )
 }
 
+#[instrument(skip_all)]
 pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
+    let mut timing = Timing::default();
+    let mut instant = Instant::now();
+
     let yes_all = *args.get_one::<bool>("yes").unwrap();
     let update = *args.get_one::<bool>("update").unwrap();
     let upgrade_only = *args.get_one::<bool>("upgrade-only").unwrap();
@@ -78,6 +83,13 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         );
     }
 
+    timing.resolve = instant.elapsed();
+    info!(
+        total_resolved = finalized.len(),
+        resolve_time_ms = timing.resolve.as_millis(),
+        "Package resolution completed"
+    );
+
     // Synced are packages are:
     //
     // Stateful: Not installed
@@ -91,6 +103,12 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         .filter(|p| !finalized.iter().any(|f| f.meta.name == p.meta.name))
         .cloned()
         .collect::<Vec<_>>();
+
+    info!(
+        synced_packages = synced.len(),
+        removed_packages = removed.len(),
+        "Sync analysis completed"
+    );
 
     if synced.is_empty() && removed.is_empty() {
         println!("No packages to sync");
@@ -123,7 +141,29 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         return Err(Error::Cancelled);
     }
 
+    instant = Instant::now();
+
+    let cache_packages_span = info_span!("progress", phase = "cache_packages", event_type = "progress");
+    let _cache_packages_guard = cache_packages_span.enter();
+    info!(
+        phase = "cache_packages",
+        total_items = synced.len(),
+        progress = 0.0,
+        event_type = "progress_start"
+    );
+
     runtime::block_on(client.cache_packages(&synced))?;
+
+    timing.fetch = instant.elapsed();
+    info!(
+        phase = "cache_packages",
+        duration_ms = timing.fetch.as_millis(),
+        items_processed = synced.len(),
+        progress = 1.0,
+        event_type = "progress_completed",
+    );
+    drop(_cache_packages_guard);
+    instant = Instant::now();
 
     // Map finalized state to a [`Selection`] by referencing
     // it's value from the previous state
@@ -161,8 +201,33 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
             .collect::<Vec<_>>()
     };
 
+    let sync_span = info_span!("progress", phase = "sync", event_type = "progress");
+    let _sync_guard = sync_span.enter();
+    info!(
+        phase = "sync",
+        total_items = new_selections.len(),
+        progress = 0.0,
+        event_type = "progress_start",
+    );
+
     // Perfect, apply state.
     client.new_state(&new_selections, "Sync")?;
+
+    timing.blit = instant.elapsed();
+    info!(
+        phase = "sync",
+        duration_ms = timing.blit.as_millis(),
+        items_processed = new_selections.len(),
+        progress = 1.0,
+        event_type = "progress_completed",
+    );
+    drop(_sync_guard);
+
+    info!(
+        blit_time_ms = timing.blit.as_millis(),
+        total_time_ms = (timing.resolve + timing.fetch + timing.blit).as_millis(),
+        "Sync completed successfully"
+    );
 
     Ok(())
 }
@@ -210,6 +275,14 @@ fn resolve_with_sync(client: &Client, upgrade_only: bool, packages: &[Package]) 
 
     // Resolve the tx
     Ok(client.resolve_packages(tx.finalize())?)
+}
+
+/// Simple timing information for Sync
+#[derive(Default)]
+pub struct Timing {
+    pub resolve: Duration,
+    pub fetch: Duration,
+    pub blit: Duration,
 }
 
 #[derive(Debug, Error)]
