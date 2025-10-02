@@ -17,7 +17,7 @@ use moss::{
 };
 use thiserror::Error;
 
-use tracing::{debug, info, info_span, instrument};
+use tracing::{Instrument, debug, info, info_span, instrument};
 use tui::dialoguer::Confirm;
 use tui::dialoguer::theme::ColorfulTheme;
 use tui::pretty::autoprint_columns;
@@ -152,7 +152,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         event_type = "progress_start"
     );
 
-    runtime::block_on(client.cache_packages(&synced))?;
+    runtime::block_on(client.cache_packages(&synced).in_current_span())?;
 
     timing.fetch = instant.elapsed();
     info!(
