@@ -7,7 +7,7 @@
 use std::time::{Duration, Instant};
 
 use thiserror::Error;
-use tracing::{debug, info, info_span, instrument};
+use tracing::{Instrument, debug, info, info_span, instrument};
 use tui::{
     dialoguer::{Confirm, theme::ColorfulTheme},
     pretty::autoprint_columns,
@@ -115,7 +115,7 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
     );
 
     // Cache packages
-    runtime::block_on(client.cache_packages(&missing))?;
+    runtime::block_on(client.cache_packages(&missing).in_current_span())?;
 
     timing.fetch = instant.elapsed();
     info!(
