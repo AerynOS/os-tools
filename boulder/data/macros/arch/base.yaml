@@ -93,6 +93,7 @@ actions              :
             CCACHE_DIR="%(ccachedir)"; export CCACHE_DIR;
             CCACHE_BASEDIR="%(workdir)"; export CCACHE_BASEDIR
             test -z "$CCACHE_DIR" && unset CCACHE_DIR;
+            export NINJA_STATUS="[%%f/%%t %%es (%%P)] ";
             %cargo_set_environment
             RUSTC_WRAPPER="%(rustc_wrapper)"; export RUSTC_WRAPPER;
             test -z "$RUSTC_WRAPPER" && unset RUSTC_WRAPPER;
