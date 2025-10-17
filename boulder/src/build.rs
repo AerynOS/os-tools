@@ -7,12 +7,10 @@ use std::{
     os::unix::process::ExitStatusExt,
     path::{Path, PathBuf},
     process, thread,
-    time::Duration,
 };
 
 use fs_err as fs;
 use itertools::Itertools;
-use moss::runtime;
 use nix::{
     sys::signal::Signal,
     unistd::{Pid, getpgrp, setpgid},
@@ -114,8 +112,6 @@ impl Builder {
         // Clean (recreate) rootfs
         root::clean(self)?;
 
-        let rt = runtime::init();
-
         let profiles = profile::Manager::new(&self.env);
         let repos = profiles.repositories(&self.profile)?.clone();
 
@@ -128,18 +124,6 @@ impl Builder {
         upstream::sync(&self.recipe, &self.paths)?;
 
         timing.finish(timer);
-
-        drop(rt);
-        // We want to ensure no threads exist before
-        // cloning into container. Sometimes a deadlock
-        // occurs which appears related to a race condition
-        // from some thread artifacts still existing. Adding
-        // this delay allows things to get cleaned up.
-        // NOTE: This appears to reliably fix the problem,
-        // I ran boulder 100 times w/ and w/out this delay
-        // and the deadlock never occurred w/ it, but w/out
-        // it occurred within 10 attempts.
-        thread::sleep(Duration::from_millis(250));
 
         Ok(())
     }
@@ -331,7 +315,7 @@ where
     use std::io::BufRead;
 
     thread::spawn(move || {
-        let pgo = is_pgo.then_some("│").unwrap_or_default().dim();
+        let pgo = if is_pgo { "│" } else { "" }.dim();
         let kind = phase.styled(format!("{}│", phase.abbrev()));
         let tag = format!("{}{pgo}{kind}", "│".dim());
 

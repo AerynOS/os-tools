@@ -10,6 +10,8 @@ use zbus::message::{self};
 
 pub use nix::sys::signal::Signal;
 
+use crate::runtime;
+
 /// Ignore the provided signals until [`Guard`] is dropped
 pub fn ignore(signals: impl IntoIterator<Item = Signal>) -> Result<Guard, Error> {
     Ok(Guard(
@@ -32,16 +34,20 @@ pub fn ignore(signals: impl IntoIterator<Item = Signal>) -> Result<Guard, Error>
 
 // https://www.freedesktop.org/wiki/Software/systemd/inhibit/
 pub fn inhibit(what: Vec<&str>, who: String, why: String, mode: String) -> Result<message::Body, Error> {
-    let conn = zbus::blocking::Connection::system()?;
-    let msg = conn.call_method(
-        Some("org.freedesktop.login1"),
-        "/org/freedesktop/login1",
-        Some("org.freedesktop.login1.Manager"),
-        "Inhibit",
-        &(what.join(":"), who, why, mode),
-    )?;
-    let fd = msg.body();
-    Ok(fd)
+    runtime::block_on(async {
+        let conn = zbus::Connection::system().await?;
+        let msg = conn
+            .call_method(
+                Some("org.freedesktop.login1"),
+                "/org/freedesktop/login1",
+                Some("org.freedesktop.login1.Manager"),
+                "Inhibit",
+                &(what.join(":"), who, why, mode),
+            )
+            .await?;
+        let fd = msg.body();
+        Ok(fd)
+    })
 }
 
 /// A guard which restores the previous signal

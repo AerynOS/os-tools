@@ -53,14 +53,26 @@ impl Runtime {
     }
 }
 
-/// Run the provided future on the current runtime.
+/// Run the provided future on the global runtime if it's
+/// been initialized, otherwise it creates a temporary runtime
+/// to run the future on and then fully drops it.
 pub fn block_on<T, F>(task: F) -> T
 where
     F: Future<Output = T>,
 {
-    let _guard = RUNTIME.get().unwrap().read().unwrap();
-    let rt = _guard.as_ref().expect("runtime initialized");
-    rt.0.block_on(task)
+    if let Some(_lock) = RUNTIME.get() {
+        let _guard = _lock.read().unwrap();
+
+        if let Some(rt) = &*_guard {
+            return rt.0.block_on(task);
+        }
+    }
+
+    let temp_rt = runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .expect("temp runtime");
+    temp_rt.block_on(task)
 }
 
 /// Runs the provided function on an executor dedicated to blocking.

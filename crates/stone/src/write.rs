@@ -304,7 +304,7 @@ fn finalize<W: Write, B: Read + Seek>(
 ) -> Result<(), Error> {
     // Write header
     Header::V1(header::v1::Header {
-        num_payloads: payloads.len() as u16 + content.is_some().then_some(1).unwrap_or_default(),
+        num_payloads: payloads.len() as u16 + if content.is_some() { 1 } else { 0 },
         file_type,
     })
     .encode(writer)?;
