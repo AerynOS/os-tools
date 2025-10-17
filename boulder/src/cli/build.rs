@@ -11,6 +11,7 @@ use boulder::package::Packager;
 use boulder::{Env, Timing, container, package, profile, timing};
 use chrono::Local;
 use clap::Parser;
+use moss::runtime;
 use moss::signal::inhibit;
 use thiserror::Error;
 use thread_priority::{NormalThreadSchedulePolicy, ThreadPriority, ThreadSchedulePolicy, thread_native_id};
@@ -65,6 +66,8 @@ pub fn handle(command: Command, env: Env) -> Result<(), Error> {
         ..
     } = command;
 
+    let rt = runtime::init();
+
     let mut timing = Timing::default();
     let timer = timing.begin(timing::Kind::Initialize);
 
@@ -100,6 +103,9 @@ pub fn handle(command: Command, env: Env) -> Result<(), Error> {
         format!("Build in-progress: {pkg_name}"),
         "block".into(),
     );
+
+    // Ensure runtime is dropped before we enter the container
+    drop(rt);
 
     // Build & package from within container
     container::exec::<Error>(paths, networking, || {

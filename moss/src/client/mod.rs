@@ -709,25 +709,34 @@ impl Client {
         // undirt.
         fs::remove_dir_all(&blit_target)?;
 
-        if let Some(root) = tree.structured() {
-            let _ = mkdir(&blit_target, Mode::from_bits_truncate(0o755));
-            let root_dir = fcntl::open(&blit_target, OFlag::O_DIRECTORY | OFlag::O_RDONLY, Mode::empty())?;
+        // We need to ensure this runtime is dropped so it doesn't linger
+        // since this is in the boulder call path & boulder can't have
+        // multithreading when CLONE into a user namespace / "container"
+        let rayon_runtime = rayon::ThreadPoolBuilder::new().build().expect("rayon runtime");
 
-            if let Element::Directory(_, _, children) = root {
-                let current_span = tracing::Span::current();
-                stats = stats.merge(
-                    children
-                        .into_par_iter()
-                        .map(|child| {
-                            let _guard = current_span.enter();
-                            self.blit_element(root_dir, cache_fd, child, &progress)
-                        })
-                        .try_reduce(BlitStats::default, |a, b| Ok(a.merge(b)))?,
-                );
+        rayon_runtime.install(|| -> Result<(), Error> {
+            if let Some(root) = tree.structured() {
+                let _ = mkdir(&blit_target, Mode::from_bits_truncate(0o755));
+                let root_dir = fcntl::open(&blit_target, OFlag::O_DIRECTORY | OFlag::O_RDONLY, Mode::empty())?;
+
+                if let Element::Directory(_, _, children) = root {
+                    let current_span = tracing::Span::current();
+                    stats = stats.merge(
+                        children
+                            .into_par_iter()
+                            .map(|child| {
+                                let _guard = current_span.enter();
+                                self.blit_element(root_dir, cache_fd, child, &progress)
+                            })
+                            .try_reduce(BlitStats::default, |a, b| Ok(a.merge(b)))?,
+                    );
+                }
+
+                close(root_dir)?;
             }
 
-            close(root_dir)?;
-        }
+            Ok(())
+        })?;
 
         progress.finish_and_clear();
 
