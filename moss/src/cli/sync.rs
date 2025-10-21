@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 use clap::{ArgMatches, Command, arg, value_parser};
 use moss::registry::transaction;
 use moss::state::Selection;
-use moss::{Installation, environment, runtime};
+use moss::{Installation, Provider, SystemModel, environment, runtime};
 use moss::{
     Package,
     client::{self, Client},
@@ -28,7 +28,6 @@ pub fn command() -> Command {
         .about("Sync packages")
         .long_about("Sync package selections with candidates from the highest priority repository")
         .arg(arg!(-u --"update" "Update repositories before syncing"))
-        .arg(arg!(--"upgrade-only" "Only sync packages that have a version upgrade"))
         .arg(
             arg!(--to <blit_target> "Blit this sync to the provided directory instead of the root")
                 .long_help(
@@ -47,7 +46,6 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
 
     let yes_all = *args.get_one::<bool>("yes").unwrap();
     let update = *args.get_one::<bool>("update").unwrap();
-    let upgrade_only = *args.get_one::<bool>("upgrade-only").unwrap();
 
     let mut client = Client::new(environment::NAME, installation)?;
 
@@ -62,16 +60,14 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     }
 
     // Grab all the existing installed packages
-    let installed = client
-        .registry
-        .list_installed(package::Flags::default())
-        .collect::<Vec<_>>();
-    if installed.is_empty() {
-        return Err(Error::NoInstall);
-    }
+    let installed = client.registry.list_installed().collect::<Vec<_>>();
 
     // Resolve the final state of packages after considering sync updates
-    let finalized = resolve_with_sync(&client, upgrade_only, &installed)?;
+    let finalized = if let Some(system_model) = &client.system_model {
+        resolve_with_system_model(&client, system_model)?
+    } else {
+        resolve_with_installed(&client, &installed)?
+    };
     debug!(count = finalized.len(), "Full package list after sync");
     for package in &finalized {
         debug!(
@@ -163,9 +159,25 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     drop(_cache_packages_guard);
     instant = Instant::now();
 
-    // Map finalized state to a [`Selection`] by referencing
-    // it's value from the previous state
-    let new_selections = {
+    let new_selections = if let Some(system_model) = &client.system_model {
+        // For system model, "explicit" is what was defined in the system model file
+
+        finalized
+            .into_iter()
+            .map(|p| {
+                let is_explicit = system_model.packages.intersection(&p.meta.providers).next().is_some();
+
+                Selection {
+                    package: p.id,
+                    explicit: is_explicit,
+                    // TODO: We can map the "why" of system-model packages to this? Or
+                    // can we remove "reason" entirely, we haven't used it to-date
+                    reason: None,
+                }
+            })
+            .collect()
+    } else {
+        // Map finalized state to a [`Selection`] by referencing it's value from the previous state
         let previous_selections = match client.installation.active_state {
             Some(id) => client.state_db.get(id)?.selections,
             None => vec![],
@@ -214,9 +226,11 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
 }
 
 /// Returns the resolved package set w/ sync'd changes swapped in using
-/// the provided `packages`
-#[tracing::instrument(skip_all, fields(upgrade_only = upgrade_only))]
-fn resolve_with_sync(client: &Client, upgrade_only: bool, packages: &[Package]) -> Result<Vec<Package>, Error> {
+/// the provided installed `packages`
+///
+/// Used to sync in "implicit" mode, where the active state is the source of truth
+#[tracing::instrument(skip_all)]
+fn resolve_with_installed(client: &Client, packages: &[Package]) -> Result<Vec<Package>, Error> {
     let all_ids = packages.iter().map(|p| &p.id).collect::<BTreeSet<_>>();
 
     // For each explicit package, replace it w/ it's sync'd change (if available)
@@ -234,13 +248,7 @@ fn resolve_with_sync(client: &Client, upgrade_only: bool, packages: &[Package]) 
                 .by_name(&p.meta.name, package::Flags::new().with_available())
                 .next()
             {
-                let upgrade_check = if upgrade_only {
-                    lookup.meta.source_release > p.meta.source_release
-                } else {
-                    true
-                };
-
-                if !all_ids.contains(&lookup.id) && upgrade_check {
+                if !all_ids.contains(&lookup.id) {
                     return Some(lookup.id);
                 }
             }
@@ -258,6 +266,33 @@ fn resolve_with_sync(client: &Client, upgrade_only: bool, packages: &[Package]) 
     Ok(client.resolve_packages(tx.finalize())?)
 }
 
+/// Returns the resolved package set based on the packages defined in the system model
+///
+/// System model is the source of truth here vs "implicit" mode which relies on the active
+/// state + configured repos as the source of truth
+#[tracing::instrument(skip_all)]
+fn resolve_with_system_model(client: &Client, system_model: &SystemModel) -> Result<Vec<Package>, Error> {
+    // Lookup the available package for each
+    let packages = system_model
+        .packages
+        .iter()
+        .map(|provider| {
+            client
+                .registry
+                .by_provider_id_only(provider, package::Flags::default().with_available())
+                .next()
+                .ok_or(Error::MissingSystemModelPackage(provider.clone()))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+
+    // Add them to a transaction that only resolves transitives from available repositories
+    let mut tx = client.registry.transaction(transaction::Lookup::AvailableOnly)?;
+    tx.add(packages)?;
+
+    // Resolve the tx
+    Ok(client.resolve_packages(tx.finalize())?)
+}
+
 /// Simple timing information for Sync
 #[derive(Default)]
 pub struct Timing {
@@ -268,11 +303,11 @@ pub struct Timing {
 
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error("Package defined in system-model does not exist in any repository: {0}")]
+    MissingSystemModelPackage(Provider),
+
     #[error("cancelled")]
     Cancelled,
-
-    #[error("no installation")]
-    NoInstall,
 
     #[error("client")]
     Client(#[from] client::Error),
