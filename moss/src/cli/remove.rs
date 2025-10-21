@@ -12,7 +12,6 @@ use moss::{
     Installation, Provider,
     client::{self, Client},
     environment,
-    package::Flags,
     registry::transaction,
     state::Selection,
 };
@@ -48,7 +47,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     // Grab a client for the target, enumerate packages
     let client = Client::new(environment::NAME, installation)?;
 
-    let installed = client.registry.list_installed(Flags::default()).collect::<Vec<_>>();
+    let installed = client.registry.list_installed().collect::<Vec<_>>();
     let installed_ids = installed.iter().map(|p| p.id.clone()).collect::<BTreeSet<_>>();
 
     // Separate packages between installed / not installed (or invalid)
