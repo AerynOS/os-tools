@@ -118,6 +118,12 @@ impl IntoIterator for Map {
     }
 }
 
+impl FromIterator<(Id, Repository)> for Map {
+    fn from_iter<T: IntoIterator<Item = (Id, Repository)>>(iter: T) -> Self {
+        Self(iter.into_iter().collect())
+    }
+}
+
 impl Config for Map {
     fn domain() -> String {
         "repo".into()

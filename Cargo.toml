@@ -92,6 +92,7 @@ mailparse = "0.16.1"
 zbus = { version = "5.1.1", default-features = false, features = ["tokio"] }
 infer = "0.19.0"
 tempfile = "3.20.0"
+kdl = "6.5.0"
 
 [workspace.lints.rust]
 rust_2018_idioms = { level = "warn", priority = -1 }

@@ -11,7 +11,7 @@ use crate::{Provider, Registry, package};
 
 enum ProviderFilter {
     /// Must be installed
-    InstalledOnly(Provider),
+    Installed(Provider),
 
     /// Filter the lookup to current selection scope
     Selections(Provider),
@@ -26,6 +26,8 @@ enum ProviderFilter {
 pub enum Lookup {
     /// Lookup only installed packages
     InstalledOnly,
+    /// Lookup only available packages
+    AvailableOnly,
     /// Lookup installed packages first
     PreferInstalled,
     /// Lookup available packages first
@@ -154,15 +156,18 @@ impl Transaction<'_> {
         match self.lookup {
             Lookup::InstalledOnly => self
                 .resolve_provider_with_filter(ProviderFilter::Selections(provider.clone()))
-                .or_else(|_| self.resolve_provider_with_filter(ProviderFilter::InstalledOnly(provider.clone()))),
+                .or_else(|_| self.resolve_provider_with_filter(ProviderFilter::Installed(provider.clone()))),
+            Lookup::AvailableOnly => self
+                .resolve_provider_with_filter(ProviderFilter::Selections(provider.clone()))
+                .or_else(|_| self.resolve_provider_with_filter(ProviderFilter::Available(provider.clone()))),
             Lookup::PreferInstalled => self
                 .resolve_provider_with_filter(ProviderFilter::Selections(provider.clone()))
-                .or_else(|_| self.resolve_provider_with_filter(ProviderFilter::InstalledOnly(provider.clone())))
+                .or_else(|_| self.resolve_provider_with_filter(ProviderFilter::Installed(provider.clone())))
                 .or_else(|_| self.resolve_provider_with_filter(ProviderFilter::Available(provider.clone()))),
             Lookup::PreferAvailable => self
                 .resolve_provider_with_filter(ProviderFilter::Selections(provider.clone()))
                 .or_else(|_| self.resolve_provider_with_filter(ProviderFilter::Available(provider.clone())))
-                .or_else(|_| self.resolve_provider_with_filter(ProviderFilter::InstalledOnly(provider.clone()))),
+                .or_else(|_| self.resolve_provider_with_filter(ProviderFilter::Installed(provider.clone()))),
         }
     }
 
@@ -174,7 +179,7 @@ impl Transaction<'_> {
                 .by_provider_id_only(&provider, package::Flags::new().with_available())
                 .next()
                 .ok_or(Error::NoCandidate(provider.to_string())),
-            ProviderFilter::InstalledOnly(provider) => self
+            ProviderFilter::Installed(provider) => self
                 .registry
                 .by_provider_id_only(&provider, package::Flags::new().with_installed())
                 .next()

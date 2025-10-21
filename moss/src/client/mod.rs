@@ -37,10 +37,11 @@ use self::install::install;
 use self::prune::{prune_cache, prune_states};
 use self::verify::verify;
 use crate::{
-    Installation, Package, Registry, Signal, State, db, environment, installation, package,
+    Installation, Package, Registry, Signal, State, SystemModel, db, environment, installation, package,
     registry::plugin::{self, Plugin},
     repository, runtime, signal,
     state::{self, Selection},
+    system_model,
 };
 use tracing::{info, info_span};
 
@@ -77,6 +78,9 @@ pub struct Client {
 
     /// Operational scope (real systems, ephemeral, etc)
     scope: Scope,
+
+    /// System model, if defined
+    pub system_model: Option<SystemModel>,
 }
 
 impl Client {
@@ -106,8 +110,12 @@ impl Client {
         let state_db = db::state::Database::new(installation.db_path("state").to_str().unwrap_or_default())?;
         let layout_db = db::layout::Database::new(installation.db_path("layout").to_str().unwrap_or_default())?;
 
+        let system_model = system_model::load(&installation)?;
+
         let repositories = if let Some(repos) = repositories {
             repository::Manager::explicit(&name, repos, installation.clone())?
+        } else if let Some(system_model) = &system_model {
+            repository::Manager::explicit(&name, system_model.repositories.clone(), installation.clone())?
         } else {
             repository::Manager::system(config.clone(), installation.clone())?
         };
@@ -124,6 +132,7 @@ impl Client {
             state_db,
             layout_db,
             scope: Scope::Stateful,
+            system_model,
         })
     }
 
@@ -1196,4 +1205,6 @@ pub enum Error {
     Cancelled,
     #[error("ignore signals during blit")]
     BlitSignalIgnore(#[from] signal::Error),
+    #[error("load system model")]
+    LoadSystemModel(#[from] system_model::LoadError),
 }
