@@ -44,7 +44,7 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
     let resolved = client.resolve_packages(tx.finalize())?;
 
     // Get installed packages to check against
-    let installed = client.registry.list_installed(Flags::default()).collect::<Vec<_>>();
+    let installed = client.registry.list_installed().collect::<Vec<_>>();
     let is_installed = |p: &Package| installed.iter().any(|i| i.meta.name == p.meta.name);
 
     // Get missing packages that are:
