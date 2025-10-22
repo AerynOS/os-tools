@@ -146,9 +146,6 @@ fn bump(recipe: PathBuf, release: Option<u64>) -> Result<(), Error> {
 }
 
 fn new(output: PathBuf, upstreams: Vec<Url>, env: Env) -> Result<(), Error> {
-    // We use async to fetch upstreams
-    let _guard = runtime::init();
-
     const RECIPE_FILE: &str = "stone.yaml";
     const MONITORING_FILE: &str = "monitoring.yaml";
 
@@ -234,9 +231,6 @@ fn update(
             }
         }
     }
-
-    // Needed to fetch
-    let _guard = runtime::init();
 
     let mpb = MultiProgress::new();
 

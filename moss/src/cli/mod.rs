@@ -10,7 +10,7 @@ use clap_complete::{
     shells::{Bash, Fish, Zsh},
 };
 use clap_mangen::Man;
-use moss::{Installation, installation, runtime};
+use moss::{Installation, installation};
 use thiserror::Error;
 use tracing_common::{self, logging::LogConfig, logging::init_log_with_config};
 
@@ -190,9 +190,6 @@ pub fn process() -> Result<(), Error> {
 
     let root = matches.get_one::<PathBuf>("root").unwrap();
     let cache = matches.get_one::<PathBuf>("cache");
-
-    // Make async runtime available to all of moss
-    let _guard = runtime::init();
 
     let installation = Installation::open(root, cache.cloned())?;
 
