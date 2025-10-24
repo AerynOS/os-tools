@@ -777,7 +777,7 @@ impl Client {
             current = progress.position() as usize,
             total = progress.length().unwrap_or(0) as usize,
             event_type = "progress_update",
-            "Installing {}",
+            "Blitting {}",
             item.path()
         );
 
