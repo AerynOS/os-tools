@@ -5,6 +5,7 @@
 use clap::{ArgMatches, Command, arg};
 use itertools::{Either, Itertools};
 use std::collections::BTreeSet;
+use std::time::{Duration, Instant};
 use thiserror::Error;
 
 use moss::{
@@ -15,6 +16,7 @@ use moss::{
     registry::transaction,
     state::Selection,
 };
+use tracing::{debug, info, info_span, instrument, warn};
 use tui::{
     Styled,
     dialoguer::{Confirm, theme::ColorfulTheme},
@@ -30,7 +32,11 @@ pub fn command() -> Command {
 }
 
 /// Handle execution of `moss remove`
+#[instrument(skip_all)]
 pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
+    let mut timing = Timing::default();
+    let mut instant = Instant::now();
+
     let pkgs = args
         .get_many::<String>("NAME")
         .into_iter()
@@ -74,6 +80,25 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     // Resolve all removed packages, where removed is (installed - finalized)
     let removed = client.resolve_packages(installed_ids.difference(&finalized))?;
 
+    timing.resolve = instant.elapsed();
+    info!(
+        total_packages = removed.len(),
+        packages_to_remove = removed.len(),
+        resolve_time_ms = timing.resolve.as_millis(),
+        "Package resolution for removal completed"
+    );
+
+    debug!(count = removed.len(), "Full package list for removal");
+    for package in &removed {
+        debug!(
+            name = %package.meta.name,
+            version = %package.meta.version_identifier,
+            source_release = package.meta.source_release,
+            build_release = package.meta.build_release,
+            "Package marked for removal"
+        );
+    }
+
     println!("The following package(s) will be removed:");
     println!();
     autoprint_columns(&removed);
@@ -91,8 +116,19 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         return Err(Error::Cancelled);
     }
 
+    instant = Instant::now();
+
+    let removal_span = info_span!("progress", phase = "removal", event_type = "progress");
+    let _removal_guard = removal_span.enter();
+    info!(
+        phase = "removal",
+        total_items = removed.len(),
+        progress = 0.0,
+        event_type = "progress_start",
+    );
+
     // Print each package to stdout
-    for package in removed {
+    for package in &removed {
         println!("{} {}", "Removed".red(), package.meta.name.to_string().bold());
     }
 
@@ -114,7 +150,10 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
                     // Should be unreachable since new state from removal
                     // is always a subset of the previous state
                     .unwrap_or_else(|| {
-                        eprintln!("Unreachable: previous selection not found during removal for package {id:?}, marking as not explicit");
+                        warn!(
+                            package_id = ?id,
+                            "Unreachable: previous selection not found during removal, marking as not explicit"
+                        );
 
                         Selection {
                             package: id,
@@ -128,6 +167,22 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
 
     // Apply state
     client.new_state(&new_state_pkgs, "Remove")?;
+
+    timing.blit = instant.elapsed();
+    info!(
+        phase = "removal",
+        duration_ms = timing.blit.as_millis(),
+        items_processed = removed.len(),
+        progress = 1.0,
+        event_type = "progress_completed",
+    );
+    drop(_removal_guard);
+
+    info!(
+        blit_time_ms = timing.blit.as_millis(),
+        total_time_ms = (timing.resolve + timing.blit).as_millis(),
+        "Removal completed successfully"
+    );
 
     Ok(())
 }
@@ -154,4 +209,11 @@ pub enum Error {
 
     #[error("string processing")]
     Dialog(#[from] tui::dialoguer::Error),
+}
+
+/// Simple timing information for Remove
+#[derive(Default)]
+pub struct Timing {
+    pub resolve: Duration,
+    pub blit: Duration,
 }
