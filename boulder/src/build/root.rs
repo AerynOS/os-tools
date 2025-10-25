@@ -214,11 +214,11 @@ const BASE_PACKAGES: &[&str] = &[
 ];
 const BASE32_PACKAGES: &[&str] = &["glibc-32bit-devel"];
 
-const GNU_PACKAGES: &[&str] = &["binutils", "gcc", "g++"];
+const GNU_PACKAGES: &[&str] = &["binary(ld.bfd)", "binary(gcc)", "binary(g++)"];
 const GNU32_PACKAGES: &[&str] = &["gcc-32bit", "libstdc++-32bit-devel"];
 
 const LLVM_PACKAGES: &[&str] = &["clang"];
-const LLVM32_PACKAGES: &[&str] = &["clang-32bit", "libcxx-32bit-devel"];
+const LLVM32_PACKAGES: &[&str] = &["clang-32bit"];
 
 const MOLD_PACKAGES: &[&str] = &["binary(mold)"];
 
