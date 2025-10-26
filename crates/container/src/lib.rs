@@ -81,6 +81,21 @@ impl Container {
         self
     }
 
+    /// Create a read-only bind mount only if the `host` path exists
+    pub fn bind_ro_if_exists(mut self, host: impl Into<PathBuf>, guest: impl Into<PathBuf>) -> Self {
+        let source = host.into();
+
+        if source.exists() {
+            self.binds.push(Bind {
+                source,
+                target: guest.into(),
+                read_only: true,
+            });
+        }
+
+        self
+    }
+
     /// Configure networking availability
     pub fn networking(self, enabled: bool) -> Self {
         Self {
