@@ -171,8 +171,8 @@ impl TriggerRunner<'_> {
                 // TODO: Add caching support via /var/
                 let isolation = Container::new(install.isolation_dir())
                     .networking(false)
-                    .bind_ro(self.scope.host_path("etc"), "/etc")
-                    .bind_rw(self.scope.guest_path("usr"), "/usr")
+                    .bind_ro(self.scope.host_path("etc"), "/etc", false)
+                    .bind_rw(self.scope.guest_path("usr"), "/usr", false)
                     .work_dir("/");
 
                 Ok(isolation.run(|| execute_trigger_directly(&self.trigger))?)
@@ -184,8 +184,8 @@ impl TriggerRunner<'_> {
                 } else {
                     let isolation = Container::new(install.isolation_dir())
                         .networking(false)
-                        .bind_rw(self.scope.host_path("etc"), "/etc")
-                        .bind_rw(self.scope.guest_path("usr"), "/usr")
+                        .bind_rw(self.scope.host_path("etc"), "/etc", false)
+                        .bind_rw(self.scope.guest_path("usr"), "/usr", false)
                         .work_dir("/");
 
                     Ok(isolation.run(|| execute_trigger_directly(&self.trigger))?)

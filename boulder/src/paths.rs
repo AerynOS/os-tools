@@ -87,6 +87,14 @@ impl Paths {
         }
     }
 
+    // Allows the person building to adjust ccache configuration, most usefully the size of the cache
+    pub fn ccache_config(&self) -> Mapping {
+        Mapping {
+            host: "/etc/ccache".into(),
+            guest: "/etc/ccache".into(),
+        }
+    }
+
     pub fn sccache(&self) -> Mapping {
         Mapping {
             host: self.host_root.join("sccache"),
