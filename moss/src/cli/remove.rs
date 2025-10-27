@@ -61,15 +61,38 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         return Err(Error::NoSuchPackage);
     }
 
-    // Add all installed packages to transaction
-    let mut transaction = client.registry.transaction(transaction::Lookup::InstalledOnly)?;
-    transaction.add(installed_ids.clone().into_iter().collect())?;
+    // First resolve a transaction where all requested packages are removed from the install
+    //
+    // This will remove those packages & any package that depends on it. This will not remove
+    // the packages it depends on if they are orphaned (see next step).
+    let tx_with_removed = {
+        // Add all installed packages to transaction
+        let mut transaction = client.registry.transaction(transaction::Lookup::InstalledOnly)?;
+        transaction.add(installed_ids.clone().into_iter().collect())?;
 
-    // Remove all pkgs for removal
-    transaction.remove(for_removal);
+        // Remove all pkgs for removal
+        transaction.remove(for_removal);
 
-    // Finalized tx has all reverse deps removed
-    let finalized = transaction.finalize().cloned().collect::<BTreeSet<_>>();
+        // Finalized tx has all reverse deps removed
+        transaction.finalize().cloned().collect::<BTreeSet<_>>()
+    };
+
+    // Build a new transaction w/ the leftover "explicit" packages. This will cause all orphaned
+    // transitive dependencies to get dropped. These are packages that were depended on by removed
+    // packages that are no longer depended on.
+    let finalized = {
+        // Is an explicit package that still exists after removals
+        let explicit_pkgs = installed
+            .iter()
+            .filter(|p| tx_with_removed.contains(&p.id) && p.flags.explicit)
+            .map(|p| p.id.clone())
+            .collect::<Vec<_>>();
+
+        let mut transaction = client.registry.transaction(transaction::Lookup::InstalledOnly)?;
+        transaction.add(explicit_pkgs)?;
+
+        transaction.finalize().cloned().collect::<BTreeSet<_>>()
+    };
 
     // Resolve all removed packages, where removed is (installed - finalized)
     let removed = client.resolve_packages(installed_ids.difference(&finalized))?;
