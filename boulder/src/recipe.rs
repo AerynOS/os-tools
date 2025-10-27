@@ -31,6 +31,13 @@ impl Recipe {
         let parsed = stone_recipe::from_str(&source)?;
         let build_time = resolve_build_time(&path);
 
+        if parsed.source.release == 0 {
+            return Err(Error::Value(format!(
+                "release must be > 0 (found 'release: {}')",
+                parsed.source.release
+            )));
+        }
+
         Ok(Self {
             path,
             source,
@@ -145,4 +152,6 @@ pub enum Error {
     Load(#[from] io::Error),
     #[error("decode recipe")]
     Decode(#[from] stone_recipe::Error),
+    #[error("value: {0}")]
+    Value(String),
 }
