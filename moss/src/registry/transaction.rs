@@ -2,6 +2,8 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
+use std::collections::HashMap;
+
 use dag::Dag;
 use thiserror::Error;
 
@@ -41,6 +43,11 @@ pub struct Transaction<'a> {
 
     /// Dependency lookup strategy
     lookup: Lookup,
+
+    /// Used as a cache to quickly resolve providers for things we've
+    /// already added to the transaction so we don't have to hit the
+    /// registry again
+    selection_providers: HashMap<Provider, package::Id>,
 }
 
 /// Construct a new Transaction wrapped around the underlying [`Registry`].
@@ -53,6 +60,7 @@ pub fn new(registry: &Registry, lookup: Lookup) -> Result<Transaction<'_>, Error
         registry,
         packages: Dag::default(),
         lookup,
+        selection_providers: HashMap::default(),
     })
 }
 
@@ -98,13 +106,18 @@ impl Transaction<'_> {
 
         // Grab this package in question
         let package = self.registry.by_id(&check_id).next();
-        let package = package.ok_or(Error::NoCandidate(check_id.into()))?;
+        let package = package.ok_or(Error::NoCandidate(check_id.to_string()))?;
 
         tracing::Span::current().record("check_name", package.meta.name.as_ref());
         tracing::debug!(
             num_dependencies = package.meta.dependencies.len(),
             "added package to transaction"
         );
+
+        // Cache each provider for the package being added to our transaction
+        for provider in package.meta.providers {
+            self.selection_providers.insert(provider, check_id.clone());
+        }
 
         for dependency in package.meta.dependencies {
             let provider = Provider {
@@ -113,7 +126,7 @@ impl Transaction<'_> {
             };
 
             // Now get it resolved
-            let search_id = self.resolve_provider(provider)?;
+            let search_id = self.resolve_provider(provider.clone())?;
 
             // Add dependency node
             let need_search = !self.packages.node_exists(&search_id);
@@ -122,6 +135,10 @@ impl Transaction<'_> {
             // No dag node for it previously
             if need_search {
                 tracing::debug!(?search_id, "adding package to next");
+
+                // Add this provider to the cache
+                self.selection_providers.insert(provider, search_id.clone());
+
                 next.push(search_id);
             }
 
@@ -163,9 +180,9 @@ impl Transaction<'_> {
                 .next()
                 .ok_or(Error::NoCandidate(provider.to_string())),
             ProviderFilter::Selections(provider) => self
-                .registry
-                .by_provider_id_only(&provider, package::Flags::default())
-                .find(|id| self.packages.node_exists(id))
+                .selection_providers
+                .get(&provider)
+                .cloned()
                 .ok_or(Error::NoCandidate(provider.to_string())),
         }
     }
