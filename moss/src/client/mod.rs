@@ -42,7 +42,7 @@ use crate::{
     repository, runtime, signal,
     state::{self, Selection},
 };
-use tracing::info;
+use tracing::{info, info_span};
 
 pub mod boot;
 pub mod cache;
@@ -291,11 +291,25 @@ impl Client {
             "block".into(),
         );
 
+        let timer = Instant::now();
+
+        let state_span = info_span!(
+            "progress",
+            phase = summary.to_string().to_lowercase(),
+            event_type = "progress"
+        );
+        let _state_guard = state_span.enter();
+        info!(
+            total_items = selections.len(),
+            progress = 0.0,
+            event_type = "progress_start",
+        );
+
         let old_state = self.installation.active_state;
 
         let fstree = self.blit_root(selections.iter().map(|s| &s.package))?;
 
-        match &self.scope {
+        let result = match &self.scope {
             Scope::Stateful => {
                 // Add to db
                 let state = self.state_db.add(selections, Some(&summary.to_string()), None)?;
@@ -309,7 +323,17 @@ impl Client {
 
                 Ok(None)
             }
-        }
+        };
+
+        info!(
+            duration_ms = timer.elapsed().as_millis(),
+            items_processed = selections.len(),
+            progress = 1.0,
+            event_type = "progress_completed",
+        );
+        drop(_state_guard);
+
+        result
     }
 
     /// Apply all triggers with the given scope, wrapping with a progressbar.
