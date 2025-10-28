@@ -25,18 +25,21 @@ pub struct Recipe {
 }
 
 impl Recipe {
+    /// Desired recipe value invariants are checked here
     pub fn load(path: impl AsRef<Path>) -> Result<Self, Error> {
         let path = resolve_path(path)?;
         let source = fs::read_to_string(&path)?;
         let parsed = stone_recipe::from_str(&source)?;
         let build_time = resolve_build_time(&path);
 
+        // Invariant checks
         if parsed.source.release == 0 {
             return Err(Error::Value(format!(
                 "release must be > 0 (found 'release: {}')",
                 parsed.source.release
             )));
         }
+        // Invariant checks done
 
         Ok(Self {
             path,
