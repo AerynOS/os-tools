@@ -146,7 +146,6 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     let cache_packages_span = info_span!("progress", phase = "cache_packages", event_type = "progress");
     let _cache_packages_guard = cache_packages_span.enter();
     info!(
-        phase = "cache_packages",
         total_items = synced.len(),
         progress = 0.0,
         event_type = "progress_start"
@@ -156,7 +155,6 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
 
     timing.fetch = instant.elapsed();
     info!(
-        phase = "cache_packages",
         duration_ms = timing.fetch.as_millis(),
         items_processed = synced.len(),
         progress = 1.0,
@@ -201,27 +199,10 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
             .collect::<Vec<_>>()
     };
 
-    let sync_span = info_span!("progress", phase = "sync", event_type = "progress");
-    let _sync_guard = sync_span.enter();
-    info!(
-        phase = "sync",
-        total_items = new_selections.len(),
-        progress = 0.0,
-        event_type = "progress_start",
-    );
-
     // Perfect, apply state.
     client.new_state(&new_selections, "Sync")?;
 
     timing.blit = instant.elapsed();
-    info!(
-        phase = "sync",
-        duration_ms = timing.blit.as_millis(),
-        items_processed = new_selections.len(),
-        progress = 1.0,
-        event_type = "progress_completed",
-    );
-    drop(_sync_guard);
 
     info!(
         blit_time_ms = timing.blit.as_millis(),

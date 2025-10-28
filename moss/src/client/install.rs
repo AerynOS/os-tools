@@ -108,7 +108,6 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
     let cache_packages_span = info_span!("progress", phase = "cache_packages", event_type = "progress");
     let _cache_packages_guard = cache_packages_span.enter();
     info!(
-        phase = "cache_packages",
         total_items = missing.len(),
         progress = 0.0,
         event_type = "progress_start"
@@ -119,7 +118,6 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
 
     timing.fetch = instant.elapsed();
     info!(
-        phase = "cache_packages",
         duration_ms = timing.fetch.as_millis(),
         items_processed = missing.len(),
         progress = 1.0,
@@ -146,27 +144,10 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
         missing_selections.chain(previous_selections).collect::<Vec<_>>()
     };
 
-    let install_span = info_span!("progress", phase = "installation", event_type = "progress");
-    let _install_guard = install_span.enter();
-    info!(
-        phase = "installation",
-        total_items = new_state_pkgs.len(),
-        progress = 0.0,
-        event_type = "progress_start",
-    );
-
     // Perfect, apply state.
     client.new_state(&new_state_pkgs, "Install")?;
 
     timing.blit = instant.elapsed();
-    info!(
-        phase = "installation",
-        duration_ms = timing.blit.as_millis(),
-        items_processed = new_state_pkgs.len(),
-        progress = 1.0,
-        event_type = "progress_completed",
-    );
-    drop(_install_guard);
 
     info!(
         blit_time_ms = timing.blit.as_millis(),

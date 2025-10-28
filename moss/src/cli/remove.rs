@@ -16,7 +16,7 @@ use moss::{
     registry::transaction,
     state::Selection,
 };
-use tracing::{debug, info, info_span, instrument, warn};
+use tracing::{debug, info, instrument, warn};
 use tui::{
     Styled,
     dialoguer::{Confirm, theme::ColorfulTheme},
@@ -88,7 +88,6 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         "Package resolution for removal completed"
     );
 
-    debug!(count = removed.len(), "Full package list for removal");
     for package in &removed {
         debug!(
             name = %package.meta.name,
@@ -117,15 +116,6 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     }
 
     instant = Instant::now();
-
-    let removal_span = info_span!("progress", phase = "removal", event_type = "progress");
-    let _removal_guard = removal_span.enter();
-    info!(
-        phase = "removal",
-        total_items = removed.len(),
-        progress = 0.0,
-        event_type = "progress_start",
-    );
 
     // Print each package to stdout
     for package in &removed {
@@ -169,14 +159,6 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     client.new_state(&new_state_pkgs, "Remove")?;
 
     timing.blit = instant.elapsed();
-    info!(
-        phase = "removal",
-        duration_ms = timing.blit.as_millis(),
-        items_processed = removed.len(),
-        progress = 1.0,
-        event_type = "progress_completed",
-    );
-    drop(_removal_guard);
 
     info!(
         blit_time_ms = timing.blit.as_millis(),
