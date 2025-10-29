@@ -56,22 +56,26 @@ impl Container {
     }
 
     /// Create a read-write bind mount
-    pub fn bind_rw(mut self, host: impl Into<PathBuf>, guest: impl Into<PathBuf>) -> Self {
-        self.binds.push(Bind {
-            source: host.into(),
-            target: guest.into(),
-            read_only: false,
-        });
+    pub fn bind_rw(mut self, host: impl Into<PathBuf> + Clone, guest: impl Into<PathBuf>, optional: bool) -> Self {
+        if !optional || host.clone().into().exists() {
+            self.binds.push(Bind {
+                source: host.into(),
+                target: guest.into(),
+                read_only: false,
+            });
+        }
         self
     }
 
     /// Create a read-only bind mount
-    pub fn bind_ro(mut self, host: impl Into<PathBuf>, guest: impl Into<PathBuf>) -> Self {
-        self.binds.push(Bind {
-            source: host.into(),
-            target: guest.into(),
-            read_only: true,
-        });
+    pub fn bind_ro(mut self, host: impl Into<PathBuf> + Clone, guest: impl Into<PathBuf>, optional: bool) -> Self {
+        if !optional || host.clone().into().exists() {
+            self.binds.push(Bind {
+                source: host.into(),
+                target: guest.into(),
+                read_only: true,
+            });
+        }
         self
     }
 
