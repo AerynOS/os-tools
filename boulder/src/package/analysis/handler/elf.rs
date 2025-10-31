@@ -170,7 +170,7 @@ fn parse_dynamic_section(
                     }
                 });
 
-                let picked = if let Some(rpath_name) = rpath_name.as_ref() {
+                let picked = if let Some(rpath_name) = &rpath_name {
                     &rpath_name.to_string_lossy().to_string()
                 } else {
                     name

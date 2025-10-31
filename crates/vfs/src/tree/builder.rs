@@ -49,7 +49,7 @@ impl<T: BlitFile> TreeBuilder<T> {
         let file = File::new(item);
 
         // Find all parent paths
-        if let Some(parent) = file.parent.as_ref() {
+        if let Some(parent) = &file.parent {
             let mut leading_path: Option<String> = None;
             // Build a set of parent paths skipping `/`, yielding `usr`, `usr/bin`, etc.
             for component in path::components(parent) {
@@ -95,7 +95,7 @@ impl<T: BlitFile> TreeBuilder<T> {
                 // Resolve the link.
                 let target = if target.starts_with('/') {
                     target.clone()
-                } else if let Some(parent) = link.parent.as_ref() {
+                } else if let Some(parent) = &link.parent {
                     path::join(parent, target)
                 } else {
                     target.clone()
@@ -121,7 +121,7 @@ impl<T: BlitFile> TreeBuilder<T> {
             // New node for this guy
             let node = tree.new_node(entry.clone());
 
-            if let Some(parent) = entry.parent.as_ref() {
+            if let Some(parent) = &entry.parent {
                 tree.add_child_to_node(node, parent)?;
             }
         }

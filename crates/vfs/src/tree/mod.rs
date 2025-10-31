@@ -185,7 +185,7 @@ impl<T: BlitFile> Tree<T> {
                 Some(n) => *n,
                 None => self.new_node(orphan.clone()),
             };
-            if let Some(parent) = orphan.parent.as_ref() {
+            if let Some(parent) = &orphan.parent {
                 self.add_child_to_node(node, parent)?;
             }
         }
