@@ -59,7 +59,7 @@ impl Installation {
             return Err(Error::RootInvalid);
         }
 
-        if let Some(dir) = cache_dir.as_ref() {
+        if let Some(dir) = &cache_dir {
             if !dir.exists() || !dir.is_dir() {
                 return Err(Error::CacheInvalid);
             }
@@ -124,7 +124,7 @@ impl Installation {
     /// Build a cache path relative to the moss root, or
     /// from the custom cache dir, if provided
     pub fn cache_path(&self, path: impl AsRef<Path>) -> PathBuf {
-        if let Some(dir) = self.cache_dir.as_ref() {
+        if let Some(dir) = &self.cache_dir {
             dir.join(path)
         } else {
             self.moss_path("cache").join(path)

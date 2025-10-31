@@ -79,11 +79,11 @@ impl Phase {
 
         let Some(content) = (match self {
             Phase::Prepare => Some(prepare_script(&recipe.parsed.upstreams)),
-            Phase::Setup => target_build.setup.as_ref().or(root_build.setup.as_ref()).cloned(),
-            Phase::Build => target_build.build.as_ref().or(root_build.build.as_ref()).cloned(),
-            Phase::Check => target_build.check.as_ref().or(root_build.check.as_ref()).cloned(),
-            Phase::Install => target_build.install.as_ref().or(root_build.install.as_ref()).cloned(),
-            Phase::Workload => match target_build.workload.as_ref().or(root_build.workload.as_ref()).cloned() {
+            Phase::Setup => target_build.setup.clone().or_else(|| root_build.setup.clone()),
+            Phase::Build => target_build.build.clone().or_else(|| root_build.build.clone()),
+            Phase::Check => target_build.check.clone().or_else(|| root_build.check.clone()),
+            Phase::Install => target_build.install.clone().or_else(|| root_build.install.clone()),
+            Phase::Workload => match target_build.workload.clone().or_else(|| root_build.workload.clone()) {
                 Some(mut content) => {
                     if matches!(recipe.parsed.options.toolchain, Toolchain::Llvm) {
                         if matches!(pgo_stage, Some(pgo::Stage::One)) {
