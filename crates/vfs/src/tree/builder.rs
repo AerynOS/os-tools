@@ -136,6 +136,8 @@ impl<T: BlitFile> TreeBuilder<T> {
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use crate::tree::Kind;
 
     use super::{BlitFile, TreeBuilder};
@@ -144,7 +146,7 @@ mod tests {
     struct CustomFile {
         path: String,
         kind: Kind,
-        id: String,
+        id: Arc<str>,
     }
 
     impl From<String> for CustomFile {
@@ -166,7 +168,7 @@ mod tests {
             self.kind.clone()
         }
 
-        fn id(&self) -> String {
+        fn id(&self) -> Arc<str> {
             self.id.clone()
         }
 

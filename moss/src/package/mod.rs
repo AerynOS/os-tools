@@ -2,7 +2,9 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-use derive_more::{AsRef, Debug, Display, From, Into};
+use std::{path::Path, sync::Arc};
+
+use derive_more::{Debug, Display, Into};
 use itertools::Itertools;
 
 pub use self::meta::{Meta, MissingMetaFieldError, Name};
@@ -11,10 +13,39 @@ pub mod meta;
 pub mod render;
 
 /// Unique ID of a [`Package`]
-#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, From, Into, AsRef, Display)]
-#[as_ref(forward)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Into, Display)]
 #[debug("{_0:?}")]
-pub struct Id(String);
+pub struct Id(Arc<str>);
+
+impl From<&str> for Id {
+    fn from(value: &str) -> Self {
+        Self(value.into())
+    }
+}
+
+impl From<String> for Id {
+    fn from(value: String) -> Self {
+        Self(value.into())
+    }
+}
+
+impl From<Id> for String {
+    fn from(val: Id) -> Self {
+        (*val.0).to_owned()
+    }
+}
+
+impl AsRef<str> for Id {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl AsRef<Path> for Id {
+    fn as_ref(&self) -> &Path {
+        (*self.0).as_ref()
+    }
+}
 
 impl From<Id> for meta::Id {
     fn from(id: Id) -> Self {

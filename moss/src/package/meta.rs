@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, sync::Arc};
 
 use derive_more::{AsRef, Debug, Display, From, Into};
 use stone::payload;
@@ -13,7 +13,7 @@ use crate::{Dependency, Provider, dependency};
 /// A package identifier constructed from metadata fields
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Display)]
 #[debug("{_0:?}")]
-pub struct Id(pub(super) String);
+pub struct Id(pub(super) Arc<str>);
 
 /// The name of a [`super::Package`]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, AsRef, From, Into, Display)]
@@ -163,7 +163,8 @@ impl Meta {
         Id(format!(
             "{}-{}-{}.{}",
             &self.name.0, &self.version_identifier, &self.source_release, &self.architecture
-        ))
+        )
+        .into())
     }
 }
 

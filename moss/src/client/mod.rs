@@ -14,6 +14,7 @@ use std::{
     fmt, io,
     os::{fd::RawFd, unix::fs::symlink},
     path::{Path, PathBuf},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -1002,7 +1003,7 @@ impl BlitFile for PendingFile {
     }
 
     /// Return ID for conflict
-    fn id(&self) -> String {
+    fn id(&self) -> Arc<str> {
         self.id.clone().into()
     }
 
