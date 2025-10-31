@@ -3281,6 +3281,7 @@ name = "vfs"
 version = "0.1.0"
 dependencies = [
  "indextree",
+ "rustc-hash",
  "snafu",
 ]
 

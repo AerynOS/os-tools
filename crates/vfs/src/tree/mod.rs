@@ -5,9 +5,10 @@
 //! Virtual filesystem tree (optimise layout inserts)
 
 use core::fmt::Debug;
-use std::{collections::HashMap, sync::Arc, vec};
+use std::{sync::Arc, vec};
 
 use indextree::{Arena, Descendants, NodeId};
+use rustc_hash::FxHashMap;
 use snafu::Snafu;
 
 use crate::path;
@@ -69,7 +70,7 @@ impl<T: BlitFile> File<T> {
 #[derive(Debug)]
 pub struct Tree<T: BlitFile> {
     arena: Arena<File<T>>,
-    map: HashMap<String, NodeId>,
+    map: FxHashMap<String, NodeId>,
     length: u64,
 }
 
@@ -78,7 +79,7 @@ impl<T: BlitFile> Tree<T> {
     fn with_capacity(capacity: usize) -> Self {
         Tree {
             arena: Arena::with_capacity(capacity),
-            map: HashMap::with_capacity(capacity),
+            map: FxHashMap::with_capacity_and_hasher(capacity, Default::default()),
             length: 0_u64,
         }
     }
