@@ -331,7 +331,6 @@ impl Client {
             progress = 1.0,
             event_type = "progress_completed",
         );
-        drop(_state_guard);
 
         result
     }
