@@ -123,6 +123,10 @@ macro_rules! builtin_definitions {
                 )+ }
             }
         }
+
+        pub static ALL_BUILTIN: &[BuiltinDefinition] = &[
+            $( BuiltinDefinition::$ident, )*
+        ];
     };
 }
 
