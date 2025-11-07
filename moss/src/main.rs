@@ -2,8 +2,10 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-use colored::Colorize;
-use cli::{self, Error};
+mod cli;
+use crate::cli::Error;
+
+use tracing::error;
 
 /// Main entry point
 fn main() {
@@ -13,12 +15,15 @@ fn main() {
     }
 }
 
+/// Report an execution error to the user
 fn report_error(error: Error) {
-    // Collect the error chain into a single string
+    // Collect the full error chain into a single string
     let chain = std::iter::successors(Some(&error as &dyn std::error::Error), |e| e.source())
-    .map(|e| e.to_string())
-    .collect::<Vec<_>>()
-    .join(": ");
+        .map(|e| e.to_string())
+        .collect::<Vec<_>>()
+        .join(": ");
 
-    eprintln!("{}: {}", "Error".red(), chain);
+    // Log with tracing and print to console
+    error!(%chain, "Command execution failed");
+    println!("Error: {chain}");
 }
