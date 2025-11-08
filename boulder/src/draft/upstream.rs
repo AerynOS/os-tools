@@ -1,4 +1,9 @@
-use std::{io, path::Path, process::ExitStatus, time::Duration};
+use std::{
+    io,
+    path::{Path, PathBuf},
+    process::ExitStatus,
+    time::Duration,
+};
 
 use fs_err::tokio::{self as fs, File};
 use futures_util::{StreamExt, TryStreamExt, stream};
@@ -81,7 +86,11 @@ async fn fetch(url: &Url, output: &Path) -> Result<String, Error> {
 }
 
 async fn extract(archive: &Path, destination: &Path) -> Result<(), Error> {
-    if let Some(kind) = infer::get_from_path(archive)? {
+    let infer_result = infer::get_from_path(archive).map_err(|source| Error::InferFileType {
+        path: archive.to_owned(),
+        source,
+    })?;
+    if let Some(kind) = infer_result {
         println!("Detected type: {} ({})", kind.mime_type(), kind.extension());
         // If we can't specialise (.zip, etc) assume its a tar
         let result = Command::new("bsdtar")
@@ -121,6 +130,8 @@ async fn extract(archive: &Path, destination: &Path) -> Result<(), Error> {
 pub enum Error {
     #[error("failed to run `bsdtar`")]
     Bsdtar(#[source] io::Error),
+    #[error("failed to infer file type of `{path}`")]
+    InferFileType { path: PathBuf, source: io::Error },
     #[error("io")]
     Io(#[from] io::Error),
     #[error("request")]
