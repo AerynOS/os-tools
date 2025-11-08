@@ -90,7 +90,8 @@ async fn extract(archive: &Path, destination: &Path) -> Result<(), Error> {
             .arg("-C")
             .arg(destination)
             .output()
-            .await?;
+            .await
+            .map_err(Error::Bsdtar)?;
         if result.status.success() {
             Ok(())
         } else {
@@ -105,7 +106,8 @@ async fn extract(archive: &Path, destination: &Path) -> Result<(), Error> {
             .arg("-C")
             .arg(destination)
             .output()
-            .await?;
+            .await
+            .map_err(Error::Bsdtar)?;
         if result.status.success() {
             Ok(())
         } else {
@@ -117,6 +119,8 @@ async fn extract(archive: &Path, destination: &Path) -> Result<(), Error> {
 
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error("failed to run `bsdtar`")]
+    Bsdtar(#[source] io::Error),
     #[error("io")]
     Io(#[from] io::Error),
     #[error("request")]
