@@ -2,28 +2,36 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-mod cli;
-use crate::cli::Error;
+use std::error::Error;
 
 use tracing::error;
+use tui::Styled;
+
+mod cli;
 
 /// Main entry point
 fn main() {
-    if let Err(err) = cli::process() {
-        report_error(err);
+    if let Err(error) = cli::process() {
+        report_error(error);
         std::process::exit(1);
     }
 }
 
 /// Report an execution error to the user
-fn report_error(error: Error) {
-    // Collect the full error chain into a single string
-    let chain = std::iter::successors(Some(&error as &dyn std::error::Error), |e| e.source())
-        .map(|e| e.to_string())
-        .collect::<Vec<_>>()
-        .join(": ");
+fn report_error(error: cli::Error) {
+    let sources = sources(&error);
+    let error = sources.join(": ");
+    error!(error, "Command execution failed");
+    println!("{}: {error}", "Error".red());
+}
 
-    // Log with tracing and print to console
-    error!(%chain, "Command execution failed");
-    println!("Error: {chain}");
+/// Accumulate sources through error chains
+fn sources(error: &cli::Error) -> Vec<String> {
+    let mut sources = vec![error.to_string()];
+    let mut source = error.source();
+    while let Some(error) = source.take() {
+        sources.push(error.to_string());
+        source = error.source();
+    }
+    sources
 }
