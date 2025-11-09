@@ -16,22 +16,20 @@ fn main() {
         std::process::exit(1);
     }
 }
-
-/// Display a formatted error message and log the details
-fn report_error(err: &cli::Error) {
-    let chain = collect_sources(err);
-    let message = chain.join(": ");
-    error!(?message, "Command execution failed");
-    println!("{}: {message}", "Error".red());
-}
-
-/// Recursively gather error sources into a string list
-fn collect_sources(err: &cli::Error) -> Vec<String> {
-    let mut result = vec![err.to_string()];
-    let mut source = err.source();
-    while let Some(next) = source {
-        result.push(next.to_string());
-        source = next.source();
+/// Report an execution error to the user
+fn report_error(error: &dyn Error) {
+    let mut chain_parts = Vec::new();
+    let mut current: &dyn Error = error;
+    loop {
+        chain_parts.push(current.to_string());
+        if let Some(source) = current.source() {
+            current = source;
+        } else {
+            break;
+        }
     }
-    result
+    let chain = chain_parts.join(": ");
+    eprintln!("{}: {}", "Error".red(), chain);
+    error!(%chain, "Command execution failed");
 }
+
