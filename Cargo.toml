@@ -1,7 +1,7 @@
 [workspace]
 members = ["boulder", "moss", "crates/*"]
 default-members = ["moss"]
-resolver = "2"
+resolver = "3"
 
 [workspace.package]
 version = "0.25.6"
