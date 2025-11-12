@@ -5,6 +5,7 @@
 use itertools::Itertools;
 use std::collections::BTreeSet;
 
+use stone_recipe::macros::BuiltinDefinition as Def;
 use stone_recipe::{
     Script, script,
     tuning::{self, Toolchain},
@@ -139,20 +140,20 @@ impl Phase {
             parser.add_macros(macros.clone());
         }
 
-        parser.add_definition("name", &recipe.parsed.source.name);
-        parser.add_definition("version", &recipe.parsed.source.version);
-        parser.add_definition("release", recipe.parsed.source.release);
-        parser.add_definition("jobs", num_jobs);
-        parser.add_definition("pkgdir", paths.recipe().guest.join("pkg").display());
-        parser.add_definition("sourcedir", paths.upstreams().guest.display());
-        parser.add_definition("installroot", paths.install().guest.display());
-        parser.add_definition("buildroot", build_dir.display());
-        parser.add_definition("workdir", work_dir.display());
+        parser.add_definition(Def::Name, &recipe.parsed.source.name);
+        parser.add_definition(Def::Version, &recipe.parsed.source.version);
+        parser.add_definition(Def::Release, recipe.parsed.source.release);
+        parser.add_definition(Def::Jobs, num_jobs);
+        parser.add_definition(Def::PkgDir, paths.recipe().guest.join("pkg").display());
+        parser.add_definition(Def::SourceDir, paths.upstreams().guest.display());
+        parser.add_definition(Def::InstallRoot, paths.install().guest.display());
+        parser.add_definition(Def::BuildRoot, build_dir.display());
+        parser.add_definition(Def::WorkDir, work_dir.display());
 
-        parser.add_definition("compiler_cache", "/mason/ccache");
-        parser.add_definition("scompiler_cache", "/mason/sccache");
+        parser.add_definition(Def::CompilerCache, "/mason/ccache");
+        parser.add_definition(Def::SCompilerCache, "/mason/sccache");
 
-        parser.add_definition("sourcedateepoch", recipe.build_time.timestamp());
+        parser.add_definition(Def::SourceDateEpoch, recipe.build_time.timestamp());
 
         let path = if ccache {
             "/usr/lib/ccache/bin:/usr/bin:/bin"
@@ -161,63 +162,63 @@ impl Phase {
         };
 
         if ccache {
-            parser.add_definition("rustc_wrapper", "/usr/bin/sccache");
+            parser.add_definition(Def::RustcWrapper, "/usr/bin/sccache");
         } else {
-            parser.add_definition("rustc_wrapper", "");
+            parser.add_definition(Def::RustcWrapper, "");
         }
 
         /* Set the relevant compilers */
         if matches!(recipe.parsed.options.toolchain, Toolchain::Llvm) {
-            parser.add_definition("compiler_c", "clang");
-            parser.add_definition("compiler_cxx", "clang++");
-            parser.add_definition("compiler_objc", "clang");
-            parser.add_definition("compiler_objcxx", "clang++");
-            parser.add_definition("compiler_cpp", "clang-cpp");
-            parser.add_definition("compiler_objcpp", "clang -E -");
-            parser.add_definition("compiler_objcxxcpp", "clang++ -E");
-            parser.add_definition("compiler_d", "ldc2");
-            parser.add_definition("compiler_ar", "llvm-ar");
-            parser.add_definition("compiler_objcopy", "llvm-objcopy");
-            parser.add_definition("compiler_nm", "llvm-nm");
-            parser.add_definition("compiler_ranlib", "llvm-ranlib");
-            parser.add_definition("compiler_strip", "llvm-strip");
+            parser.add_definition(Def::CompilerC, "clang");
+            parser.add_definition(Def::CompilerCxx, "clang++");
+            parser.add_definition(Def::CompilerObjC, "clang");
+            parser.add_definition(Def::CompilerObjCxx, "clang++");
+            parser.add_definition(Def::CompilerCpp, "clang-cpp");
+            parser.add_definition(Def::CompilerObjCpp, "clang -E -");
+            parser.add_definition(Def::CompilerObjCxxCpp, "clang++ -E");
+            parser.add_definition(Def::CompilerD, "ldc2");
+            parser.add_definition(Def::CompilerAr, "llvm-ar");
+            parser.add_definition(Def::CompilerObjcopy, "llvm-objcopy");
+            parser.add_definition(Def::CompilerNm, "llvm-nm");
+            parser.add_definition(Def::CompilerRanlib, "llvm-ranlib");
+            parser.add_definition(Def::CompilerStrip, "llvm-strip");
         } else {
-            parser.add_definition("compiler_c", "gcc");
-            parser.add_definition("compiler_cxx", "g++");
-            parser.add_definition("compiler_objc", "gcc");
-            parser.add_definition("compiler_objcxx", "g++");
-            parser.add_definition("compiler_cpp", "gcc -E");
-            parser.add_definition("compiler_objcpp", "gcc -E");
-            parser.add_definition("compiler_objcxxcpp", "g++ -E");
-            parser.add_definition("compiler_d", "ldc2"); // FIXME: GDC
-            parser.add_definition("compiler_ar", "gcc-ar");
-            parser.add_definition("compiler_objcopy", "objcopy");
-            parser.add_definition("compiler_nm", "gcc-nm");
-            parser.add_definition("compiler_ranlib", "gcc-ranlib");
-            parser.add_definition("compiler_strip", "strip");
+            parser.add_definition(Def::CompilerC, "gcc");
+            parser.add_definition(Def::CompilerCxx, "g++");
+            parser.add_definition(Def::CompilerObjC, "gcc");
+            parser.add_definition(Def::CompilerObjCxx, "g++");
+            parser.add_definition(Def::CompilerCpp, "gcc -E");
+            parser.add_definition(Def::CompilerObjCpp, "gcc -E");
+            parser.add_definition(Def::CompilerObjCxxCpp, "g++ -E");
+            parser.add_definition(Def::CompilerD, "ldc2"); // FIXME: GDC
+            parser.add_definition(Def::CompilerAr, "gcc-ar");
+            parser.add_definition(Def::CompilerObjcopy, "objcopy");
+            parser.add_definition(Def::CompilerNm, "gcc-nm");
+            parser.add_definition(Def::CompilerRanlib, "gcc-ranlib");
+            parser.add_definition(Def::CompilerStrip, "strip");
         }
-        parser.add_definition("compiler_path", path);
+        parser.add_definition(Def::CompilerPath, path);
 
         if recipe.parsed.mold {
-            parser.add_definition("compiler_ld", "ld.mold");
+            parser.add_definition(Def::CompilerLd, "ld.mold");
         } else if matches!(recipe.parsed.options.toolchain, Toolchain::Llvm) {
-            parser.add_definition("compiler_ld", "ld.lld");
+            parser.add_definition(Def::CompilerLd, "ld.lld");
         } else {
-            parser.add_definition("compiler_ld", "ld.bfd");
+            parser.add_definition(Def::CompilerLd, "ld.bfd");
         }
 
         /* Allow packagers to do stage specific actions in a pgo build */
         if matches!(pgo_stage, Some(pgo::Stage::One)) {
-            parser.add_definition("pgo_stage", "ONE");
+            parser.add_definition(Def::PgoStage, "ONE");
         } else if matches!(pgo_stage, Some(pgo::Stage::Two)) {
-            parser.add_definition("pgo_stage", "TWO");
+            parser.add_definition(Def::PgoStage, "TWO");
         } else if matches!(pgo_stage, Some(pgo::Stage::Use)) {
-            parser.add_definition("pgo_stage", "USE");
+            parser.add_definition(Def::PgoStage, "USE");
         } else {
-            parser.add_definition("pgo_stage", "NONE");
+            parser.add_definition(Def::PgoStage, "NONE");
         }
 
-        parser.add_definition("pgo_dir", format!("{}-pgo", build_dir.display()));
+        parser.add_definition(Def::PgoDir, format!("{}-pgo", build_dir.display()));
 
         add_tuning(target, pgo_stage, recipe, macros, &mut parser)?;
 
@@ -380,12 +381,12 @@ fn add_tuning(
         rustflags.push_str(" -Clink-arg=-fuse-ld=mold");
     }
 
-    parser.add_definition("cflags", cflags);
-    parser.add_definition("cxxflags", cxxflags);
-    parser.add_definition("fflags", fflags);
-    parser.add_definition("ldflags", ldflags);
-    parser.add_definition("dflags", dflags);
-    parser.add_definition("rustflags", rustflags);
+    parser.add_definition(Def::CFlags, cflags);
+    parser.add_definition(Def::CxxFlags, cxxflags);
+    parser.add_definition(Def::FFlags, fflags);
+    parser.add_definition(Def::LdFlags, ldflags);
+    parser.add_definition(Def::DFlags, dflags);
+    parser.add_definition(Def::RustFlags, rustflags);
 
     Ok(())
 }

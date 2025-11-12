@@ -321,19 +321,31 @@ async fn fetch_hash(uri: Url, mpb: &MultiProgress) -> Result<String, Error> {
 fn macros(_macro: Option<String>, env: Env) -> Result<(), Error> {
     let macros = Macros::load(&env)?;
 
-    let mut items = macros
-        .actions
+    let mut items: Vec<_> = stone_recipe::macros::ALL_BUILTIN
         .iter()
-        .flat_map(|m| {
-            m.actions.iter().map(|action| PrintMacro {
-                name: format!("%{}", action.key),
-                // Multi-line strings need to be in `example`
-                description: action.value.description.lines().next().unwrap_or_default(),
-                example: action.value.example.as_deref(),
-            })
+        .map(|m| {
+            let m = m.details();
+            PrintMacro {
+                name: format!("%{}", m.name),
+                description: m.description,
+                example: Some(m.example),
+            }
         })
-        .sorted()
-        .collect::<Vec<_>>();
+        .collect();
+    items.extend(
+        macros
+            .actions
+            .iter()
+            .flat_map(|m| {
+                m.actions.iter().map(|action| PrintMacro {
+                    name: format!("%{}", action.key),
+                    // Multi-line strings need to be in `example`
+                    description: action.value.description.lines().next().unwrap_or_default(),
+                    example: action.value.example.as_deref(),
+                })
+            })
+            .sorted(),
+    );
 
     let mut definitions = vec![];
     for arch in ["base", &architecture::host().to_string()] {
