@@ -30,6 +30,7 @@ fnmatch = { path = "../crates/fnmatch" }
 fs-err.workspace = true
 futures-util.workspace = true
 hex.workspace = true
+kdl.workspace = true
 libsqlite3-sys.workspace = true
 log.workspace = true
 nix.workspace = true

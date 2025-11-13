@@ -165,6 +165,11 @@ impl Installation {
     pub fn isolation_path(&self, path: impl AsRef<Path>) -> PathBuf {
         self.root_path("isolation").join(path)
     }
+
+    /// Path to the system model file
+    pub fn system_model_path(&self) -> PathBuf {
+        self.root.join("etc/moss/system-model.kdl")
+    }
 }
 
 /// Blocks until lockfiles can be obtained for the
