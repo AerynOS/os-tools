@@ -54,6 +54,7 @@ impl Paths {
         util::ensure_dir_exists(&job.build().host)?;
         util::ensure_dir_exists(&job.ccache().host)?;
         util::ensure_dir_exists(&job.gocache().host)?;
+        util::ensure_dir_exists(&job.gomodcache().host)?;
         util::ensure_dir_exists(&job.sccache().host)?;
         util::ensure_dir_exists(&job.upstreams().host)?;
 
@@ -92,6 +93,13 @@ impl Paths {
         Mapping {
             host: self.host_root.join("gocache"),
             guest: self.guest_root.join("gocache"),
+        }
+    }
+
+    pub fn gomodcache(&self) -> Mapping {
+        Mapping {
+            host: self.host_root.join("gomodcache"),
+            guest: self.guest_root.join("gomodcache"),
         }
     }
 
