@@ -52,6 +52,7 @@ definitions:
     - strip          : "%(compiler_strip)"
     - path           : "%(compiler_path)"
     - ccachedir      : "%(compiler_cache)"
+    - gocachedir     : "%(compiler_go_cache)"
     - sccachedir     : "%(scompiler_cache)"
     - pkgconfigpath  : "%(libdir)/pkgconfig:/usr/share/pkgconfig"
 
@@ -97,6 +98,8 @@ actions              :
             %cargo_set_environment
             RUSTC_WRAPPER="%(rustc_wrapper)"; export RUSTC_WRAPPER;
             test -z "$RUSTC_WRAPPER" && unset RUSTC_WRAPPER;
+            GOCACHE="%(gocachedir)"; export GOCACHE;
+            test -z "$GOCACHE" && unset GOCACHE;
             SCCACHE_DIR="%(sccachedir)"; export SCCACHE_DIR;
             test -z "$SCCACHE_DIR" && unset SCCACHE_DIR;
             LANG="en_US.UTF-8"; export LANG

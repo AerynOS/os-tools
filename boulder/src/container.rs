@@ -22,6 +22,7 @@ where
     let artefacts = paths.artefacts();
     let build = paths.build();
     let compiler = paths.ccache();
+    let gocache = paths.gocache();
     let rustc_wrapper = paths.sccache();
     let recipe = paths.recipe();
 
@@ -33,6 +34,7 @@ where
         .bind_rw(&artefacts.host, &artefacts.guest)
         .bind_rw(&build.host, &build.guest)
         .bind_rw(&compiler.host, &compiler.guest)
+        .bind_rw(&gocache.host, &gocache.guest)
         .bind_rw(&rustc_wrapper.host, &rustc_wrapper.guest)
         .bind_ro(&recipe.host, &recipe.guest)
         .run::<E>(f)?;
