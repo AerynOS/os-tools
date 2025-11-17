@@ -161,8 +161,10 @@ impl Phase {
         };
 
         if ccache {
+            parser.add_definition("compiler_go_cache", "/mason/gocache");
             parser.add_definition("rustc_wrapper", "/usr/bin/sccache");
         } else {
+            parser.add_definition("compiler_go_cache", "");
             parser.add_definition("rustc_wrapper", "");
         }
 
