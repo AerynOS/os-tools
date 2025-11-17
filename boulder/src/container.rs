@@ -22,6 +22,7 @@ where
     let artefacts = paths.artefacts();
     let build = paths.build();
     let compiler = paths.ccache();
+    let ccache_conf = paths.ccache_config();
     let rustc_wrapper = paths.sccache();
     let recipe = paths.recipe();
 
@@ -30,11 +31,12 @@ where
         .networking(networking)
         .ignore_host_sigint(true)
         .work_dir(&build.guest)
-        .bind_rw(&artefacts.host, &artefacts.guest)
-        .bind_rw(&build.host, &build.guest)
-        .bind_rw(&compiler.host, &compiler.guest)
-        .bind_rw(&rustc_wrapper.host, &rustc_wrapper.guest)
-        .bind_ro(&recipe.host, &recipe.guest)
+        .bind_rw(&artefacts.host, &artefacts.guest, false)
+        .bind_rw(&build.host, &build.guest, false)
+        .bind_rw(&compiler.host, &compiler.guest, false)
+        .bind_rw(&rustc_wrapper.host, &rustc_wrapper.guest, false)
+        .bind_ro(&recipe.host, &recipe.guest, false)
+        .bind_ro(&ccache_conf.host, &ccache_conf.guest, true)
         .run::<E>(f)?;
 
     Ok(())
