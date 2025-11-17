@@ -8,6 +8,9 @@ actions:
             CARGO_PROFILE_RELEASE_SPLIT_DEBUGINFO="off"; export CARGO_PROFILE_RELEASE_SPLIT_DEBUGINFO;
             CARGO_PROFILE_RELEASE_LTO="off"; export CARGO_PROFILE_RELEASE_LTO;
             CARGO_PROFILE_RELEASE_STRIP="none"; export CARGO_PROFILE_RELEASE_STRIP;
+        example: |
+            environment: |
+                %cargo_set_environment
 
     - cargo_fetch:
         description: Fetch dependencies
@@ -25,14 +28,14 @@ actions:
             - binary(cargo)
 
     - cargo_build:
-        description: Build the rust project
+        description: Build the rust project to %(cargo_target_dir)
         command: |
             cargo build %(options_cargo_release)
         dependencies:
             - binary(cargo)
 
     - cargo_install:
-        description: Install the built binary
+        description: Install the build artefacts from %(cargo_target_dir)
         command: |
             cargo_install(){
                 if [ $# -gt 0 ]; then
