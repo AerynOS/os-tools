@@ -215,10 +215,10 @@ impl Builder {
 
             let mut to = &group.root;
 
-            if let Some(option) = self.option_sets.get(enabled) {
-                if let Some(choice) = group.choices.iter().find(|kv| &kv.key == option) {
-                    to = &choice.value;
-                }
+            if let Some(option) = self.option_sets.get(enabled)
+                && let Some(choice) = group.choices.iter().find(|kv| &kv.key == option)
+            {
+                to = &choice.value;
             }
 
             enabled_flags.extend(to.enabled.clone());

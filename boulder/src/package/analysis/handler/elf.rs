@@ -187,10 +187,10 @@ fn parse_dynamic_section(
         if file_name.contains(".so") {
             let mut soname = "";
 
-            if let Some(offset) = soname_offset {
-                if let Ok(val) = strtab.get(offset) {
-                    soname = val;
-                }
+            if let Some(offset) = soname_offset
+                && let Ok(val) = strtab.get(offset)
+            {
+                soname = val;
             }
 
             if soname.is_empty() {

@@ -495,10 +495,10 @@ impl Client {
         // After promotion, the old active /usr is now in staging/usr
         let usr_target = self.installation.root_path(id.to_string()).join("usr");
         let usr_source = self.installation.staging_path("usr");
-        if let Some(parent) = usr_target.parent() {
-            if !parent.exists() {
-                fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = usr_target.parent()
+            && !parent.exists()
+        {
+            fs::create_dir_all(parent)?;
         }
         // hot swap the staging/usr into the root/$id/usr
         fs::rename(usr_source, &usr_target)?;
