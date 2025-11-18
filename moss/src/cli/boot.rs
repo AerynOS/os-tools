@@ -34,11 +34,9 @@ pub fn handle(_args: &ArgMatches, installation: Installation) -> Result<(), Erro
         blsforme::Firmware::Uefi => {
             println!("ESP            : {:?}", manager.boot_environment().esp());
             println!("XBOOTLDR       : {:?}", manager.boot_environment().xbootldr());
-            if is_native {
-                if let Ok(bootloader) = systemd_boot::interface::BootLoaderInterface::new(&config.vfs) {
-                    let v = bootloader.get_ucs2_string(systemd_boot::interface::VariableName::Info)?;
-                    println!("Bootloader     : {v}");
-                }
+            if is_native && let Ok(bootloader) = systemd_boot::interface::BootLoaderInterface::new(&config.vfs) {
+                let v = bootloader.get_ucs2_string(systemd_boot::interface::VariableName::Info)?;
+                println!("Bootloader     : {v}");
             }
         }
         blsforme::Firmware::Bios => {

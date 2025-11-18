@@ -92,37 +92,23 @@ async fn extract(archive: &Path, destination: &Path) -> Result<(), Error> {
     })?;
     if let Some(kind) = infer_result {
         println!("Detected type: {} ({})", kind.mime_type(), kind.extension());
-        // If we can't specialise (.zip, etc) assume its a tar
-        let result = Command::new("bsdtar")
-            .arg("xf")
-            .arg(archive)
-            .arg("-C")
-            .arg(destination)
-            .output()
-            .await
-            .map_err(Error::Bsdtar)?;
-        if result.status.success() {
-            Ok(())
-        } else {
-            eprintln!("Command exited with: {}", String::from_utf8_lossy(&result.stderr));
-            Err(Error::Extract(result.status))
-        }
     } else {
         println!("Unknown file type, attempting tar extraction");
-        let result = Command::new("bsdtar")
-            .arg("xf")
-            .arg(archive)
-            .arg("-C")
-            .arg(destination)
-            .output()
-            .await
-            .map_err(Error::Bsdtar)?;
-        if result.status.success() {
-            Ok(())
-        } else {
-            eprintln!("Command exited with: {}", String::from_utf8_lossy(&result.stderr));
-            Err(Error::Extract(result.status))
-        }
+    }
+
+    let result = Command::new("bsdtar")
+        .arg("xf")
+        .arg(archive)
+        .arg("-C")
+        .arg(destination)
+        .output()
+        .await
+        .map_err(Error::Bsdtar)?;
+    if result.status.success() {
+        Ok(())
+    } else {
+        eprintln!("Command exited with: {}", String::from_utf8_lossy(&result.stderr));
+        Err(Error::Extract(result.status))
     }
 }
 

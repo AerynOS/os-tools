@@ -53,10 +53,12 @@ fn load_sub_mappings(kind: Kind, id: u32, username: &str) -> Result<Vec<Submap>,
         let sub_id = split.next().and_then(|s| s.parse::<u32>().ok());
         let count = split.next().and_then(|s| s.parse::<u32>().ok());
 
-        if let (Some(user), Some(sub_id), Some(count)) = (user, sub_id, count) {
-            if user.parse::<u32>() == Ok(id) || user == username {
-                mappings.push(Submap { sub_id, count });
-            }
+        if let Some(user) = user
+            && let Some(sub_id) = sub_id
+            && let Some(count) = count
+            && (user.parse::<u32>() == Ok(id) || user == username)
+        {
+            mappings.push(Submap { sub_id, count });
         }
     }
 

@@ -103,10 +103,10 @@ fn boot_files_from_new_state<'a>(
     let mut rets = vec![];
 
     for (_, path) in layouts.iter() {
-        if let layout::Entry::Regular(_, target) = &path.entry {
-            if pattern.match_path(target).is_some() {
-                rets.push(install.root.join("usr").join(target));
-            }
+        if let layout::Entry::Regular(_, target) = &path.entry
+            && pattern.match_path(target).is_some()
+        {
+            rets.push(install.root.join("usr").join(target));
         }
     }
 

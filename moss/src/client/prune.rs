@@ -326,10 +326,10 @@ fn remove_empty_dirs(starting: &Path, root: &Path) -> io::Result<()> {
             fs::remove_dir(dir)?;
         }
 
-        if let Some(parent) = dir.parent() {
-            if parent != root {
-                current = Some(parent);
-            }
+        if let Some(parent) = dir.parent()
+            && parent != root
+        {
+            current = Some(parent);
         }
     }
 

@@ -120,13 +120,12 @@ fn get_git_info() -> Result<(), Box<dyn std::error::Error>> {
 
 fn get_build_time() -> Result<(), Box<dyn std::error::Error>> {
     // Propagate SOURCE_DATE_EPOCH if set
-    if let Ok(epoch_env) = env("SOURCE_DATE_EPOCH") {
-        if let Ok(seconds) = epoch_env.to_string_lossy().parse::<i64>() {
-            if let Some(time) = DateTime::from_timestamp(seconds, 0) {
-                println!("cargo:rustc-env=BUILDINFO_BUILD_TIME={}", time.timestamp());
-                return Ok(());
-            }
-        }
+    if let Ok(epoch_env) = env("SOURCE_DATE_EPOCH")
+        && let Ok(seconds) = epoch_env.to_string_lossy().parse::<i64>()
+        && let Some(time) = DateTime::from_timestamp(seconds, 0)
+    {
+        println!("cargo:rustc-env=BUILDINFO_BUILD_TIME={}", time.timestamp());
+        return Ok(());
     }
 
     println!("cargo:rustc-env=BUILDINFO_BUILD_TIME={}", Utc::now().timestamp());

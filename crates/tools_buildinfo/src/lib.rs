@@ -19,12 +19,13 @@ pub const fn get_version() -> &'static str {
 ///
 /// This will look like "2025-07-09T19:20:40+00:00"
 pub fn get_build_time() -> String {
-    if let Ok(time) = values::BUILD_TIME.parse::<i64>() {
-        if let Some(build_time) = DateTime::from_timestamp(time, 0) {
-            return build_time.to_rfc3339();
-        }
+    if let Ok(time) = values::BUILD_TIME.parse::<i64>()
+        && let Some(build_time) = DateTime::from_timestamp(time, 0)
+    {
+        build_time.to_rfc3339()
+    } else {
+        "unknown".to_owned()
     }
-    "unknown".to_owned()
 }
 
 /// Returns `true` if the project was built from a git source, `false` otherwise

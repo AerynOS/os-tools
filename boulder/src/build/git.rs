@@ -83,22 +83,21 @@ pub(crate) fn update_git_upstream_refs(
             original_index,
             ..
         } = installed
+            && resolved_hash != original_ref
         {
-            if resolved_hash != original_ref {
-                update_git_upstream_ref_in_yaml(
-                    &mut yaml_updater,
-                    *original_index,
-                    uri.as_str(),
-                    resolved_hash,
-                    original_ref,
-                );
-                println!(
-                    "{} | Updated ref '{original_ref}' to commit {} for {uri}",
-                    "Warning".yellow(),
-                    &resolved_hash[..8],
-                );
-                refs_updated = true;
-            }
+            update_git_upstream_ref_in_yaml(
+                &mut yaml_updater,
+                *original_index,
+                uri.as_str(),
+                resolved_hash,
+                original_ref,
+            );
+            println!(
+                "{} | Updated ref '{original_ref}' to commit {} for {uri}",
+                "Warning".yellow(),
+                &resolved_hash[..8],
+            );
+            refs_updated = true;
         }
     }
 

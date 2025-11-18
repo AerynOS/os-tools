@@ -59,10 +59,10 @@ impl Installation {
             return Err(Error::RootInvalid);
         }
 
-        if let Some(dir) = &cache_dir {
-            if !dir.exists() || !dir.is_dir() {
-                return Err(Error::CacheInvalid);
-            }
+        if let Some(dir) = &cache_dir
+            && (!dir.exists() || !dir.is_dir())
+        {
+            return Err(Error::CacheInvalid);
         }
 
         // Make sure directories exist (silently fail if read-only)

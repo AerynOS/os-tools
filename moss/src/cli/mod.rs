@@ -180,12 +180,11 @@ pub fn process() -> Result<(), Error> {
     }
 
     // Print the version, but not if the user is using the version subcommand
-    if matches.get_flag("verbose") {
-        if let Some(command) = matches.subcommand_name() {
-            if command != "version" {
-                version::print();
-            }
-        }
+    if matches.get_flag("verbose")
+        && let Some(command) = matches.subcommand_name()
+        && command != "version"
+    {
+        version::print();
     }
 
     let root = matches.get_one::<PathBuf>("root").unwrap();
