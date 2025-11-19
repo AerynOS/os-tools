@@ -57,6 +57,15 @@ actions:
         dependencies:
             - binary(cargo)
 
+    # Some builds might break if CARGO_HOME is set (used for the global cargo cache). Add a descriptive macro for when this is the case
+    - cargo_home_breaks_this_build:
+        description: Use this macro to indicate that setting CARGO_HOME breaks this build
+        example: |
+            environment: |
+                %cargo_home_breaks_this_build
+        command: |
+            unset CARGO_HOME
+
 definitions:
     # The default cargo build profile
     - cargo_profile: "release"
