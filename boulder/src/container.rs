@@ -24,6 +24,7 @@ where
     let compiler = paths.ccache();
     let gocache = paths.gocache();
     let gomodcache = paths.gomodcache();
+    let cargocache = paths.cargocache();
     let rustc_wrapper = paths.sccache();
     let recipe = paths.recipe();
 
@@ -37,6 +38,7 @@ where
         .bind_rw(&compiler.host, &compiler.guest)
         .bind_rw(&gocache.host, &gocache.guest)
         .bind_rw(&gomodcache.host, &gomodcache.guest)
+        .bind_rw(&cargocache.host, &cargocache.guest)
         .bind_rw(&rustc_wrapper.host, &rustc_wrapper.guest)
         .bind_ro(&recipe.host, &recipe.guest)
         .run::<E>(f)?;
