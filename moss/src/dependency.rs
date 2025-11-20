@@ -178,6 +178,14 @@ pub struct Provider {
 }
 
 impl Provider {
+    /// Creates a [`Kind::PackageName`] provider with the given name
+    pub fn package_name(name: &str) -> Self {
+        Provider {
+            kind: Kind::PackageName,
+            name: name.to_owned(),
+        }
+    }
+
     /// Construct a Provider from a specially formatted string
     ///
     /// Identical in behaviour to [`Dependency::from_name`]
