@@ -84,13 +84,8 @@ impl Registry {
     }
 
     /// Return a sorted stream of installed [`Package`]
-    pub fn list_installed(&self, flags: package::Flags) -> impl Iterator<Item = Package> + '_ {
-        self.list(flags.with_installed())
-    }
-
-    /// Return a sorted stream of available [`Package`]
-    pub fn list_available(&self, flags: package::Flags) -> impl Iterator<Item = Package> + '_ {
-        self.list(flags.with_available())
+    pub fn list_installed(&self) -> impl Iterator<Item = Package> + '_ {
+        self.list(package::Flags::default().with_installed())
     }
 
     /// Return a new transaction for this registry
@@ -198,10 +193,14 @@ mod test {
             ],
         )));
 
-        let installed = registry.list_installed(package::Flags::default()).collect();
-        let available = registry.list_available(package::Flags::default()).collect();
-        let installed_source = registry.list_installed(package::Flags::new().with_source()).collect();
-        let available_source = registry.list_available(package::Flags::new().with_source()).collect();
+        let installed = registry.list_installed().collect();
+        let available = registry.list(package::Flags::default().with_available()).collect();
+        let installed_source = registry
+            .list(package::Flags::new().with_installed().with_source())
+            .collect();
+        let available_source = registry
+            .list(package::Flags::new().with_available().with_source())
+            .collect();
 
         fn matches(actual: Vec<Package>, expected: &[&'static str]) -> bool {
             let actual = actual

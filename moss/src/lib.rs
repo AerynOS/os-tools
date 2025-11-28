@@ -10,6 +10,7 @@ pub use self::registry::Registry;
 pub use self::repository::Repository;
 pub use self::signal::Signal;
 pub use self::state::State;
+pub use self::system_model::SystemModel;
 
 pub mod client;
 pub mod db;
@@ -23,3 +24,4 @@ pub mod request;
 pub mod runtime;
 pub mod signal;
 pub mod state;
+pub mod system_model;
