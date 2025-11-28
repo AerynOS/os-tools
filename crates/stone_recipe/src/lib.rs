@@ -109,6 +109,8 @@ pub struct Package {
     pub description: Option<String>,
     #[serde(default, rename = "rundeps")]
     pub run_deps: Vec<String>,
+    #[serde(default, rename = "rundeps-exclude")]
+    pub run_deps_exclude: Vec<String>,
     #[serde(default)]
     pub paths: Vec<Path>,
     #[serde(default)]
