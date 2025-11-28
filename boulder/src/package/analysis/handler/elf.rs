@@ -12,6 +12,7 @@ use elf::{
     to_str,
 };
 use fs_err::File;
+use path_clean::clean;
 
 use moss::{Dependency, Provider, dependency};
 use stone_recipe::tuning::Toolchain;
@@ -141,7 +142,7 @@ fn parse_dynamic_section(
             .filter_map(|v| strtab.get(*v).ok())
         {
             for path in rpath.split(':') {
-                let path = path.replace("$ORIGIN", &origin);
+                let path = clean(path.replace("$ORIGIN", &origin)).to_string_lossy().to_string();
                 rpaths.push(path);
             }
         }

@@ -30,6 +30,7 @@ futures-util.workspace = true
 hex.workspace = true
 itertools.workspace = true
 nix.workspace = true
+path-clean.workspace = true
 rapidfuzz = "0.5.0"
 rayon.workspace = true
 regex.workspace = true
