@@ -10,6 +10,7 @@ use std::{
 use fs_err::{self as fs, File};
 use itertools::Itertools;
 use moss::{Dependency, Provider, package::Meta};
+use regex::Regex;
 use thiserror::Error;
 use tui::{ProgressBar, ProgressStyle, Styled};
 
@@ -80,6 +81,16 @@ impl<'a> Package<'a> {
                         .iter()
                         .filter_map(|name| Dependency::from_name(name).ok()),
                 )
+                .filter(|dep| {
+                    for exclude_filter in self.definition.run_deps_exclude.iter() {
+                        if let Ok(re) = Regex::new(exclude_filter)
+                            && re.is_match(&dep.to_string())
+                        {
+                            return false;
+                        }
+                    }
+                    true
+                })
                 .collect(),
             providers: self.analysis.providers().cloned().collect(),
             conflicts: self

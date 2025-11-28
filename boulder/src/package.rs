@@ -150,6 +150,7 @@ fn resolve_packages(
             .into_iter()
             .map(|dep| parser.parse_content(&dep))
             .collect::<Result<_, _>>()?;
+        package.run_deps_exclude = package.run_deps_exclude.into_iter().collect();
         package.paths = package
             .paths
             .into_iter()
@@ -175,6 +176,12 @@ fn resolve_packages(
                 let prev = entry.remove();
 
                 package.run_deps = package.run_deps.into_iter().chain(prev.run_deps).sorted().collect();
+                package.run_deps_exclude = package
+                    .run_deps_exclude
+                    .into_iter()
+                    .chain(prev.run_deps_exclude)
+                    .sorted()
+                    .collect();
                 package.paths = package
                     .paths
                     .into_iter()

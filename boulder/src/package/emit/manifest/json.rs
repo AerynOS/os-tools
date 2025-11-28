@@ -10,6 +10,7 @@ use std::{
 
 use fs_err::File;
 use itertools::Itertools;
+use regex::Regex;
 use serde::Serialize;
 
 use super::Error;
@@ -32,6 +33,16 @@ pub fn write(
                 .dependencies()
                 .map(ToString::to_string)
                 .chain(package.definition.run_deps.clone())
+                .filter(|dep| {
+                    for exclude_filter in package.definition.run_deps_exclude.iter() {
+                        if let Ok(re) = Regex::new(exclude_filter)
+                            && re.is_match(&dep.to_string())
+                        {
+                            return false;
+                        }
+                    }
+                    true
+                })
                 .collect::<Vec<_>>();
             depends.sort();
             depends.dedup();
