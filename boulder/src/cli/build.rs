@@ -51,6 +51,12 @@ pub struct Command {
         help = "Specify the build release number used for this build"
     )]
     build_release: NonZeroU64,
+    #[arg(
+        long,
+        help = "Automatically cleanup all build related artefacts",
+        default_value_t = false
+    )]
+    cleanup: bool,
 }
 
 pub fn handle(command: Command, env: Env) -> Result<(), Error> {
@@ -62,6 +68,7 @@ pub fn handle(command: Command, env: Env) -> Result<(), Error> {
         update,
         normal_priority,
         build_release,
+        cleanup,
         ..
     } = command;
 
@@ -122,6 +129,10 @@ pub fn handle(command: Command, env: Env) -> Result<(), Error> {
     // Copy artefacts to host recipe dir
     package::sync_artefacts(paths).map_err(Error::SyncArtefacts)?;
 
+    if cleanup {
+        builder.cleanup().map_err(Error::Cleanup)?;
+    }
+
     println!(
         "Build finished successfully at {}",
         Local::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
@@ -144,4 +155,6 @@ pub enum Error {
     Container(#[from] container::Error),
     #[error("setting thread priority")]
     Priority(#[from] thread_priority::Error),
+    #[error("cleanup")]
+    Cleanup(#[source] build::Error),
 }

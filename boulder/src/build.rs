@@ -11,6 +11,7 @@ use std::{
 
 use fs_err as fs;
 use itertools::Itertools;
+use moss::repository;
 use nix::{
     sys::signal::Signal,
     unistd::{Pid, getpgrp, setpgid},
@@ -22,16 +23,17 @@ use stone_recipe::{
 use thiserror::Error;
 use tui::Styled;
 
+use self::job::Job;
+use self::upstream::Upstream;
+use crate::{
+    Env, Macros, Paths, Recipe, Timing, architecture::BuildTarget, container, macros, profile, recipe, timing, util,
+};
+
 pub mod git;
 pub mod job;
 pub mod pgo;
 mod root;
 mod upstream;
-
-use self::job::Job;
-use crate::{
-    Env, Macros, Paths, Recipe, Timing, architecture::BuildTarget, container, macros, profile, recipe, timing, util,
-};
 
 pub struct Builder {
     pub targets: Vec<Target>,
@@ -40,7 +42,8 @@ pub struct Builder {
     pub macros: Macros,
     pub ccache: bool,
     pub env: Env,
-    profile: profile::Id,
+    upstreams: Vec<Upstream>,
+    repos: repository::Map,
 }
 
 pub struct Target {
@@ -84,6 +87,11 @@ impl Builder {
             })
             .collect::<Result<Vec<_>, job::Error>>()?;
 
+        let upstreams = upstream::parse(&recipe)?;
+
+        let profiles = profile::Manager::new(&env);
+        let repos = profiles.repositories(&profile)?.clone();
+
         Ok(Self {
             targets,
             recipe,
@@ -91,7 +99,8 @@ impl Builder {
             macros,
             ccache,
             env,
-            profile,
+            upstreams,
+            repos,
         })
     }
 
@@ -106,24 +115,52 @@ impl Builder {
     }
 
     pub fn setup(&self, timing: &mut Timing, initialize_timer: timing::Timer, update_repos: bool) -> Result<(), Error> {
-        // Remove old artifacts
+        // Recreate artifacts
         util::recreate_dir(&self.paths.artefacts().host).map_err(Error::RecreateArtefactsDir)?;
 
-        // Clean (recreate) rootfs
-        root::clean(self)?;
-
-        let profiles = profile::Manager::new(&self.env);
-        let repos = profiles.repositories(&self.profile)?.clone();
+        // Recreate rootfs
+        root::recreate(self)?;
 
         // Populate rootfs
-        root::populate(self, repos, timing, initialize_timer, update_repos)?;
+        root::populate(self, self.repos.clone(), timing, initialize_timer, update_repos)?;
 
         let timer = timing.begin(timing::Kind::Fetch);
 
         // Sync (fetch & share) upstreams to rootfs
-        upstream::sync(&self.recipe, &self.paths)?;
+        upstream::sync(&self.recipe, &self.paths, &self.upstreams)?;
 
         timing.finish(timer);
+
+        Ok(())
+    }
+
+    pub fn cleanup(&self) -> Result<(), Error> {
+        // Remove rootfs
+        root::remove(self)?;
+
+        // Remove artifacts
+        if self.paths.artefacts().host.exists() {
+            fs::remove_dir_all(&self.paths.artefacts().host)?;
+        }
+
+        // Remove build dir
+        if self.paths.build().host.exists() {
+            fs::remove_dir_all(&self.paths.build().host)?;
+        }
+
+        // Remove downloaded upstreams
+        upstream::remove(&self.paths, &self.upstreams)?;
+
+        // Prune moss cache, retaining stones from the repos defined
+        // by our boulder profile
+        {
+            moss::Client::with_explicit_repositories(
+                "boulder",
+                moss::Installation::open(&self.env.moss_dir, None)?,
+                self.repos.clone(),
+            )?
+            .prune_cache()?;
+        }
 
         Ok(())
     }
@@ -446,4 +483,8 @@ pub enum Error {
     RecreateArtefactsDir(#[source] io::Error),
     #[error("git upstream processing")]
     Git(#[from] git::GitError),
+    #[error("moss client")]
+    MossClient(#[from] moss::client::Error),
+    #[error("moss installation")]
+    MossInstallation(#[from] moss::installation::Error),
 }

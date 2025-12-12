@@ -21,18 +21,20 @@ use url::Url;
 
 use crate::{Paths, Recipe, build::git, util};
 
-/// Cache all upstreams from the provided [`Recipe`], make them available
-/// in the guest rootfs, and update the stone.yaml with resolved git upstream hashes.
-pub fn sync(recipe: &Recipe, paths: &Paths) -> Result<(), Error> {
-    let upstreams = recipe
+pub fn parse(recipe: &Recipe) -> Result<Vec<Upstream>, Error> {
+    recipe
         .parsed
         .upstreams
         .iter()
         .cloned()
         .enumerate()
         .map(|(index, upstream)| Upstream::from_recipe(upstream, index))
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect()
+}
 
+/// Cache all upstreams from the provided [`Recipe`], make them available
+/// in the guest rootfs, and update the stone.yaml with resolved git upstream hashes.
+pub fn sync(recipe: &Recipe, paths: &Paths, upstreams: &[Upstream]) -> Result<(), Error> {
     println!();
     println!("Sharing {} upstream(s) with the build container", upstreams.len());
 
@@ -50,7 +52,7 @@ pub fn sync(recipe: &Recipe, paths: &Paths) -> Result<(), Error> {
     util::ensure_dir_exists(&upstream_dir)?;
 
     let installed_upstreams = runtime::block_on(
-        stream::iter(&upstreams)
+        stream::iter(upstreams)
             .map(|upstream| async {
                 let pb = mp.insert_before(
                     &tp,
@@ -104,6 +106,14 @@ pub fn sync(recipe: &Recipe, paths: &Paths) -> Result<(), Error> {
 
     mp.clear()?;
     println!();
+
+    Ok(())
+}
+
+pub fn remove(paths: &Paths, upstreams: &[Upstream]) -> Result<(), Error> {
+    for upstream in upstreams {
+        upstream.remove(paths)?;
+    }
 
     Ok(())
 }
@@ -193,6 +203,13 @@ impl Upstream {
         match self {
             Upstream::Plain(plain) => plain.fetch(paths, pb).await,
             Upstream::Git(git) => git.fetch(paths, pb).await,
+        }
+    }
+
+    fn remove(&self, paths: &Paths) -> Result<(), Error> {
+        match self {
+            Upstream::Plain(plain) => plain.remove(paths),
+            Upstream::Git(git) => git.remove(paths),
         }
     }
 }
@@ -315,6 +332,18 @@ impl Plain {
             path,
             was_cached: false,
         })
+    }
+
+    fn remove(&self, paths: &Paths) -> Result<(), Error> {
+        let path = self.path(paths);
+
+        fs::remove_file(&path)?;
+
+        if let Some(parent) = path.parent() {
+            util::remove_empty_dirs(parent, &paths.upstreams().host)?;
+        }
+
+        Ok(())
     }
 }
 
@@ -480,6 +509,18 @@ impl Git {
         if !output.status.success() {
             eprint!("{}", String::from_utf8_lossy(&output.stderr));
             return Err(Error::GitFailed(self.uri.clone()));
+        }
+
+        Ok(())
+    }
+
+    fn remove(&self, paths: &Paths) -> Result<(), Error> {
+        for path in [self.staging_path(paths), self.final_path(paths)] {
+            fs::remove_dir_all(&path)?;
+
+            if let Some(parent) = path.parent() {
+                util::remove_empty_dirs(parent, &paths.upstreams().host)?;
+            }
         }
 
         Ok(())
