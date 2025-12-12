@@ -127,3 +127,34 @@ pub fn is_root() -> bool {
 
     Uid::effective().is_root()
 }
+
+/// Remove all empty folders from `starting` and moving up until `root`
+///
+/// `root` must be a prefix / ancestor of `starting`
+pub fn remove_empty_dirs(starting: &Path, root: &Path) -> io::Result<()> {
+    if !starting.starts_with(root) || !starting.is_dir() || !root.is_dir() {
+        return Ok(());
+    }
+
+    let mut current = Some(starting);
+
+    while let Some(dir) = current.take() {
+        if dir.exists() {
+            let is_empty = fs::read_dir(dir)?.count() == 0;
+
+            if !is_empty {
+                return Ok(());
+            }
+
+            fs::remove_dir(dir)?;
+        }
+
+        if let Some(parent) = dir.parent()
+            && parent != root
+        {
+            current = Some(parent);
+        }
+    }
+
+    Ok(())
+}
