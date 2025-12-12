@@ -52,7 +52,27 @@ pub fn populate(
     Ok(())
 }
 
-pub fn clean(builder: &Builder) -> Result<(), Error> {
+pub fn recreate(builder: &Builder) -> Result<(), Error> {
+    clean(builder)?;
+
+    // Now we can safely recreate the rootfs
+    util::recreate_dir(&builder.paths.rootfs().host)?;
+
+    Ok(())
+}
+
+pub fn remove(builder: &Builder) -> Result<(), Error> {
+    if builder.paths.rootfs().host.exists() {
+        clean(builder)?;
+
+        // Now we can safely remove the rootfs
+        fs::remove_dir_all(&builder.paths.rootfs().host)?;
+    }
+
+    Ok(())
+}
+
+fn clean(builder: &Builder) -> Result<(), Error> {
     // Dont't need to clean if it doesn't exist
     if !builder.paths.rootfs().host.exists() {
         return Ok(());
@@ -79,9 +99,6 @@ pub fn clean(builder: &Builder) -> Result<(), Error> {
 
         Ok(()) as io::Result<_>
     })?;
-
-    // Now we can safely recreate the rootfs
-    util::recreate_dir(&builder.paths.rootfs().host)?;
 
     Ok(())
 }
