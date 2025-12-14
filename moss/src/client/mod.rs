@@ -34,7 +34,7 @@ use tui::{MultiProgress, ProgressBar, ProgressStyle, Styled};
 use vfs::tree::{BlitFile, Element, builder::TreeBuilder};
 
 use self::install::install;
-use self::prune::prune;
+use self::prune::{prune_cache, prune_states};
 use self::verify::verify;
 use crate::{
     Installation, Package, Registry, Signal, State, db, environment, installation, package,
@@ -194,12 +194,12 @@ impl Client {
     ///
     /// This allows automatic removal of unused states (and their associated assets)
     /// from the disk, acting as a garbage collection facility.
-    pub fn prune(&self, strategy: prune::Strategy, yes: bool) -> Result<(), Error> {
+    pub fn prune_states(&self, strategy: prune::Strategy, yes: bool) -> Result<(), Error> {
         if self.scope.is_ephemeral() {
             return Err(Error::EphemeralProhibitedOperation);
         }
 
-        prune(
+        prune_states(
             strategy,
             &self.state_db,
             &self.install_db,
@@ -207,7 +207,27 @@ impl Client {
             &self.installation,
             yes,
         )?;
+
         Ok(())
+    }
+
+    /// Prune all cached data that isn't related to any states or active repositories.
+    ///
+    /// This will remove all downloaded stones & unpacked asset data for packages not
+    /// in that set.
+    pub fn prune_cache(&self) -> Result<usize, Error> {
+        if self.scope.is_ephemeral() {
+            return Err(Error::EphemeralProhibitedOperation);
+        }
+
+        prune_cache(
+            &self.state_db,
+            &self.install_db,
+            &self.layout_db,
+            &self.installation,
+            &self.repositories,
+        )
+        .map_err(Error::Prune)
     }
 
     /// Resolves the provided id's with the underlying registry, returning

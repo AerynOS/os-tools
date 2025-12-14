@@ -230,6 +230,17 @@ impl Database {
         })
     }
 
+    pub fn package_ids(&self) -> Result<BTreeSet<package::Id>, Error> {
+        self.conn.exec(|conn| {
+            Ok(model::meta::table
+                .select(model::meta::package)
+                .distinct()
+                .load_iter::<String, _>(conn)?
+                .map(|result| result.map(package::Id::from))
+                .collect::<Result<_, _>>()?)
+        })
+    }
+
     pub fn file_hashes(&self) -> Result<BTreeSet<String>, Error> {
         self.conn.exec(|conn| {
             Ok(model::meta::table

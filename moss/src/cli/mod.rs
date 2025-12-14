@@ -15,6 +15,7 @@ use thiserror::Error;
 use tracing_common::{self, logging::LogConfig, logging::init_log_with_config};
 
 mod boot;
+mod cache;
 mod extract;
 mod index;
 mod info;
@@ -101,6 +102,7 @@ fn command() -> Command {
         )
         .arg_required_else_help(true)
         .subcommand(boot::command())
+        .subcommand(cache::command())
         .subcommand(extract::command())
         .subcommand(index::command())
         .subcommand(info::command())
@@ -194,6 +196,7 @@ pub fn process() -> Result<(), Error> {
 
     match matches.subcommand() {
         Some(("boot", args)) => boot::handle(args, installation).map_err(Error::Boot),
+        Some(("cache", args)) => cache::handle(args, installation).map_err(Error::Cache),
         Some(("extract", args)) => extract::handle(args).map_err(Error::Extract),
         Some(("index", args)) => index::handle(args).map_err(Error::Index),
         Some(("info", args)) => info::handle(args, installation).map_err(Error::Info),
@@ -257,6 +260,9 @@ fn replace_aliases(args: env::Args) -> Vec<String> {
 pub enum Error {
     #[error("boot")]
     Boot(#[from] boot::Error),
+
+    #[error("cache")]
+    Cache(#[from] cache::Error),
 
     #[error("index")]
     Index(#[from] index::Error),
