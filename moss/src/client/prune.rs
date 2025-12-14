@@ -23,6 +23,7 @@ use tui::{
     pretty::autoprint_columns,
 };
 
+use crate::repository;
 use crate::{Installation, State, client::cache, db, package, state};
 
 /// The prune strategy for removing old states
@@ -44,7 +45,7 @@ pub enum Strategy {
 /// * - `install_db`   - Installation's "installed" database
 /// * - `layout_db`    - Installation's layout database
 /// * - `installation` - Client specific target filesystem encapsulation
-pub fn prune(
+pub fn prune_states(
     strategy: Strategy,
     state_db: &db::state::Database,
     install_db: &db::meta::Database,
@@ -191,6 +192,90 @@ pub fn prune(
     Ok(())
 }
 
+/// Prune all cached data that isn't related to any states
+/// or active repositories. This will remove all downloaded
+/// stones & unpacked asset data for packages not in that set.
+///
+/// # Arguments
+///
+/// * - `state_db`     - Installation's state database
+/// * - `install_db`   - Installation's "installed" database
+/// * - `layout_db`    - Installation's layout database
+/// * - `installation` - Client specific target filesystem encapsulation
+/// * - `repositories` - All configured repositories
+pub fn prune_cache(
+    state_db: &db::state::Database,
+    install_db: &db::meta::Database,
+    layout_db: &db::layout::Database,
+    installation: &Installation,
+    repositories: &repository::Manager,
+) -> Result<usize, Error> {
+    // Prune all packages from our internal DBs that aren't
+    // part of a state or an active repository
+    {
+        // Packages in all states (active + archived)
+        let state_packages = state_db
+            .all()?
+            .into_iter()
+            .flat_map(|state| state.selections.into_iter().map(|selection| selection.package))
+            .collect::<BTreeSet<_>>();
+
+        // Packages in all active repos
+        let repo_packages = repositories
+            .active()
+            .map(|repo| repo.db.package_ids())
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
+            .flatten()
+            .collect::<BTreeSet<_>>();
+
+        // Keep state + active repo packages
+        let packages_to_keep = state_packages.into_iter().chain(repo_packages).collect::<BTreeSet<_>>();
+
+        // Prune packages not in `packages_to_keep` from layout db (layout entries)
+        {
+            let layout_packages = layout_db.package_ids()?;
+            let to_remove = layout_packages.difference(&packages_to_keep);
+            layout_db.batch_remove(to_remove)?;
+        }
+
+        // Prune packages not in `packages_to_keep` from install db (meta entries)
+        {
+            let install_packages = install_db.package_ids()?;
+            let to_remove = install_packages.difference(&packages_to_keep);
+            install_db.batch_remove(to_remove)?;
+        }
+    }
+
+    let mut num_removed_files = 0;
+
+    // Now we can prune "orphaned package artefacts" / packages artefacts
+    // on disk but not defined in our internal dbs
+    {
+        // Remove orphaned downloads (package stones)
+        num_removed_files += remove_orphaned_files(
+            // root
+            installation.cache_path("downloads").join("v1"),
+            // final set of hashes to compare against
+            install_db.file_hashes()?,
+            // path builder using hash
+            |hash| cache::download_path(installation, &hash).ok(),
+        )?;
+
+        // Remove orphaned assets (unpacked package assets in CAS)
+        num_removed_files += remove_orphaned_files(
+            // root
+            installation.assets_path("v2"),
+            // final set of hashes to compare against
+            layout_db.file_hashes()?,
+            // path builder using hash
+            |hash| Some(cache::asset_path(installation, &hash)),
+        )?;
+    }
+
+    Ok(num_removed_files)
+}
+
 /// Removes the provided states & packages from the databases
 /// When any removals cause a filesystem asset to become completely unreffed
 /// it will be permanently deleted from disk.
@@ -224,16 +309,16 @@ fn remove_orphaned_files(
     root: PathBuf,
     final_hashes: BTreeSet<String>,
     compute_path: impl Fn(String) -> Option<PathBuf>,
-) -> Result<(), Error> {
+) -> Result<usize, Error> {
     // Compute hashes to remove by (installed - final)
     let installed_hashes = enumerate_file_hashes(&root)?;
     let hashes_to_remove = installed_hashes.difference(&final_hashes);
 
     // Remove each and it's parent dir if empty
-    hashes_to_remove.into_iter().try_for_each(|hash| {
+    hashes_to_remove.into_iter().try_fold(0, |acc, hash| {
         // Compute path to file using hash
         let Some(file) = compute_path(hash.clone()) else {
-            return Ok(());
+            return Ok(acc);
         };
         let partial = file.with_extension("part");
 
@@ -253,10 +338,8 @@ fn remove_orphaned_files(
             let _ = remove_empty_dirs(parent, &root);
         }
 
-        Ok(()) as Result<(), Error>
-    })?;
-
-    Ok(())
+        Ok(acc + 1)
+    })
 }
 
 /// Returns all nested files under `root` and parses the file name as a hash

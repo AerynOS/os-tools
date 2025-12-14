@@ -69,6 +69,17 @@ impl Database {
         })
     }
 
+    pub fn package_ids(&self) -> Result<BTreeSet<package::Id>, Error> {
+        self.conn.exec(|conn| {
+            Ok(model::layout::table
+                .select(model::layout::package_id)
+                .distinct()
+                .load_iter::<String, _>(conn)?
+                .map(|result| result.map(package::Id::from))
+                .collect::<Result<_, _>>()?)
+        })
+    }
+
     pub fn file_hashes(&self) -> Result<BTreeSet<String>, Error> {
         self.conn.exec(|conn| {
             let hashes = model::layout::table

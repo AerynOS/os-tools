@@ -141,7 +141,7 @@ pub fn prune(args: &ArgMatches, installation: Installation) -> Result<(), Error>
     let yes = args.get_flag("yes");
 
     let client = Client::new(environment::NAME, installation)?;
-    client.prune(prune::Strategy::KeepRecent { keep, include_newer }, yes)?;
+    client.prune_states(prune::Strategy::KeepRecent { keep, include_newer }, yes)?;
 
     Ok(())
 }
@@ -151,7 +151,7 @@ pub fn remove(args: &ArgMatches, installation: Installation) -> Result<(), Error
     let yes = args.get_flag("yes");
 
     let client = Client::new(environment::NAME, installation)?;
-    client.prune(prune::Strategy::Remove(id.into()), yes)?;
+    client.prune_states(prune::Strategy::Remove(id.into()), yes)?;
 
     Ok(())
 }
