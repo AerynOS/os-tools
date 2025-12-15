@@ -2,14 +2,14 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-use std::process;
+use std::{path::PathBuf, process};
 
 use clap::{Arg, ArgAction, ArgMatches, Command, arg};
 use itertools::Itertools;
 use moss::{
-    Installation, Repository,
+    Installation, Repository, environment,
     repository::{self, Priority},
-    runtime,
+    runtime, system_model,
 };
 use thiserror::Error;
 use tui::Styled;
@@ -94,14 +94,32 @@ pub fn command() -> Command {
 pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
     let config = config::Manager::system(&installation.root, "moss");
 
+    let system_model = system_model::load(&installation)?;
+
+    let manager = if let Some(system_model) = &system_model {
+        repository::Manager::explicit(
+            environment::NAME,
+            system_model.repositories.clone(),
+            installation.clone(),
+        )?
+    } else {
+        repository::Manager::system(config, installation.clone())?
+    };
+
     let handler = match args.subcommand() {
+        Some(("list", _)) => Action::List,
+        Some((command, _)) if system_model.is_some() => {
+            return Err(Error::SystemModelDisallowed {
+                command: command.to_owned(),
+                path: installation.system_model_path(),
+            });
+        }
         Some(("add", cmd_args)) => Action::Add(
             cmd_args.get_one::<String>("NAME").cloned().unwrap(),
             cmd_args.get_one::<Url>("URI").cloned().unwrap(),
             cmd_args.get_one::<String>("comment").cloned().unwrap(),
             Priority::new(*cmd_args.get_one::<u64>("priority").unwrap()),
         ),
-        Some(("list", _)) => Action::List,
         Some(("remove", cmd_args)) => Action::Remove(cmd_args.get_one::<String>("NAME").cloned().unwrap()),
         Some(("update", cmd_args)) => Action::Update(cmd_args.get_one::<String>("NAME").cloned()),
         Some(("enable", cmd_args)) => Action::Enable(cmd_args.get_one::<String>("NAME").cloned().unwrap()),
@@ -111,26 +129,23 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
 
     // dispatch to runtime handler function
     match handler {
-        Action::List => list(installation, config),
-        Action::Add(name, uri, comment, priority) => add(installation, config, name, uri, comment, priority),
-        Action::Remove(name) => remove(installation, config, name),
-        Action::Update(name) => update(installation, config, name),
-        Action::Enable(name) => enable(installation, config, name),
-        Action::Disable(name) => disable(installation, config, name),
+        Action::List => list(manager),
+        Action::Add(name, uri, comment, priority) => add(manager, name, uri, comment, priority),
+        Action::Remove(name) => remove(manager, name),
+        Action::Update(name) => update(manager, name),
+        Action::Enable(name) => enable(manager, name),
+        Action::Disable(name) => disable(manager, name),
     }
 }
 
 // Actual implementation of moss repo add
 fn add(
-    installation: Installation,
-    config: config::Manager,
+    mut manager: repository::Manager,
     name: String,
     uri: Url,
     comment: String,
     priority: Priority,
 ) -> Result<(), Error> {
-    let mut manager = repository::Manager::system(config, installation)?;
-
     let id = repository::Id::new(&name);
 
     manager.add_repository(
@@ -151,9 +166,7 @@ fn add(
 }
 
 /// List the repositories and pretty print them
-fn list(installation: Installation, config: config::Manager) -> Result<(), Error> {
-    let manager = repository::Manager::system(config, installation)?;
-
+fn list(manager: repository::Manager) -> Result<(), Error> {
     let configured_repos = manager.list();
     if configured_repos.len() == 0 {
         println!("No repositories have been configured yet");
@@ -174,9 +187,7 @@ fn list(installation: Installation, config: config::Manager) -> Result<(), Error
 }
 
 /// Update specific repos or all
-fn update(installation: Installation, config: config::Manager, which: Option<String>) -> Result<(), Error> {
-    let mut manager = repository::Manager::system(config, installation)?;
-
+fn update(mut manager: repository::Manager, which: Option<String>) -> Result<(), Error> {
     runtime::block_on(async {
         match which {
             Some(repo) => manager.refresh(&repository::Id::new(&repo)).await,
@@ -188,10 +199,8 @@ fn update(installation: Installation, config: config::Manager, which: Option<Str
 }
 
 /// Remove repo
-fn remove(installation: Installation, config: config::Manager, repo: String) -> Result<(), Error> {
+fn remove(mut manager: repository::Manager, repo: String) -> Result<(), Error> {
     let id = repository::Id::new(&repo);
-
-    let mut manager = repository::Manager::system(config, installation)?;
 
     match manager.remove(id.clone())? {
         repository::manager::Removal::NotFound => {
@@ -212,9 +221,8 @@ fn remove(installation: Installation, config: config::Manager, repo: String) -> 
     Ok(())
 }
 
-fn enable(installation: Installation, config: config::Manager, repo: String) -> Result<(), Error> {
+fn enable(mut manager: repository::Manager, repo: String) -> Result<(), Error> {
     let id = repository::Id::new(&repo);
-    let mut manager = repository::Manager::system(config, installation)?;
 
     runtime::block_on(manager.enable(&id))?;
 
@@ -223,9 +231,8 @@ fn enable(installation: Installation, config: config::Manager, repo: String) -> 
     Ok(())
 }
 
-fn disable(installation: Installation, config: config::Manager, repo: String) -> Result<(), Error> {
+fn disable(mut manager: repository::Manager, repo: String) -> Result<(), Error> {
     let id = repository::Id::new(&repo);
-    let mut manager = repository::Manager::system(config, installation)?;
 
     runtime::block_on(manager.disable(&id))?;
 
@@ -238,4 +245,10 @@ fn disable(installation: Installation, config: config::Manager, repo: String) ->
 pub enum Error {
     #[error("repo manager")]
     RepositoryManager(#[from] repository::manager::Error),
+    #[error("load system model")]
+    LoadSystemModel(#[from] system_model::LoadError),
+    #[error(
+        "`moss repo {command}` is not allowed with system-model enabled. Repos must be manually edited from {path:?}"
+    )]
+    SystemModelDisallowed { command: String, path: PathBuf },
 }
