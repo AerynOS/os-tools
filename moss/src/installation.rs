@@ -101,7 +101,7 @@ impl Installation {
             root,
             mutability,
             active_state,
-            cache_dir: None,
+            cache_dir,
             _locks,
         })
     }
