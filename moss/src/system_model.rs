@@ -1,9 +1,10 @@
+use std::path::Path;
 use std::{collections::BTreeSet, io};
 
 use fs_err as fs;
 use thiserror::Error;
 
-use crate::{Installation, Package, dependency, repository};
+use crate::{Package, dependency, repository};
 
 use self::decode::decode;
 use self::encode::encode;
@@ -20,15 +21,19 @@ pub struct SystemModel {
     encoded: String,
 }
 
-/// Loads a [`SystemModel`] from the provided [`Installation`]
-pub fn load(installation: &Installation) -> Result<Option<SystemModel>, LoadError> {
-    let path = installation.system_model_path();
+impl SystemModel {
+    pub fn encoded(&self) -> &str {
+        &self.encoded
+    }
+}
 
+/// Loads a [`SystemModel`] from the provided path
+pub fn load(path: &Path) -> Result<Option<SystemModel>, LoadError> {
     if !path.exists() {
         return Ok(None);
     }
 
-    let content = fs::read_to_string(&path).map_err(LoadError::ReadFile)?;
+    let content = fs::read_to_string(path).map_err(LoadError::ReadFile)?;
 
     Ok(Some(decode(&content)?))
 }
