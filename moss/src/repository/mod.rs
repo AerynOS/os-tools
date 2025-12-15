@@ -118,6 +118,15 @@ impl IntoIterator for Map {
     }
 }
 
+impl<'a> IntoIterator for &'a Map {
+    type Item = (&'a Id, &'a Repository);
+    type IntoIter = std::collections::btree_map::Iter<'a, Id, Repository>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.iter()
+    }
+}
+
 impl FromIterator<(Id, Repository)> for Map {
     fn from_iter<T: IntoIterator<Item = (Id, Repository)>>(iter: T) -> Self {
         Self(iter.into_iter().collect())

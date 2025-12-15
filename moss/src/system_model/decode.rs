@@ -1,9 +1,7 @@
 use kdl::{KdlDocument, KdlNode, KdlValue};
 use thiserror::Error;
 
-use crate::{Provider, Repository, dependency, repository};
-
-use super::SystemModel;
+use crate::{Provider, Repository, SystemModel, dependency, repository};
 
 pub fn decode(content: &str) -> Result<SystemModel, Error> {
     let document: KdlDocument = content.parse().map_err(Error::ParseKdlDocument)?;
@@ -23,11 +21,11 @@ pub fn decode(content: &str) -> Result<SystemModel, Error> {
     Ok(SystemModel {
         repositories,
         packages,
-        raw: content.to_owned(),
+        encoded: content.to_owned(),
     })
 }
 
-fn decode_package(node: &KdlNode) -> Result<Provider, Error> {
+pub(super) fn decode_package(node: &KdlNode) -> Result<Provider, Error> {
     Provider::from_name(node.name().value()).map_err(Error::ParseProvider)
 }
 

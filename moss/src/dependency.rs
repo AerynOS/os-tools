@@ -199,6 +199,19 @@ impl Provider {
             })
         }
     }
+
+    /// Display the [`Provider`] as it's name. For `name(xyz)` providers,
+    /// this is displayed as `xyz`. For all other kinds of providers,
+    /// it's shown with the type prefix: `soname(abc.so)`, etc.
+    ///
+    /// This is the inverse of [`Provider::from_name`].
+    pub fn to_name(&self) -> String {
+        if matches!(self.kind, Kind::PackageName) {
+            self.name.clone()
+        } else {
+            self.to_string()
+        }
+    }
 }
 
 /// Partial ordering comparator for Provider
