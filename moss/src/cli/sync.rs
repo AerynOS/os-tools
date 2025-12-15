@@ -247,10 +247,9 @@ fn resolve_with_installed(client: &Client, packages: &[Package]) -> Result<Vec<P
                 .registry
                 .by_name(&p.meta.name, package::Flags::new().with_available())
                 .next()
+                && !all_ids.contains(&lookup.id)
             {
-                if !all_ids.contains(&lookup.id) {
-                    return Some(lookup.id);
-                }
+                return Some(lookup.id);
             }
 
             Some(p.id.clone())
