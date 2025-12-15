@@ -13,6 +13,7 @@ use clap_mangen::Man;
 use moss::{Installation, installation};
 use thiserror::Error;
 use tracing_common::{self, logging::LogConfig, logging::init_log_with_config};
+use tui::Styled;
 
 mod boot;
 mod cache;
@@ -194,6 +195,10 @@ pub fn process() -> Result<(), Error> {
 
     let installation = Installation::open(root, cache.cloned())?;
 
+    if installation.system_model.is_some() {
+        print_system_model_warning(&installation);
+    }
+
     match matches.subcommand() {
         Some(("boot", args)) => boot::handle(args, installation).map_err(Error::Boot),
         Some(("cache", args)) => cache::handle(args, installation).map_err(Error::Cache),
@@ -254,6 +259,20 @@ fn replace_aliases(args: env::Args) -> Vec<String> {
     }
 
     args
+}
+
+fn print_system_model_warning(installation: &Installation) {
+    eprintln!(
+        "{}: {path:?} is present & therefore active. This means that:
+
+ - The system-model is the source of truth and all repositories & packages must be defined from it
+ - Any package changes (installs / removes) will be temporary until the system-model is updated
+ - The system state can be reverted to match the system-model state with a `moss sync`
+ - To disable the system-model, either remove or rename {path:?}
+ ",
+        "INFO".green(),
+        path = installation.system_model_path(),
+    );
 }
 
 #[derive(Debug, Error)]

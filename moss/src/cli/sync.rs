@@ -63,7 +63,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     let installed = client.registry.list_installed().collect::<Vec<_>>();
 
     // Resolve the final state of packages after considering sync updates
-    let finalized = if let Some(system_model) = &client.system_model {
+    let finalized = if let Some(system_model) = &client.installation.system_model {
         resolve_with_system_model(&client, system_model)?
     } else {
         resolve_with_installed(&client, &installed)?
@@ -159,7 +159,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     drop(_cache_packages_guard);
     instant = Instant::now();
 
-    let new_selections = if let Some(system_model) = &client.system_model {
+    let new_selections = if let Some(system_model) = &client.installation.system_model {
         // For system model, "explicit" is what was defined in the system model file
 
         finalized

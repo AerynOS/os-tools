@@ -78,9 +78,6 @@ pub struct Client {
 
     /// Operational scope (real systems, ephemeral, etc)
     scope: Scope,
-
-    /// System model, if defined
-    pub system_model: Option<SystemModel>,
 }
 
 impl Client {
@@ -110,11 +107,9 @@ impl Client {
         let state_db = db::state::Database::new(installation.db_path("state").to_str().unwrap_or_default())?;
         let layout_db = db::layout::Database::new(installation.db_path("layout").to_str().unwrap_or_default())?;
 
-        let system_model = system_model::load(&installation.system_model_path())?;
-
         let repositories = if let Some(repos) = repositories {
             repository::Manager::explicit(&name, repos, installation.clone())?
-        } else if let Some(system_model) = &system_model {
+        } else if let Some(system_model) = &installation.system_model {
             repository::Manager::explicit(&name, system_model.repositories.clone(), installation.clone())?
         } else {
             repository::Manager::system(config.clone(), installation.clone())?
@@ -132,7 +127,6 @@ impl Client {
             state_db,
             layout_db,
             scope: Scope::Stateful,
-            system_model,
         })
     }
 
@@ -322,8 +316,11 @@ impl Client {
 
         let explicit_packages =
             self.resolve_packages(selections.iter().filter_map(|s| s.explicit.then_some(&s.package)))?;
-        let system_model =
-            update_or_create_system_model(self.system_model.clone(), &self.repositories, &explicit_packages)?;
+        let system_model = update_or_create_system_model(
+            self.installation.system_model.clone(),
+            &self.repositories,
+            &explicit_packages,
+        )?;
 
         let timer = Instant::now();
 

@@ -12,7 +12,7 @@ use nix::unistd::{AccessFlags, Uid, access};
 use thiserror::Error;
 use tui::Styled;
 
-use crate::state;
+use crate::{SystemModel, state, system_model};
 
 mod lockfile;
 
@@ -41,6 +41,9 @@ pub struct Installation {
     /// Custom cache directory location,
     /// otherwise derived from root
     pub cache_dir: Option<PathBuf>,
+
+    /// If defined, the system model of the installation
+    pub system_model: Option<SystemModel>,
 
     /// Acquired locks that guarantee exclusive access
     /// to the installation for mutable operations
@@ -97,11 +100,15 @@ impl Installation {
             warn!("Unable to discover Active State ID");
         }
 
+        let system_model =
+            system_model::load(&root.join("etc/moss/system-model.kdl")).map_err(Error::LoadSystemModel)?;
+
         Ok(Self {
             root,
             mutability,
             active_state,
             cache_dir,
+            system_model,
             _locks,
         })
     }
@@ -264,4 +271,6 @@ pub enum Error {
     CacheInvalid,
     #[error("acquiring lockfile")]
     Lockfile(#[from] lockfile::Error),
+    #[error("load system model")]
+    LoadSystemModel(#[from] system_model::LoadError),
 }
