@@ -938,6 +938,42 @@ impl Client {
 
         Ok(())
     }
+
+    fn load_or_create_system_model(&self, path: PathBuf, state: &State) -> Result<SystemModel, Error> {
+        match system_model::load(&path).map_err(Error::LoadSystemModel)? {
+            Some(system_model) => Ok(system_model),
+            None => {
+                let active_repos = self
+                    .repositories
+                    .active()
+                    .map(|repo| (repo.id, repo.repository))
+                    .collect::<repository::Map>();
+
+                let packages = self
+                    .resolve_packages(state.selections.iter().filter_map(|s| s.explicit.then_some(&s.package)))?
+                    .into_iter()
+                    .map(|package| Provider::package_name(package.meta.name.as_ref()))
+                    .collect();
+
+                Ok(system_model::create(active_repos, packages))
+            }
+        }
+    }
+
+    pub fn export_state(&self, state: state::Id) -> Result<SystemModel, Error> {
+        let state = self.state_db.get(state)?;
+        let is_active = self.installation.active_state == Some(state.id);
+
+        let path = if is_active {
+            self.installation.root.join("usr/lib/system-model.kdl")
+        } else {
+            self.installation
+                .root_path(state.id.to_string())
+                .join("usr/lib/system-model.kdl")
+        };
+
+        self.load_or_create_system_model(path, &state)
+    }
 }
 
 /// Add root symlinks & os-release file
