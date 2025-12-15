@@ -18,9 +18,9 @@ use tui::{
 use vfs::tree::BlitFile;
 
 use crate::{
-    Client, Package, Signal,
+    Client, Package, Provider, Signal, SystemModel,
     client::{self, cache},
-    package, runtime, signal, state,
+    package, repository, runtime, signal, state, system_model,
 };
 
 pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::Error> {
@@ -261,16 +261,34 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
         // Blits to staging dir
         let fstree = client.blit_root(state.selections.iter().map(|s| &s.package))?;
 
+        let explicit_packages =
+            client.resolve_packages(state.selections.iter().filter_map(|s| s.explicit.then_some(&s.package)))?;
+
         if is_active {
+            let system_model = load_or_create_system_model(
+                client.installation.root.join("usr/lib/system-model.kdl"),
+                &client.repositories,
+                &explicit_packages,
+            )?;
+
             // Override install root with the newly blitted active state
-            client.apply_stateful_blit(fstree, state, None)?;
+            client.apply_stateful_blit(fstree, state, None, system_model)?;
             // Remove corrupt (swapped) state from staging directory
             fs::remove_dir_all(client.installation.staging_dir())?;
         } else {
+            let system_model = load_or_create_system_model(
+                client
+                    .installation
+                    .root_path(state.id.to_string())
+                    .join("usr/lib/system-model.kdl"),
+                &client.repositories,
+                &explicit_packages,
+            )?;
+
             // Use the staged blit as an ephereral target for the non-active state
             // then archive it to it's archive directory
             client::record_state_id(&client.installation.staging_dir(), state.id)?;
-            client.apply_ephemeral_blit(fstree, &client.installation.staging_dir())?;
+            client.apply_ephemeral_blit(fstree, &client.installation.staging_dir(), system_model)?;
 
             // Remove the old archive state so the new blit can be archived
             fs::remove_dir_all(client.installation.root_path(state.id.to_string()))?;
@@ -340,4 +358,27 @@ impl fmt::Display for Issue {
 fn try_reduce_vec_concat<T, E>(mut a: Vec<T>, mut b: Vec<T>) -> Result<Vec<T>, E> {
     a.append(&mut b);
     Ok(a)
+}
+
+fn load_or_create_system_model(
+    path: PathBuf,
+    repositories: &repository::Manager,
+    packages: &[Package],
+) -> Result<SystemModel, client::Error> {
+    match system_model::load(&path).map_err(client::Error::LoadSystemModel)? {
+        Some(system_model) => Ok(system_model),
+        None => {
+            let active_repos = repositories
+                .active()
+                .map(|repo| (repo.id, repo.repository))
+                .collect::<repository::Map>();
+
+            let packages = packages
+                .iter()
+                .map(|package| Provider::package_name(package.meta.name.as_ref()))
+                .collect();
+
+            Ok(system_model::create(active_repos, packages))
+        }
+    }
 }

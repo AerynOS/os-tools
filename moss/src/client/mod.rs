@@ -37,7 +37,7 @@ use self::install::install;
 use self::prune::{prune_cache, prune_states};
 use self::verify::verify;
 use crate::{
-    Installation, Package, Registry, Signal, State, SystemModel, db, environment, installation, package,
+    Installation, Package, Provider, Registry, Signal, State, SystemModel, db, environment, installation, package,
     registry::plugin::{self, Plugin},
     repository, runtime, signal,
     state::{self, Selection},
@@ -110,7 +110,7 @@ impl Client {
         let state_db = db::state::Database::new(installation.db_path("state").to_str().unwrap_or_default())?;
         let layout_db = db::layout::Database::new(installation.db_path("layout").to_str().unwrap_or_default())?;
 
-        let system_model = system_model::load(&installation)?;
+        let system_model = system_model::load(&installation.system_model_path())?;
 
         let repositories = if let Some(repos) = repositories {
             repository::Manager::explicit(&name, repos, installation.clone())?
@@ -320,6 +320,11 @@ impl Client {
             "block".into(),
         );
 
+        let explicit_packages =
+            self.resolve_packages(selections.iter().filter_map(|s| s.explicit.then_some(&s.package)))?;
+        let system_model =
+            update_or_create_system_model(self.system_model.clone(), &self.repositories, &explicit_packages)?;
+
         let timer = Instant::now();
 
         let state_span = info_span!(
@@ -343,12 +348,12 @@ impl Client {
                 // Add to db
                 let state = self.state_db.add(selections, Some(&summary.to_string()), None)?;
 
-                self.apply_stateful_blit(fstree, &state, old_state)?;
+                self.apply_stateful_blit(fstree, &state, old_state, system_model)?;
 
                 Ok(Some(state))
             }
             Scope::Ephemeral { blit_root } => {
-                self.apply_ephemeral_blit(fstree, blit_root)?;
+                self.apply_ephemeral_blit(fstree, blit_root, system_model)?;
 
                 Ok(None)
             }
@@ -429,9 +434,11 @@ impl Client {
         fstree: vfs::Tree<PendingFile>,
         state: &State,
         old_state: Option<state::Id>,
+        system_model: SystemModel,
     ) -> Result<(), Error> {
         record_state_id(&self.installation.staging_dir(), state.id)?;
         record_os_release(&self.installation.staging_dir())?;
+        record_system_model(&self.installation.staging_dir(), system_model)?;
 
         create_root_links(&self.installation.isolation_dir())?;
         Self::apply_triggers(TriggerScope::Transaction(&self.installation, &self.scope), &fstree)?;
@@ -454,8 +461,15 @@ impl Client {
         Ok(())
     }
 
-    pub fn apply_ephemeral_blit(&self, fstree: vfs::Tree<PendingFile>, blit_root: &Path) -> Result<(), Error> {
+    pub fn apply_ephemeral_blit(
+        &self,
+        fstree: vfs::Tree<PendingFile>,
+        blit_root: &Path,
+        system_model: SystemModel,
+    ) -> Result<(), Error> {
         record_os_release(blit_root)?;
+        record_system_model(blit_root, system_model)?;
+
         create_root_links(blit_root)?;
         create_root_links(&self.installation.isolation_dir())?;
 
@@ -1021,6 +1035,44 @@ fn record_os_release(root: &Path) -> Result<(), Error> {
     Ok(())
 }
 
+fn update_or_create_system_model(
+    current: Option<SystemModel>,
+    repositories: &repository::Manager,
+    packages: &[Package],
+) -> Result<SystemModel, Error> {
+    let active_repos = repositories
+        .active()
+        .map(|repo| (repo.id, repo.repository))
+        .collect::<repository::Map>();
+
+    match current {
+        // Update existing w/ incoming packages
+        Some(existing) => existing.update(packages).map_err(Error::UpdateSystemModel),
+
+        // Generate a fresh system-model file
+        None => {
+            let packages = packages
+                .iter()
+                .map(|package| Provider::package_name(package.meta.name.as_ref()))
+                .collect();
+
+            Ok(system_model::create(active_repos, packages))
+        }
+    }
+}
+
+fn record_system_model(root: &Path, system_model: SystemModel) -> Result<(), Error> {
+    let dir = root.join("usr").join("lib");
+
+    if !dir.exists() {
+        fs::create_dir(&dir)?;
+    }
+
+    fs::write(dir.join("system-model.kdl"), system_model.encoded())?;
+
+    Ok(())
+}
+
 #[derive(Clone, Debug)]
 enum Scope {
     Stateful,
@@ -1207,4 +1259,6 @@ pub enum Error {
     BlitSignalIgnore(#[from] signal::Error),
     #[error("load system model")]
     LoadSystemModel(#[from] system_model::LoadError),
+    #[error("update system model")]
+    UpdateSystemModel(#[from] system_model::UpdateError),
 }
