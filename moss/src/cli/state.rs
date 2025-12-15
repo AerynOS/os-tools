@@ -7,7 +7,7 @@ use clap::{ArgAction, ArgMatches, Command, arg};
 use moss::{
     Installation, State,
     client::{self, Client, prune},
-    environment,
+    environment, state,
 };
 use thiserror::Error;
 use tui::Styled;
@@ -62,6 +62,15 @@ pub fn command() -> Command {
                 .about("Verify TODO")
                 .arg(arg!(--verbose "Vebose output").action(ArgAction::SetTrue)),
         )
+        .subcommand(
+            Command::new("export")
+                .about("Export a state as a system-model.kdl file")
+                .arg(
+                    arg!([ID] "State id to export or current state if omitted")
+                        .action(ArgAction::Set)
+                        .value_parser(clap::value_parser!(u64)),
+                ),
+        )
 }
 
 pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
@@ -73,6 +82,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         Some(("prune", args)) => prune(args, installation),
         Some(("remove", args)) => remove(args, installation),
         Some(("verify", args)) => verify(args, installation),
+        Some(("export", args)) => export(args, installation),
         _ => unreachable!(),
     }
 }
@@ -166,6 +176,20 @@ pub fn verify(args: &ArgMatches, installation: Installation) -> Result<(), Error
     Ok(())
 }
 
+fn export(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
+    let id = match args.get_one::<u64>("ID") {
+        Some(id) => state::Id::from(*id as i32),
+        None => installation.active_state.ok_or(Error::NoActiveState)?,
+    };
+
+    let client = Client::new(environment::NAME, installation)?;
+    let system_model = client.export_state(id)?;
+
+    println!("{}", system_model.encoded());
+
+    Ok(())
+}
+
 /// Emit a state description for the TUI
 fn print_state(state: State) {
     let local_time = state.created.with_timezone(&Local);
@@ -251,4 +275,7 @@ pub enum Error {
 
     #[error("db")]
     DB(#[from] moss::db::Error),
+
+    #[error("no active state")]
+    NoActiveState,
 }
