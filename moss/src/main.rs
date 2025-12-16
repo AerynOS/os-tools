@@ -11,27 +11,25 @@ mod cli;
 
 /// Main entry point
 fn main() {
-    if let Err(error) = cli::process() {
-        report_error(error);
+    if let Err(err) = cli::process() {
+        report_error(&err);
         std::process::exit(1);
     }
 }
-
 /// Report an execution error to the user
-fn report_error(error: cli::Error) {
-    let sources = sources(&error);
-    let error = sources.join(": ");
-    error!(error, "Command execution failed");
-    println!("{}: {error}", "Error".red());
+fn report_error(error: &dyn Error) {
+    let mut chain_parts = Vec::new();
+    let mut current: &dyn Error = error;
+    loop {
+        chain_parts.push(current.to_string());
+        if let Some(source) = current.source() {
+            current = source;
+        } else {
+            break;
+        }
+    }
+    let chain = chain_parts.join(": ");
+    eprintln!("{}: {}", "Error".red(), chain);
+    error!(%chain, "Command execution failed");
 }
 
-/// Accumulate sources through error chains
-fn sources(error: &cli::Error) -> Vec<String> {
-    let mut sources = vec![error.to_string()];
-    let mut source = error.source();
-    while let Some(error) = source.take() {
-        sources.push(error.to_string());
-        source = error.source();
-    }
-    sources
-}
