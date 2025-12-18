@@ -6,10 +6,10 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use clap::{ArgMatches, Command, arg, value_parser};
+use clap::{ArgMatches, CommandFactory, FromArgMatches, Parser};
 use moss::registry::transaction;
 use moss::state::Selection;
-use moss::{Installation, Provider, SystemModel, environment, runtime};
+use moss::{Installation, Provider, SystemModel, environment, runtime, system_model};
 use moss::{
     Package,
     client::{self, Client},
@@ -22,35 +22,49 @@ use tui::dialoguer::Confirm;
 use tui::dialoguer::theme::ColorfulTheme;
 use tui::pretty::autoprint_columns;
 
-pub fn command() -> Command {
-    Command::new("sync")
-        .visible_alias("up")
-        .about("Sync packages")
-        .long_about("Sync package selections with candidates from the highest priority repository")
-        .arg(arg!(-u --"update" "Update repositories before syncing"))
-        .arg(
-            arg!(--to <blit_target> "Blit this sync to the provided directory instead of the root")
-                .long_help(
-                    "Blit this sync to the provided directory instead of the root. \n\
-                     \n\
-                     This operation won't be captured as a new state",
-                )
-                .value_parser(value_parser!(PathBuf)),
-        )
+pub fn command() -> clap::Command {
+    Command::command()
+}
+
+#[derive(Debug, Parser)]
+#[command(
+    name = "sync",
+    visible_alias = "up",
+    about = "Sync packages",
+    long_about = "Sync package selections with candidates from the highest priority repository"
+)]
+pub struct Command {
+    /// Update repositories before syncing
+    #[arg(short, long)]
+    update: bool,
+    /// Blit this sync to the provided directory instead of the root
+    ///
+    /// This operation won't be captured as a new state
+    #[arg(value_name = "dir", long = "to")]
+    blit_target: Option<PathBuf>,
+
+    /// Sync against the provided system-model.kdl
+    ///
+    /// Only the repositories and packages from the provided file
+    /// will be used to create the new state
+    #[arg(value_name = "file", long)]
+    import: Option<PathBuf>,
 }
 
 #[instrument(skip_all)]
 pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
+    let command = Command::from_arg_matches(args).expect("validated by clap");
+
     let mut timing = Timing::default();
     let mut instant = Instant::now();
 
     let yes_all = *args.get_one::<bool>("yes").unwrap();
-    let update = *args.get_one::<bool>("update").unwrap();
+    let update = command.update;
 
     let mut client = Client::new(environment::NAME, installation)?;
 
     // Make ephemeral if a blit target was provided
-    if let Some(blit_target) = args.get_one::<PathBuf>("to").cloned() {
+    if let Some(blit_target) = command.blit_target {
         client = client.ephemeral(blit_target)?;
     }
 
@@ -59,11 +73,17 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         runtime::block_on(client.refresh_repositories())?;
     }
 
+    let system_model = if let Some(path) = command.import {
+        Some(system_model::load(&path)?.ok_or(Error::ImportSystemModelDoesntExist(path))?)
+    } else {
+        client.installation.system_model.clone()
+    };
+
     // Grab all the existing installed packages
     let installed = client.registry.list_installed().collect::<Vec<_>>();
 
     // Resolve the final state of packages after considering sync updates
-    let finalized = if let Some(system_model) = &client.installation.system_model {
+    let finalized = if let Some(system_model) = &system_model {
         resolve_with_system_model(&client, system_model)?
     } else {
         resolve_with_installed(&client, &installed)?
@@ -159,7 +179,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     drop(_cache_packages_guard);
     instant = Instant::now();
 
-    let new_selections = if let Some(system_model) = &client.installation.system_model {
+    let new_selections = if let Some(system_model) = &system_model {
         // For system model, "explicit" is what was defined in the system model file
 
         finalized
@@ -322,4 +342,10 @@ pub enum Error {
 
     #[error("io")]
     Io(#[from] std::io::Error),
+
+    #[error("load system model")]
+    LoadSystemModel(#[from] system_model::LoadError),
+
+    #[error("system model doesn't exist at {0:?}")]
+    ImportSystemModelDoesntExist(PathBuf),
 }
