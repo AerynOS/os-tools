@@ -132,3 +132,9 @@ where
         self.0.into_iter().sorted()
     }
 }
+
+/// A package being updated from `old` to `new`
+pub struct Update<'a> {
+    pub old: &'a Package,
+    pub new: &'a Package,
+}
