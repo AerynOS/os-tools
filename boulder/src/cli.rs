@@ -163,7 +163,7 @@ fn replace_aliases(args: std::env::Args) -> Vec<String> {
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("build")]
-    Build(Box<build::Error>),
+    Build(#[source] Box<build::Error>),
     #[error("chroot")]
     Chroot(#[from] chroot::Error),
     #[error("profile")]

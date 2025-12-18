@@ -10,7 +10,12 @@ use std::ptr::addr_of_mut;
 use std::sync::atomic::{AtomicI32, Ordering};
 
 use fs_err::{self as fs, PathExt as _};
-use nix::libc::SIGCHLD;
+use nix::NixPath;
+use nix::errno::Errno;
+use nix::libc::{
+    AT_EMPTY_PATH, AT_FDCWD, MOUNT_ATTR_RDONLY, MOVE_MOUNT_F_EMPTY_PATH, OPEN_TREE_CLOEXEC, OPEN_TREE_CLONE, SIGCHLD,
+    SYS_mount_setattr, SYS_move_mount, SYS_open_tree, mount_attr, syscall,
+};
 use nix::mount::{MntFlags, MsFlags, mount, umount2};
 use nix::sched::{CloneFlags, clone};
 use nix::sys::prctl::set_pdeathsig;
@@ -248,17 +253,7 @@ fn pivot(root: &Path, binds: &[Bind]) -> Result<(), ContainerError> {
         let source = bind.source.fs_err_canonicalize().context(FsErrSnafu)?;
         let target = root.join(bind.target.strip_prefix("/").unwrap_or(&bind.target));
 
-        add_mount(Some(&source), &target, None, MsFlags::MS_BIND)?;
-
-        // Remount to enforce readonly flag
-        if bind.read_only {
-            add_mount(
-                Some(source),
-                target,
-                None,
-                MsFlags::MS_BIND | MsFlags::MS_REMOUNT | MsFlags::MS_RDONLY,
-            )?;
-        }
+        bind_mount(&source, &target, bind.read_only)?;
     }
 
     ensure_directory(&old_root)?;
@@ -314,6 +309,60 @@ fn ensure_directory(path: impl AsRef<Path>) -> Result<(), ContainerError> {
     Ok(())
 }
 
+fn bind_mount(source: &Path, target: &Path, read_only: bool) -> Result<(), ContainerError> {
+    ensure_directory(target)?;
+
+    unsafe {
+        source
+            .with_nix_path(|source| {
+                target.with_nix_path(|target| {
+                    // Bind mount to fd
+                    let fd = Errno::result(syscall(
+                        SYS_open_tree,
+                        AT_FDCWD,
+                        source.as_ptr(),
+                        OPEN_TREE_CLONE | OPEN_TREE_CLOEXEC,
+                    ))?;
+
+                    // Set rd flag if applicable
+                    if read_only {
+                        let attr = mount_attr {
+                            attr_set: MOUNT_ATTR_RDONLY,
+                            attr_clr: 0,
+                            propagation: 0,
+                            userns_fd: 0,
+                        };
+                        Errno::result(syscall(
+                            SYS_mount_setattr,
+                            fd,
+                            c"".as_ptr(),
+                            AT_EMPTY_PATH,
+                            &attr as *const mount_attr,
+                            size_of::<mount_attr>(),
+                        ))?;
+                    }
+
+                    // Move detached mount to target
+                    Errno::result(syscall(
+                        SYS_move_mount,
+                        fd,
+                        c"".as_ptr(),
+                        AT_FDCWD,
+                        target.as_ptr(),
+                        MOVE_MOUNT_F_EMPTY_PATH,
+                    ))?;
+
+                    Ok(())
+                })
+            })
+            .context(NixPathSnafu)?
+            .context(NixPathSnafu)?
+            .context(MountSnafu {
+                target: target.to_owned(),
+            })
+    }
+}
+
 fn add_mount<T: AsRef<Path>>(
     source: Option<T>,
     target: T,
@@ -329,7 +378,7 @@ fn add_mount<T: AsRef<Path>>(
         flags,
         Option::<&str>::None,
     )
-    .with_context(|_| MountSnafu {
+    .context(MountSnafu {
         target: target.to_owned(),
     })?;
     Ok(())
@@ -451,7 +500,9 @@ enum ContainerError {
     #[snafu(display("unmount old root"))]
     UnmountOldRoot { source: nix::Error },
     #[snafu(display("mount {}", target.display()))]
-    Mount { target: PathBuf, source: nix::Error },
+    Mount { source: nix::Error, target: PathBuf },
+    #[snafu(display("with nix path"))]
+    NixPath { source: Errno },
     #[snafu(display("filesystem"))]
     FsErr { source: io::Error },
 }
