@@ -22,7 +22,7 @@ AerynOS distributes software via its custom `stone` format. This format was expl
     > Context: we dont mix layout + metadata (unlike in alpine, where tar records are used for metadata)
     > in fact we explicitly separate them
     > so a "normal" stone file has a meta payload with strongly typed/tagged key value pairs/sets
-    > a content payload which is every unique file concatanated into a "megablob" and compressed singly 
+    > a content payload which is every unique file concatenated into a "megablob" and compressed singly 
     > an index payload which is a jump table into offsets in the unpacked content payload
     > to allow the xxhash128 keying
     > ie "position one is hash xyz"
