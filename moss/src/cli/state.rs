@@ -2,13 +2,20 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
+use std::{
+    io,
+    path::{Path, PathBuf},
+};
+
 use chrono::Local;
-use clap::{ArgAction, ArgMatches, Command, arg};
+use clap::{ArgAction, ArgMatches, Command, CommandFactory, FromArgMatches, Parser, arg};
+use fs_err as fs;
 use moss::{
     Installation, State,
     client::{self, Client, prune},
     environment, state,
 };
+use nix::unistd::gethostname;
 use thiserror::Error;
 use tui::Styled;
 
@@ -62,15 +69,19 @@ pub fn command() -> Command {
                 .about("Verify TODO")
                 .arg(arg!(--verbose "Vebose output").action(ArgAction::SetTrue)),
         )
-        .subcommand(
-            Command::new("export")
-                .about("Export a state as a system-model.kdl file")
-                .arg(
-                    arg!([ID] "State id to export or current state if omitted")
-                        .action(ArgAction::Set)
-                        .value_parser(clap::value_parser!(u64)),
-                ),
-        )
+        .subcommand(Export::command())
+}
+
+#[derive(Debug, Parser)]
+#[command(name = "export", about = "Export a state as a system-model.kdl file")]
+struct Export {
+    /// State id to export or current state if omitted
+    id: Option<i32>,
+    /// Export to the provided path or stdout if not supplied
+    ///
+    /// If supplied without a path or path is a directory, outputs to "system-model-{hostname}-fstxn-{id}.kdl"
+    #[arg(short, long)]
+    output: Option<Option<PathBuf>>,
 }
 
 pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
@@ -177,15 +188,45 @@ pub fn verify(args: &ArgMatches, installation: Installation) -> Result<(), Error
 }
 
 fn export(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
-    let id = match args.get_one::<u64>("ID") {
-        Some(id) => state::Id::from(*id as i32),
+    let export = Export::from_arg_matches(args).expect("validate by clap");
+
+    let id = match export.id {
+        Some(id) => state::Id::from(id),
         None => installation.active_state.ok_or(Error::NoActiveState)?,
     };
 
     let client = Client::new(environment::NAME, installation)?;
     let system_model = client.export_state(id)?;
 
-    println!("{}", system_model.encoded());
+    match export.output {
+        Some(maybe_path) => {
+            let format_filename = || {
+                if let Some(hostname) = gethostname().ok().and_then(|s| s.into_string().ok()) {
+                    format!("system-model-{hostname}-fstxn-{id}.kdl")
+                } else {
+                    format!("system-model-fstxn-{id}.kdl")
+                }
+            };
+
+            let path = match maybe_path {
+                Some(path) => {
+                    if path.is_dir() {
+                        path.join(format_filename())
+                    } else {
+                        path
+                    }
+                }
+                None => Path::new(".").join(format_filename()),
+            };
+
+            fs::write(&path, system_model.encoded())?;
+
+            println!("Exported to {path:?}");
+        }
+        None => {
+            println!("{}", system_model.encoded());
+        }
+    }
 
     Ok(())
 }
@@ -272,10 +313,10 @@ impl Revision {
 pub enum Error {
     #[error("client")]
     Client(#[from] client::Error),
-
     #[error("db")]
     DB(#[from] moss::db::Error),
-
+    #[error("io")]
+    Io(#[from] io::Error),
     #[error("no active state")]
     NoActiveState,
 }
