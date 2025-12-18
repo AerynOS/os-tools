@@ -4,7 +4,7 @@
 
 //! Cache management for unpacking remote assets (`.stone`, etc.)
 
-use std::collections::BTreeSet;
+use std::collections::HashSet;
 use std::{
     io,
     path::PathBuf,
@@ -24,7 +24,7 @@ use crate::{Installation, package, request};
 /// unpacked. Used to prevent unpacking the same asset
 /// from different packages at the same time.
 #[derive(Debug, Clone, Default)]
-pub struct UnpackingInProgress(Arc<Mutex<BTreeSet<PathBuf>>>);
+pub struct UnpackingInProgress(Arc<Mutex<HashSet<PathBuf>>>);
 
 impl UnpackingInProgress {
     /// Marks the provided path as "in-progress".
