@@ -7,6 +7,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use clap::{ArgMatches, CommandFactory, FromArgMatches, Parser};
+use itertools::Itertools;
 use moss::registry::transaction;
 use moss::state::Selection;
 use moss::{Installation, Provider, SystemModel, environment, runtime, system_model};
@@ -114,14 +115,24 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         .iter()
         .filter(|p| client.is_ephemeral() || !installed.iter().any(|i| i.id == p.id))
         .collect::<Vec<_>>();
+    let (added, updated): (Vec<_>, Vec<_>) = synced.iter().partition_map(|p| {
+        if let Some(i) = installed.iter().find(|i| i.meta.name == p.meta.name)
+            && !client.is_ephemeral()
+        {
+            itertools::Either::Right(package::Update { old: i, new: *p })
+        } else {
+            itertools::Either::Left(*p)
+        }
+    });
     let removed = installed
         .iter()
-        .filter(|p| !finalized.iter().any(|f| f.meta.name == p.meta.name))
+        .filter(|p| !client.is_ephemeral() && !finalized.iter().any(|f| f.meta.name == p.meta.name))
         .cloned()
         .collect::<Vec<_>>();
 
     info!(
-        synced_packages = synced.len(),
+        added_packages = added.len(),
+        upgraded_packages = updated.len(),
         removed_packages = removed.len(),
         "Sync analysis completed"
     );
@@ -131,10 +142,16 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         return Ok(());
     }
 
-    if !synced.is_empty() {
-        println!("The following packages will be sync'd: ");
+    if !added.is_empty() {
+        println!("The following packages will be added: ");
         println!();
-        autoprint_columns(synced.as_slice());
+        autoprint_columns(added.as_slice());
+        println!();
+    }
+    if !updated.is_empty() {
+        println!("The following packages will be updated: ");
+        println!();
+        autoprint_columns(updated.as_slice());
         println!();
     }
     if !removed.is_empty() {
