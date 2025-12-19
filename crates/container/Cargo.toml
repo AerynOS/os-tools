@@ -8,6 +8,7 @@ rust-version.workspace = true
 
 [dependencies]
 fs-err.workspace = true
+nc.workspace = true
 nix.workspace = true
 snafu.workspace = true
 strum.workspace = true

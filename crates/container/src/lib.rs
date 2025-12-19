@@ -10,12 +10,13 @@ use std::ptr::addr_of_mut;
 use std::sync::atomic::{AtomicI32, Ordering};
 
 use fs_err::{self as fs, PathExt as _};
-use nix::NixPath;
-use nix::errno::Errno;
-use nix::libc::{
-    AT_EMPTY_PATH, AT_FDCWD, MOUNT_ATTR_RDONLY, MOVE_MOUNT_F_EMPTY_PATH, OPEN_TREE_CLOEXEC, OPEN_TREE_CLONE, SIGCHLD,
-    SYS_mount_setattr, SYS_move_mount, SYS_open_tree, mount_attr, syscall,
+use nc::syscalls::syscall5;
+use nc::{
+    AT_EMPTY_PATH, AT_FDCWD, MOUNT_ATTR_RDONLY, MOVE_MOUNT_F_EMPTY_PATH, OPEN_TREE_CLOEXEC, OPEN_TREE_CLONE,
+    SYS_MOUNT_SETATTR, mount_attr_t, move_mount, open_tree,
 };
+use nix::errno::Errno;
+use nix::libc::SIGCHLD;
 use nix::mount::{MntFlags, MsFlags, mount, umount2};
 use nix::sched::{CloneFlags, clone};
 use nix::sys::prctl::set_pdeathsig;
@@ -313,53 +314,38 @@ fn bind_mount(source: &Path, target: &Path, read_only: bool) -> Result<(), Conta
     ensure_directory(target)?;
 
     unsafe {
-        source
-            .with_nix_path(|source| {
-                target.with_nix_path(|target| {
-                    // Bind mount to fd
-                    let fd = Errno::result(syscall(
-                        SYS_open_tree,
-                        AT_FDCWD,
-                        source.as_ptr(),
-                        OPEN_TREE_CLONE | OPEN_TREE_CLOEXEC,
-                    ))?;
+        let inner = || {
+            // Bind mount to fd
+            let fd = open_tree(AT_FDCWD, source, OPEN_TREE_CLONE | OPEN_TREE_CLOEXEC).map_err(Errno::from_i32)?;
 
-                    // Set rd flag if applicable
-                    if read_only {
-                        let attr = mount_attr {
-                            attr_set: MOUNT_ATTR_RDONLY,
-                            attr_clr: 0,
-                            propagation: 0,
-                            userns_fd: 0,
-                        };
-                        Errno::result(syscall(
-                            SYS_mount_setattr,
-                            fd,
-                            c"".as_ptr(),
-                            AT_EMPTY_PATH,
-                            &attr as *const mount_attr,
-                            size_of::<mount_attr>(),
-                        ))?;
-                    }
+            // Set rd flag if applicable
+            if read_only {
+                let attr = mount_attr_t {
+                    attr_set: MOUNT_ATTR_RDONLY as u64,
+                    attr_clr: 0,
+                    program: 0,
+                    userns_fd: 0,
+                };
+                syscall5(
+                    SYS_MOUNT_SETATTR,
+                    fd as usize,
+                    c"".as_ptr() as usize,
+                    AT_EMPTY_PATH as usize,
+                    &attr as *const mount_attr_t as usize,
+                    size_of::<mount_attr_t>(),
+                )
+                .map_err(Errno::from_i32)?;
+            }
 
-                    // Move detached mount to target
-                    Errno::result(syscall(
-                        SYS_move_mount,
-                        fd,
-                        c"".as_ptr(),
-                        AT_FDCWD,
-                        target.as_ptr(),
-                        MOVE_MOUNT_F_EMPTY_PATH,
-                    ))?;
+            // Move detached mount to target
+            move_mount(fd, Path::new(""), AT_FDCWD, target, MOVE_MOUNT_F_EMPTY_PATH).map_err(Errno::from_i32)?;
 
-                    Ok(())
-                })
-            })
-            .context(NixPathSnafu)?
-            .context(NixPathSnafu)?
-            .context(MountSnafu {
-                target: target.to_owned(),
-            })
+            Ok(())
+        };
+
+        inner().context(MountSnafu {
+            target: target.to_owned(),
+        })
     }
 }
 
@@ -501,8 +487,6 @@ enum ContainerError {
     UnmountOldRoot { source: nix::Error },
     #[snafu(display("mount {}", target.display()))]
     Mount { source: nix::Error, target: PathBuf },
-    #[snafu(display("with nix path"))]
-    NixPath { source: Errno },
     #[snafu(display("filesystem"))]
     FsErr { source: io::Error },
 }
