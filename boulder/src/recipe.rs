@@ -33,12 +33,23 @@ impl Recipe {
         let build_time = resolve_build_time(&path);
 
         // Invariant checks
+
+        // We want versions to start with an integer for ent comparison purposes
+        if !parsed.source.version.starts_with(|c: char| c.is_ascii_digit()) {
+            return Err(Error::Value(format!(
+                "version must start with an integer (found 'version: {}')",
+                parsed.source.version
+            )));
+        }
+
+        // Setting release to 0 is a common mistake
         if parsed.source.release == 0 {
             return Err(Error::Value(format!(
                 "release must be > 0 (found 'release: {}')",
                 parsed.source.release
             )));
         }
+
         // Invariant checks done
 
         Ok(Self {
