@@ -110,7 +110,7 @@ impl Transaction<'_> {
         let package = self.registry.by_id(&check_id).next();
         let package = package.ok_or(Error::NoCandidate(check_id.to_string()))?;
 
-        tracing::Span::current().record("check_name", package.meta.name.as_ref());
+        tracing::Span::current().record("check_name", package.meta.name.as_str());
         tracing::debug!(
             num_dependencies = package.meta.dependencies.len(),
             "added package to transaction"

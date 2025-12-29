@@ -4,7 +4,7 @@
 
 use std::collections::BTreeSet;
 
-use derive_more::{AsRef, Debug, Display, From, Into};
+use derive_more::{Debug, Display, From, Into};
 use stone::payload;
 use thiserror::Error;
 
@@ -16,10 +16,14 @@ use crate::{Dependency, Provider, dependency};
 pub struct Id(pub(super) String);
 
 /// The name of a [`super::Package`]
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, AsRef, From, Into, Display)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, From, Into, Display)]
 pub struct Name(String);
 
 impl Name {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+
     pub fn contains(&self, text: &str) -> bool {
         self.0.contains(text)
     }

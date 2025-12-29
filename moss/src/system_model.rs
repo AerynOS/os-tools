@@ -75,7 +75,7 @@ impl SystemModel {
                     .any(|provider| self.packages.contains(provider))
             })
             // We add these as their package name
-            .map(|package| package.meta.name.as_ref().as_str());
+            .map(|package| package.meta.name.as_str());
 
         // Apply diffs to encoded system model which allows us to retain existing formatting
         let updated_content = update(&self.encoded, &packages_to_remove, packages_to_add)?;

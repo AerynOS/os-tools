@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-use derive_more::{AsRef, Debug, Display, From, Into};
+use derive_more::{Debug, Display, From, Into};
 use itertools::Itertools;
 
 pub use self::meta::{Meta, MissingMetaFieldError, Name};
@@ -11,10 +11,15 @@ pub mod meta;
 pub mod render;
 
 /// Unique ID of a [`Package`]
-#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, From, Into, AsRef, Display)]
-#[as_ref(forward)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, From, Into, Display)]
 #[debug("{_0:?}")]
 pub struct Id(String);
+
+impl Id {
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
 
 impl From<Id> for meta::Id {
     fn from(id: Id) -> Self {
