@@ -5,7 +5,7 @@
 use diesel::prelude::*;
 use diesel::{Connection as _, SqliteConnection};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
-use std::collections::BTreeSet;
+use std::{borrow::Cow, collections::BTreeSet};
 
 use stone::payload;
 
@@ -111,7 +111,7 @@ impl Database {
                 .map(|(package_id, layout)| {
                     ids.push(package_id.as_str());
 
-                    let (entry_type, entry_value1, entry_value2) = encode_entry(layout.entry.clone());
+                    let (entry_type, entry_value1, entry_value2) = encode_entry(&layout.entry);
 
                     model::NewLayout {
                         package_id: package_id.to_string(),
@@ -200,21 +200,23 @@ fn decode_entry(
     }
 }
 
-fn encode_entry(entry: payload::layout::Entry) -> (&'static str, Option<String>, Option<String>) {
+fn encode_entry(entry: &payload::layout::Entry) -> (&'static str, Option<Cow<'_, str>>, Option<&str>) {
     use payload::layout::Entry;
 
     match entry {
-        Entry::Regular(hash, name) => ("regular", Some(hash.to_string()), Some(name)),
-        Entry::Symlink(a, b) => ("symlink", Some(a), Some(b)),
-        Entry::Directory(name) => ("directory", Some(name), None),
-        Entry::CharacterDevice(name) => ("character-device", Some(name), None),
-        Entry::BlockDevice(name) => ("block-device", Some(name), None),
-        Entry::Fifo(name) => ("fifo", Some(name), None),
-        Entry::Socket(name) => ("socket", Some(name), None),
+        Entry::Regular(hash, name) => ("regular", Some(hash.to_string().into()), Some(name)),
+        Entry::Symlink(a, b) => ("symlink", Some(a.into()), Some(b)),
+        Entry::Directory(name) => ("directory", Some(name.into()), None),
+        Entry::CharacterDevice(name) => ("character-device", Some(name.into()), None),
+        Entry::BlockDevice(name) => ("block-device", Some(name.into()), None),
+        Entry::Fifo(name) => ("fifo", Some(name.into()), None),
+        Entry::Socket(name) => ("socket", Some(name.into()), None),
     }
 }
 
 mod model {
+    use std::borrow::Cow;
+
     use diesel::{Selectable, associations::Identifiable, deserialize::Queryable, prelude::Insertable};
 
     use crate::package;
@@ -245,8 +247,8 @@ mod model {
         pub mode: i32,
         pub tag: i32,
         pub entry_type: &'a str,
-        pub entry_value1: Option<String>,
-        pub entry_value2: Option<String>,
+        pub entry_value1: Option<Cow<'a, str>>,
+        pub entry_value2: Option<&'a str>,
     }
 }
 
