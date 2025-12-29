@@ -108,6 +108,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
 
     let handler = match args.subcommand() {
         Some(("list", _)) => Action::List,
+        Some(("update", cmd_args)) => Action::Update(cmd_args.get_one::<String>("NAME").cloned()),
         Some((command, _)) if system_model.is_some() => {
             return Err(Error::SystemModelDisallowed {
                 command: command.to_owned(),
@@ -121,7 +122,6 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
             Priority::new(*cmd_args.get_one::<u64>("priority").unwrap()),
         ),
         Some(("remove", cmd_args)) => Action::Remove(cmd_args.get_one::<String>("NAME").cloned().unwrap()),
-        Some(("update", cmd_args)) => Action::Update(cmd_args.get_one::<String>("NAME").cloned()),
         Some(("enable", cmd_args)) => Action::Enable(cmd_args.get_one::<String>("NAME").cloned().unwrap()),
         Some(("disable", cmd_args)) => Action::Disable(cmd_args.get_one::<String>("NAME").cloned().unwrap()),
         _ => unreachable!(),
