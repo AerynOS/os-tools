@@ -28,8 +28,9 @@ pub enum Kind {
     Symlink(String),
 }
 
-/// Simple generic interface for blittable files while retaining details
-/// All implementations should return a directory typed blitfile for a PathBuf
+/// Simple generic interface for blittable files while retaining details.
+///
+/// All implementations should return a directory typed blitfile for a PathBuf.
 pub trait BlitFile: Clone + Sized + Debug + From<String> {
     fn kind(&self) -> Kind;
     fn path(&self) -> String;
