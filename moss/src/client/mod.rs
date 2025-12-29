@@ -259,11 +259,12 @@ impl Client {
         let new = self.state_db.get(id).map_err(|_| Error::StateDoesntExist(id))?;
 
         // Get old (current) state
-        let Some(old) = self.installation.active_state else {
+        let Some(old_id) = self.installation.active_state else {
             return Err(Error::NoActiveState);
         };
+        let old = self.state_db.get(old_id).map_err(|_| Error::StateDoesntExist(old_id))?;
 
-        if new.id == old {
+        if new.id == old.id {
             return Err(Error::StateAlreadyActive(id));
         }
 
@@ -281,23 +282,29 @@ impl Client {
         self.promote_staging()?;
 
         // Archive old state
-        self.archive_state(old)?;
+        self.archive_state(old.id)?;
+
+        if skip_triggers {
+            return Ok(old.id);
+        }
 
         // Build VFS from new state selections
         // to build triggers from
-        let fstree = self.vfs(new.selections.iter().map(|selection| &selection.package))?;
-
-        if skip_triggers {
-            return Ok(old);
-        }
+        let old_vfs = self.vfs(old.selections.iter().map(|selection| &selection.package))?;
+        let new_vfs = self.vfs(new.selections.iter().map(|selection| &selection.package))?;
 
         // Run system triggers
-        let sys_triggers = postblit::triggers(TriggerScope::System(&self.installation, &self.scope), &fstree)?;
+        let sys_triggers = postblit::triggers(
+            TriggerScope::System(&self.installation, &self.scope),
+            Some(&old_vfs),
+            &new_vfs,
+        )?;
+
         for trigger in sys_triggers {
             trigger.execute()?;
         }
 
-        Ok(old)
+        Ok(old.id)
     }
 
     /// Create a new recorded state from the provided packages
@@ -336,21 +343,25 @@ impl Client {
             event_type = "progress_start",
         );
 
-        let old_state = self.installation.active_state;
+        let old_state = self
+            .installation
+            .active_state
+            .map(|id| self.state_db.get(id).map_err(|_| Error::StateDoesntExist(id)))
+            .transpose()?;
 
-        let fstree = self.blit_root(selections.iter().map(|s| &s.package))?;
+        let new_vfs = self.blit_root(selections.iter().map(|s| &s.package))?;
 
         let result = match &self.scope {
             Scope::Stateful => {
                 // Add to db
                 let state = self.state_db.add(selections, Some(&summary.to_string()), None)?;
 
-                self.apply_stateful_blit(fstree, &state, old_state, system_model)?;
+                self.apply_stateful_blit(new_vfs, &state, old_state, system_model)?;
 
                 Ok(Some(state))
             }
             Scope::Ephemeral { blit_root } => {
-                self.apply_ephemeral_blit(fstree, blit_root, system_model)?;
+                self.apply_ephemeral_blit(new_vfs, blit_root, system_model)?;
 
                 Ok(None)
             }
@@ -367,8 +378,12 @@ impl Client {
     }
 
     /// Apply all triggers with the given scope, wrapping with a progressbar.
-    fn apply_triggers(scope: TriggerScope<'_>, fstree: &vfs::Tree<PendingFile>) -> Result<(), postblit::Error> {
-        let triggers = postblit::triggers(scope, fstree)?;
+    fn apply_triggers(
+        scope: TriggerScope<'_>,
+        prev_vfs: Option<&vfs::Tree<PendingFile>>,
+        curr_vfs: &vfs::Tree<PendingFile>,
+    ) -> Result<(), postblit::Error> {
+        let triggers = postblit::triggers(scope, prev_vfs, curr_vfs)?;
 
         let progress = ProgressBar::new(triggers.len() as u64).with_style(
             ProgressStyle::with_template("\n|{bar:20.green/blue}| {pos}/{len} {msg}")
@@ -428,9 +443,9 @@ impl Client {
 
     pub fn apply_stateful_blit(
         &self,
-        fstree: vfs::Tree<PendingFile>,
+        new_vfs: vfs::Tree<PendingFile>,
         state: &State,
-        old_state: Option<state::Id>,
+        old_state: Option<State>,
         system_model: SystemModel,
     ) -> Result<(), Error> {
         record_state_id(&self.installation.staging_dir(), state.id)?;
@@ -438,7 +453,17 @@ impl Client {
         record_system_model(&self.installation.staging_dir(), system_model)?;
 
         create_root_links(&self.installation.isolation_dir())?;
-        Self::apply_triggers(TriggerScope::Transaction(&self.installation, &self.scope), &fstree)?;
+
+        let prev_vfs = old_state
+            .as_ref()
+            .map(|old| self.vfs(old.selections.iter().map(|selection| &selection.package)))
+            .transpose()?;
+
+        Self::apply_triggers(
+            TriggerScope::Transaction(&self.installation, &self.scope),
+            prev_vfs.as_ref(),
+            &new_vfs,
+        )?;
 
         // Staging is only used with [`Scope::Stateful`]
         self.promote_staging()?;
@@ -446,12 +471,16 @@ impl Client {
         // Now we got it staged, we need working rootfs
         create_root_links(&self.installation.root)?;
 
-        if let Some(id) = old_state {
-            self.archive_state(id)?;
+        if let Some(old_state) = old_state {
+            self.archive_state(old_state.id)?;
         }
 
         // At this point we're allowed to run system triggers
-        Self::apply_triggers(TriggerScope::System(&self.installation, &self.scope), &fstree)?;
+        Self::apply_triggers(
+            TriggerScope::System(&self.installation, &self.scope),
+            prev_vfs.as_ref(),
+            &new_vfs,
+        )?;
 
         boot::synchronize(self, state)?;
 
@@ -460,7 +489,7 @@ impl Client {
 
     pub fn apply_ephemeral_blit(
         &self,
-        fstree: vfs::Tree<PendingFile>,
+        new_vfs: vfs::Tree<PendingFile>,
         blit_root: &Path,
         system_model: SystemModel,
     ) -> Result<(), Error> {
@@ -474,9 +503,13 @@ impl Client {
         fs::create_dir_all(etc)?;
 
         // ephemeral tx triggers
-        Self::apply_triggers(TriggerScope::Transaction(&self.installation, &self.scope), &fstree)?;
+        Self::apply_triggers(
+            TriggerScope::Transaction(&self.installation, &self.scope),
+            None,
+            &new_vfs,
+        )?;
         // ephemeral system triggers
-        Self::apply_triggers(TriggerScope::System(&self.installation, &self.scope), &fstree)?;
+        Self::apply_triggers(TriggerScope::System(&self.installation, &self.scope), None, &new_vfs)?;
 
         Ok(())
     }
