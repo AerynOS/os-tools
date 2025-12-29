@@ -200,7 +200,7 @@ impl Download {
         }
 
         let content_dir = self.installation.cache_path("content");
-        let content_path = content_dir.join(self.id);
+        let content_path = content_dir.join(self.id.as_str());
 
         fs::create_dir_all(&content_dir)?;
 

@@ -258,12 +258,12 @@ impl Database {
 
     pub fn batch_add(&self, packages: Vec<(package::Id, Meta)>) -> Result<(), Error> {
         self.conn.exclusive_tx(|tx| {
-            let ids = packages.iter().map(|(id, _)| id.as_ref()).collect::<Vec<_>>();
+            let ids = packages.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>();
             let entries = packages
                 .iter()
                 .map(|(package, meta)| model::NewMeta {
-                    package: package.as_ref(),
-                    name: meta.name.as_ref(),
+                    package: package.as_str(),
+                    name: meta.name.as_str(),
                     version_identifier: &meta.version_identifier,
                     source_release: meta.source_release as i32,
                     build_release: meta.build_release as i32,
@@ -282,7 +282,7 @@ impl Database {
                 .flat_map(|(package, meta)| {
                     meta.licenses.iter().map(|license| {
                         (
-                            model::meta_licenses::package.eq(<package::Id as AsRef<str>>::as_ref(package)),
+                            model::meta_licenses::package.eq(package.as_str()),
                             model::meta_licenses::license.eq(license),
                         )
                     })
@@ -293,7 +293,7 @@ impl Database {
                 .flat_map(|(package, meta)| {
                     meta.dependencies.iter().map(|dependency| {
                         (
-                            model::meta_dependencies::package.eq(<package::Id as AsRef<str>>::as_ref(package)),
+                            model::meta_dependencies::package.eq(package.as_str()),
                             model::meta_dependencies::dependency.eq(dependency.to_string()),
                         )
                     })
@@ -304,7 +304,7 @@ impl Database {
                 .flat_map(|(package, meta)| {
                     meta.providers.iter().map(|provider| {
                         (
-                            model::meta_providers::package.eq(<package::Id as AsRef<str>>::as_ref(package)),
+                            model::meta_providers::package.eq(package.as_str()),
                             model::meta_providers::provider.eq(provider.to_string()),
                         )
                     })
@@ -315,7 +315,7 @@ impl Database {
                 .flat_map(|(package, meta)| {
                     meta.conflicts.iter().map(|conflict| {
                         (
-                            model::meta_conflicts::package.eq(<package::Id as AsRef<str>>::as_ref(package)),
+                            model::meta_conflicts::package.eq(package.as_str()),
                             model::meta_conflicts::conflict.eq(conflict.to_string()),
                         )
                     })
@@ -358,10 +358,7 @@ impl Database {
 
     pub fn batch_remove<'a>(&self, packages: impl IntoIterator<Item = &'a package::Id>) -> Result<(), Error> {
         self.conn.exclusive_tx(|tx| {
-            let packages = packages
-                .into_iter()
-                .map(<package::Id as AsRef<str>>::as_ref)
-                .collect::<Vec<_>>();
+            let packages = packages.into_iter().map(package::Id::as_str).collect::<Vec<_>>();
             batch_remove_impl(&packages, tx)?;
             Ok(())
         })

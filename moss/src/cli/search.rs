@@ -77,7 +77,7 @@ struct Output {
 
 impl ColumnDisplay for Output {
     fn get_display_width(&self) -> usize {
-        self.name.as_ref().chars().count()
+        self.name.as_str().chars().count()
     }
 
     fn display_column(&self, writer: &mut impl std::io::prelude::Write, _col: tui::pretty::Column, width: usize) {

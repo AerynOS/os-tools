@@ -137,7 +137,7 @@ impl Database {
                     .iter()
                     .map(|selection| model::NewSelection {
                         state_id: id,
-                        package_id: selection.package.as_ref(),
+                        package_id: selection.package.as_str(),
                         explicit: selection.explicit,
                         reason: selection.reason.as_deref(),
                     })

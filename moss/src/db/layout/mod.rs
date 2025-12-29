@@ -40,7 +40,7 @@ impl Database {
         packages: impl IntoIterator<Item = &'a package::Id>,
     ) -> Result<Vec<(package::Id, payload::Layout)>, Error> {
         self.conn.exec(|conn| {
-            let packages = packages.into_iter().map(AsRef::<str>::as_ref).collect::<Vec<_>>();
+            let packages = packages.into_iter().map(package::Id::as_str).collect::<Vec<_>>();
 
             let mut output = vec![];
 
@@ -109,7 +109,7 @@ impl Database {
             let values = layouts
                 .into_iter()
                 .map(|(package_id, layout)| {
-                    ids.push(package_id.as_ref());
+                    ids.push(package_id.as_str());
 
                     let (entry_type, entry_value1, entry_value2) = encode_entry(layout.entry.clone());
 
@@ -144,7 +144,7 @@ impl Database {
 
     pub fn batch_remove<'a>(&self, packages: impl IntoIterator<Item = &'a package::Id>) -> Result<(), Error> {
         self.conn.exclusive_tx(|tx| {
-            let packages = packages.into_iter().map(AsRef::<str>::as_ref).collect::<Vec<_>>();
+            let packages = packages.into_iter().map(package::Id::as_str).collect::<Vec<_>>();
 
             batch_remove_impl(&packages, tx)?;
 

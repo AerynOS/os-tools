@@ -969,7 +969,7 @@ impl Client {
                 let packages = self
                     .resolve_packages(state.selections.iter().filter_map(|s| s.explicit.then_some(&s.package)))?
                     .into_iter()
-                    .map(|package| Provider::package_name(package.meta.name.as_ref()))
+                    .map(|package| Provider::package_name(package.meta.name.as_str()))
                     .collect();
 
                 Ok(system_model::create(active_repos, packages))
@@ -1086,7 +1086,7 @@ fn update_or_create_system_model(
         None => {
             let packages = packages
                 .iter()
-                .map(|package| Provider::package_name(package.meta.name.as_ref()))
+                .map(|package| Provider::package_name(package.meta.name.as_str()))
                 .collect();
 
             Ok(system_model::create(active_repos, packages))
