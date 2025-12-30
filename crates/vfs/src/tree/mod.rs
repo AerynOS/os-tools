@@ -8,6 +8,7 @@ use core::fmt::Debug;
 use std::collections::HashMap;
 use std::vec;
 
+use astr::AStr;
 use indextree::{Arena, Descendants, NodeId};
 use snafu::Snafu;
 
@@ -25,26 +26,26 @@ pub enum Kind {
     Directory,
 
     // Symlink to somewhere else.
-    Symlink(String),
+    Symlink(AStr),
 }
 
 /// Simple generic interface for blittable files while retaining details.
 ///
 /// All implementations should return a directory typed blitfile for a PathBuf.
-pub trait BlitFile: Clone + Sized + Debug + From<String> {
+pub trait BlitFile: Clone + Sized + Debug + From<AStr> {
     fn kind(&self) -> Kind;
-    fn path(&self) -> String;
+    fn path(&self) -> AStr;
     fn id(&self) -> String;
 
     /// Clone the BlitFile and update the path
-    fn cloned_to(&self, path: String) -> Self;
+    fn cloned_to(&self, path: AStr) -> Self;
 }
 
 #[derive(Debug, Clone)]
 struct File<T> {
     // Cache these to avoid reallocation
     id: String,
-    path: String,
+    path: AStr,
     file_name: Option<String>,
     parent: Option<String>,
     kind: Kind,
@@ -72,7 +73,7 @@ impl<T: BlitFile> File<T> {
 #[derive(Debug)]
 pub struct Tree<T: BlitFile> {
     arena: Arena<File<T>>,
-    map: HashMap<String, NodeId>,
+    map: HashMap<AStr, NodeId>,
     length: u64,
 }
 
@@ -258,7 +259,7 @@ pub enum Error {
 
     #[snafu(display("duplicate entry: {node_path} {node_id} attempts to overwrite {other_id}"))]
     Duplicate {
-        node_path: String,
+        node_path: AStr,
         node_id: String,
         other_id: String,
     },

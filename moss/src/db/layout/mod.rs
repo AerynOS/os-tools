@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
+use astr::AStr;
 use diesel::prelude::*;
 use diesel::{Connection as _, SqliteConnection};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
@@ -178,8 +179,8 @@ fn map_layout(result: QueryResult<model::Layout>) -> Result<(package::Id, payloa
 
 fn decode_entry(
     entry_type: String,
-    entry_value1: Option<String>,
-    entry_value2: Option<String>,
+    entry_value1: Option<AStr>,
+    entry_value2: Option<AStr>,
 ) -> Option<payload::layout::Entry> {
     use payload::layout::Entry;
 
@@ -217,6 +218,7 @@ fn encode_entry(entry: &payload::layout::Entry) -> (&'static str, Option<Cow<'_,
 mod model {
     use std::borrow::Cow;
 
+    use astr::AStr;
     use diesel::{Selectable, associations::Identifiable, deserialize::Queryable, prelude::Insertable};
 
     use crate::package;
@@ -234,8 +236,8 @@ mod model {
         pub mode: i32,
         pub tag: i32,
         pub entry_type: String,
-        pub entry_value1: Option<String>,
-        pub entry_value2: Option<String>,
+        pub entry_value1: Option<AStr>,
+        pub entry_value2: Option<AStr>,
     }
 
     #[derive(Insertable)]

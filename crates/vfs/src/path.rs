@@ -1,10 +1,13 @@
-pub fn join(a: &str, b: &str) -> String {
-    if b.starts_with('/') {
-        b.to_owned()
+use astr::AStr;
+
+pub fn join(a: &str, b: impl AsRef<str> + Into<AStr>) -> AStr {
+    let b_ = b.as_ref();
+    if b_.starts_with('/') {
+        b.into()
     } else if a.ends_with('/') {
-        format!("{a}{b}")
+        AStr::from(format!("{a}{b_}"))
     } else {
-        format!("{a}/{b}")
+        AStr::from(format!("{a}/{b_}"))
     }
 }
 
