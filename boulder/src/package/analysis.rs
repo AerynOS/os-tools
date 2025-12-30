@@ -37,6 +37,7 @@ impl<'a> Chain<'a> {
                 Box::new(handler::binary),
                 Box::new(handler::elf),
                 Box::new(handler::pkg_config),
+                Box::new(handler::perl),
                 Box::new(handler::python),
                 Box::new(handler::cmake),
                 Box::new(handler::compressman),

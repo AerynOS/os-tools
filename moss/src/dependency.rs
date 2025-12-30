@@ -59,6 +59,9 @@ pub enum Kind {
 
     /// Exported 32-bit pkgconfig provider
     PkgConfig32,
+
+    /// Perl module
+    Perl,
 }
 
 /// Convert payload dependency types to our internal representation
@@ -74,6 +77,7 @@ impl From<payload::meta::Dependency> for Kind {
             payload::meta::Dependency::Binary => Kind::Binary,
             payload::meta::Dependency::SystemBinary => Kind::SystemBinary,
             payload::meta::Dependency::PkgConfig32 => Kind::PkgConfig32,
+            payload::meta::Dependency::Perl => Kind::Perl,
         }
     }
 }
@@ -91,6 +95,7 @@ impl From<Kind> for payload::meta::Dependency {
             Kind::Binary => Self::Binary,
             Kind::SystemBinary => Self::SystemBinary,
             Kind::PkgConfig32 => Self::PkgConfig32,
+            Kind::Perl => Self::Perl,
         }
     }
 }
