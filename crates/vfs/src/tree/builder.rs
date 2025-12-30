@@ -5,6 +5,8 @@
 //! Build a vfs tree incrementally
 use std::collections::BTreeMap;
 
+use astr::AStr;
+
 use crate::path;
 use crate::tree::{Kind, Tree};
 
@@ -16,7 +18,7 @@ pub struct TreeBuilder<T: BlitFile> {
     explicit: Vec<File<T>>,
 
     // Implicitly created paths
-    implicit_dirs: BTreeMap<String, File<T>>,
+    implicit_dirs: BTreeMap<AStr, File<T>>,
 }
 
 /// Special sort algorithm for files by directory
@@ -50,12 +52,12 @@ impl<T: BlitFile> TreeBuilder<T> {
 
         // Find all parent paths
         if let Some(parent) = &file.parent {
-            let mut leading_path: Option<String> = None;
+            let mut leading_path: Option<AStr> = None;
             // Build a set of parent paths skipping `/`, yielding `usr`, `usr/bin`, etc.
             for component in path::components(parent) {
                 let full_path = match leading_path {
                     Some(fp) => path::join(&fp, component),
-                    None => component.to_owned(),
+                    None => component.into(),
                 };
                 leading_path = Some(full_path.clone());
                 self.implicit_dirs
@@ -136,19 +138,21 @@ impl<T: BlitFile> TreeBuilder<T> {
 
 #[cfg(test)]
 mod tests {
+    use astr::AStr;
+
     use crate::tree::Kind;
 
     use super::{BlitFile, TreeBuilder};
 
     #[derive(Clone, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
     struct CustomFile {
-        path: String,
+        path: AStr,
         kind: Kind,
         id: String,
     }
 
-    impl From<String> for CustomFile {
-        fn from(value: String) -> Self {
+    impl From<AStr> for CustomFile {
+        fn from(value: AStr) -> Self {
             Self {
                 path: value,
                 kind: Kind::Directory,
@@ -158,7 +162,7 @@ mod tests {
     }
 
     impl BlitFile for CustomFile {
-        fn path(&self) -> String {
+        fn path(&self) -> AStr {
             self.path.clone()
         }
 
@@ -171,7 +175,7 @@ mod tests {
         }
 
         /// Clone to new path portion
-        fn cloned_to(&self, path: String) -> Self {
+        fn cloned_to(&self, path: AStr) -> Self {
             Self {
                 path,
                 kind: self.kind.clone(),
@@ -191,7 +195,7 @@ mod tests {
             },
             CustomFile {
                 path: "/usr/bin/rnano".into(),
-                kind: Kind::Symlink("nano".to_owned()),
+                kind: Kind::Symlink("nano".into()),
                 id: "nano".into(),
             },
             CustomFile {

@@ -48,6 +48,7 @@ mailparse.workspace = true
 infer.workspace = true
 walkdir = "2.5.0"
 zstd.workspace = true
+astr.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

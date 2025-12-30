@@ -17,6 +17,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use astr::AStr;
 use fs_err as fs;
 use futures_util::{StreamExt, TryStreamExt, stream};
 use nix::{
@@ -1144,7 +1145,7 @@ impl BlitFile for PendingFile {
     }
 
     /// Resolve the target path, including the missing `/usr` prefix
-    fn path(&self) -> String {
+    fn path(&self) -> AStr {
         let result = match &self.layout.entry {
             layout::Entry::Regular(_, target) => target.clone(),
             layout::Entry::Symlink(_, target) => target.clone(),
@@ -1159,7 +1160,7 @@ impl BlitFile for PendingFile {
     }
 
     /// Clone the node to a reparented path, for symlink resolution
-    fn cloned_to(&self, path: String) -> Self {
+    fn cloned_to(&self, path: AStr) -> Self {
         let mut new = self.clone();
         new.layout.entry = match &self.layout.entry {
             layout::Entry::Regular(source, _) => layout::Entry::Regular(*source, path),
@@ -1174,8 +1175,8 @@ impl BlitFile for PendingFile {
     }
 }
 
-impl From<String> for PendingFile {
-    fn from(value: String) -> Self {
+impl From<AStr> for PendingFile {
+    fn from(value: AStr) -> Self {
         PendingFile {
             id: Default::default(),
             layout: layout::Layout {

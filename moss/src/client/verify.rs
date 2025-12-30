@@ -8,6 +8,7 @@ use std::{
     path::PathBuf,
 };
 
+use astr::AStr;
 use fs_err as fs;
 use rayon::iter::{IntoParallelIterator as _, IntoParallelRefIterator as _, ParallelIterator as _};
 use stone::{payload::layout, write::digest};
@@ -300,12 +301,12 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
 enum Issue {
     CorruptAsset {
         hash: String,
-        files: BTreeSet<String>,
+        files: BTreeSet<AStr>,
         packages: BTreeSet<package::Id>,
     },
     MissingAsset {
         hash: String,
-        files: BTreeSet<String>,
+        files: BTreeSet<AStr>,
         packages: BTreeSet<package::Id>,
     },
     MissingVFSPath {

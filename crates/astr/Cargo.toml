@@ -1,0 +1,12 @@
+[package]
+name = "astr"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+diesel.workspace = true
+triomphe.workspace = true
+
+[lints]
+workspace = true

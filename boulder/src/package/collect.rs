@@ -9,6 +9,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use astr::AStr;
 use fs_err as fs;
 use glob::Pattern;
 use nix::libc::{S_IFDIR, S_IRGRP, S_IROTH, S_IRWXU, S_IXGRP, S_IXOTH};
@@ -202,11 +203,11 @@ fn layout_from_metadata(
     hasher: &mut digest::Hasher,
 ) -> Result<Layout, Error> {
     // Strip /usr
-    let target = target_path
+    let target: AStr = target_path
         .strip_prefix("/usr")
         .unwrap_or(target_path)
         .to_string_lossy()
-        .to_string();
+        .into();
 
     let file_type = metadata.file_type();
 
@@ -218,7 +219,7 @@ fn layout_from_metadata(
         entry: if file_type.is_symlink() {
             let source = fs::read_link(path)?;
 
-            layout::Entry::Symlink(source.to_string_lossy().to_string(), target)
+            layout::Entry::Symlink(source.to_string_lossy().into(), target)
         } else if file_type.is_dir() {
             layout::Entry::Directory(target)
         } else if file_type.is_char_device() {
