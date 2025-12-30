@@ -263,12 +263,15 @@ fn replace_aliases(args: env::Args) -> Vec<String> {
 
 fn print_system_model_warning(installation: &Installation) {
     eprintln!(
-        "{}: `{path:?}` is present & therefore active. This means that:
- 
-- The system-model is the source of truth and defines all repositories & installed packages.
-- Any changes made via `moss` commands will be temporary until the system-model is updated.
-- The system state can be reverted to match the system-model state with a `moss sync`.
-- To disable the system-model, either remove or rename `{path:?}`.",
+        "{}: {path:?} is present & therefore active.
+Hence:
+- The system-model is the source of truth and defines all
+  repositories & installed packages.
+- Any changes made via `moss` commands will be temporary
+  until the system-model is updated.
+- The system state can be reverted to match the system-model state
+  by doing a `moss sync`.
+- To disable the system-model, remove or rename {path:?}.",
         "INFO".green(),
         path = installation.system_model_path(),
     );
