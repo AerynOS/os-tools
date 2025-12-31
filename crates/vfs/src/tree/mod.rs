@@ -35,7 +35,7 @@ pub enum Kind {
 pub trait BlitFile: Clone + Sized + Debug + From<AStr> {
     fn kind(&self) -> Kind;
     fn path(&self) -> AStr;
-    fn id(&self) -> String;
+    fn id(&self) -> AStr;
 
     /// Clone the BlitFile and update the path
     fn cloned_to(&self, path: AStr) -> Self;
@@ -43,9 +43,9 @@ pub trait BlitFile: Clone + Sized + Debug + From<AStr> {
 
 #[derive(Debug, Clone)]
 struct File<T> {
-    // Cache these to avoid reallocation
-    id: String,
+    id: AStr,
     path: AStr,
+    // Cache these to avoid reallocation
     file_name: Option<String>,
     parent: Option<String>,
     kind: Kind,
@@ -260,7 +260,7 @@ pub enum Error {
     #[snafu(display("duplicate entry: {node_path} {node_id} attempts to overwrite {other_id}"))]
     Duplicate {
         node_path: AStr,
-        node_id: String,
-        other_id: String,
+        node_id: AStr,
+        other_id: AStr,
     },
 }

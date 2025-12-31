@@ -171,9 +171,9 @@ packages {
         assert_eq!(updated.encoded, EXPECTED);
     }
 
-    fn package(name: &str) -> Package {
+    fn package(name: &'static str) -> Package {
         Package {
-            id: package::Id::from(name.to_owned()),
+            id: package::Id::from(name),
             meta: package::Meta {
                 name: name.to_owned().into(),
                 version_identifier: "".to_owned(),

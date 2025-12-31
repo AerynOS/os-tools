@@ -4,6 +4,7 @@
 
 use std::borrow::Borrow;
 
+use astr::AStr;
 use derive_more::{Debug, Display, From, Into};
 use itertools::Itertools;
 
@@ -15,7 +16,7 @@ pub mod render;
 /// Unique ID of a [`Package`]
 #[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, From, Into, Display)]
 #[debug("{_0:?}")]
-pub struct Id(String);
+pub struct Id(AStr);
 
 impl Id {
     #[inline]
@@ -33,6 +34,13 @@ impl From<Id> for meta::Id {
 impl From<meta::Id> for Id {
     fn from(id: meta::Id) -> Self {
         Self(id.0)
+    }
+}
+
+#[cfg(test)]
+impl From<&'static str> for Id {
+    fn from(value: &'static str) -> Self {
+        Self(value.into())
     }
 }
 

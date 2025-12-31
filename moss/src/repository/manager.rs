@@ -7,6 +7,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use astr::AStr;
 use fs_err::{self as fs, File};
 use futures_util::{StreamExt, TryStreamExt, stream};
 use thiserror::Error;
@@ -351,9 +352,9 @@ fn update_meta_db(state: &repository::Cached, index_path: &Path) -> Result<(), E
             // Create id from hash of meta
             let hash = meta
                 .hash
-                .clone()
+                .as_deref()
                 .ok_or(Error::MissingMetaField(stone::payload::meta::Tag::PackageHash))?;
-            let id = package::Id::from(hash);
+            let id = package::Id::from(AStr::from(hash));
 
             Ok((id, meta))
         })

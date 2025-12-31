@@ -4,6 +4,7 @@
 
 use std::collections::BTreeSet;
 
+use astr::AStr;
 use derive_more::{Debug, Display, From, Into};
 use stone::payload;
 use thiserror::Error;
@@ -13,7 +14,7 @@ use crate::{Dependency, Provider, dependency};
 /// A package identifier constructed from metadata fields
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Display)]
 #[debug("{_0:?}")]
-pub struct Id(pub(super) String);
+pub struct Id(pub(super) AStr);
 
 /// The name of a [`super::Package`]
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, From, Into, Display)]
@@ -167,7 +168,8 @@ impl Meta {
         Id(format!(
             "{}-{}-{}.{}",
             &self.name.0, &self.version_identifier, &self.source_release, &self.architecture
-        ))
+        )
+        .into())
     }
 }
 

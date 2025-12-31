@@ -4,6 +4,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use astr::AStr;
 use diesel::prelude::*;
 use diesel::{Connection as _, SqliteConnection};
 use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
@@ -103,7 +104,7 @@ impl Database {
                 .select(model::meta_providers::package)
                 .distinct()
                 .filter(model::meta_providers::provider.eq(provider.to_string()))
-                .load_iter::<String, _>(conn)?
+                .load_iter::<AStr, _>(conn)?
                 .map(|result| {
                     let id = result?;
                     Ok(id.into())
@@ -118,7 +119,7 @@ impl Database {
                 let meta: model::Meta = result?;
 
                 Ok((
-                    meta.package.into(),
+                    package::Id::from(AStr::from(meta.package)),
                     Meta {
                         name: meta.name,
                         version_identifier: meta.version_identifier,
@@ -175,9 +176,7 @@ impl Database {
 
             let package_ids = entries
                 .keys()
-                .cloned()
-                .map(String::from)
-                .map(|id| model::PackageId { id })
+                .map(|id| model::PackageId { id: id.to_string() })
                 .collect::<Vec<_>>();
 
             for chunk in package_ids.chunks(MAX_VARIABLE_NUMBER) {
@@ -235,7 +234,7 @@ impl Database {
             Ok(model::meta::table
                 .select(model::meta::package)
                 .distinct()
-                .load_iter::<String, _>(conn)?
+                .load_iter::<AStr, _>(conn)?
                 .map(|result| result.map(package::Id::from))
                 .collect::<Result<_, _>>()?)
         })
@@ -493,7 +492,7 @@ mod test {
         let meta_payload = payloads.iter().find_map(PayloadKind::meta).unwrap();
         let meta = Meta::from_stone_payload(&meta_payload.body).unwrap();
 
-        let id = package::Id::from("test".to_owned());
+        let id = package::Id::from("test");
 
         db.add(id.clone(), meta.clone()).unwrap();
 

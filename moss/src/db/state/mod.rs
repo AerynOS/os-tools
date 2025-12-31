@@ -173,6 +173,7 @@ impl Database {
 }
 
 mod model {
+    use astr::AStr;
     use diesel::{
         Selectable,
         associations::{Associations, Identifiable},
@@ -204,7 +205,7 @@ mod model {
     #[diesel(belongs_to(State))]
     pub struct Selection {
         pub state_id: i32,
-        #[diesel(deserialize_as = String)]
+        #[diesel(deserialize_as = AStr)]
         pub package_id: package::Id,
         pub explicit: bool,
         pub reason: Option<String>,
@@ -250,9 +251,9 @@ mod test {
         let database = Database::new(":memory:").unwrap();
 
         let selections = vec![
-            Selection::explicit(package::Id::from("pkg a".to_owned())),
-            Selection::explicit(package::Id::from("pkg b".to_owned())),
-            Selection::explicit(package::Id::from("pkg c".to_owned())),
+            Selection::explicit(package::Id::from("pkg a")),
+            Selection::explicit(package::Id::from("pkg b")),
+            Selection::explicit(package::Id::from("pkg c")),
         ];
 
         let state = database.add(&selections, Some("test"), Some("test")).unwrap();
