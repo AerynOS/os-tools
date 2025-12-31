@@ -1,4 +1,5 @@
 use diesel::{
+    Queryable,
     deserialize::{FromSql, Result},
     sql_types::Text,
     sqlite::Sqlite,
@@ -13,5 +14,14 @@ impl FromSql<Text, Sqlite> for AStr {
         // bytes, only converted to a pointer because the trait does not allow
         // this borrowing relationship to be expressed.
         Ok(Self::from(unsafe { &*ptr }))
+    }
+}
+
+impl Queryable<Text, Sqlite> for AStr {
+    type Row = AStr;
+
+    #[inline]
+    fn build(row: Self::Row) -> Result<Self> {
+        Ok(row)
     }
 }

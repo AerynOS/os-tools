@@ -75,7 +75,7 @@ impl Database {
             Ok(model::layout::table
                 .select(model::layout::package_id)
                 .distinct()
-                .load_iter::<String, _>(conn)?
+                .load_iter::<AStr, _>(conn)?
                 .map(|result| result.map(package::Id::from))
                 .collect::<Result<_, _>>()?)
         })
@@ -229,7 +229,7 @@ mod model {
     #[diesel(table_name = layout)]
     pub struct Layout {
         pub id: i32,
-        #[diesel(deserialize_as = String)]
+        #[diesel(deserialize_as = AStr)]
         pub package_id: package::Id,
         pub uid: i32,
         pub gid: i32,
@@ -273,7 +273,7 @@ mod test {
             .iter()
             .filter_map(PayloadKind::layout)
             .flat_map(|p| &p.body)
-            .map(|layout| (package::Id::from("test".to_owned()), layout))
+            .map(|layout| (package::Id::from("test"), layout))
             .collect::<Vec<_>>();
 
         let count = layouts.len();

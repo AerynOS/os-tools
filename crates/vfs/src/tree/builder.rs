@@ -148,7 +148,7 @@ mod tests {
     struct CustomFile {
         path: AStr,
         kind: Kind,
-        id: String,
+        id: AStr,
     }
 
     impl From<AStr> for CustomFile {
@@ -170,7 +170,7 @@ mod tests {
             self.kind.clone()
         }
 
-        fn id(&self) -> String {
+        fn id(&self) -> AStr {
             self.id.clone()
         }
 

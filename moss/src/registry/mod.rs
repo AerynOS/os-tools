@@ -104,8 +104,8 @@ mod test {
     fn test_ordering() {
         let mut registry = Registry::default();
 
-        let package = |id: &str, release| Package {
-            id: package::Id::from(id.to_owned()),
+        let package = |id: &'static str, release| Package {
+            id: package::Id::from(id),
             meta: package::Meta {
                 name: package::Name::from(id.to_owned()),
                 version_identifier: Default::default(),
@@ -143,7 +143,7 @@ mod test {
 
         // Packages are sorted by plugin priority, desc -> release number, desc
         for (idx, package) in query.enumerate() {
-            let id = |id: &str| package::Id::from(id.to_owned());
+            let id = |id: &'static str| package::Id::from(id);
 
             match idx {
                 0 => assert_eq!(package.id, id("c")),
@@ -159,8 +159,8 @@ mod test {
     fn test_flags() {
         let mut registry = Registry::default();
 
-        let package = |id: &str, flags| Package {
-            id: package::Id::from(id.to_owned()),
+        let package = |id: &'static str, flags| Package {
+            id: package::Id::from(id),
             meta: package::Meta {
                 name: package::Name::from(id.to_owned()),
                 version_identifier: Default::default(),

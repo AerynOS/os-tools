@@ -1140,7 +1140,7 @@ impl BlitFile for PendingFile {
     }
 
     /// Return ID for conflict
-    fn id(&self) -> String {
+    fn id(&self) -> AStr {
         self.id.clone().into()
     }
 
