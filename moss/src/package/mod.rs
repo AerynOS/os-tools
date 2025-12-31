@@ -2,6 +2,8 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
+use std::borrow::Borrow;
+
 use derive_more::{Debug, Display, From, Into};
 use itertools::Itertools;
 
@@ -16,6 +18,7 @@ pub mod render;
 pub struct Id(String);
 
 impl Id {
+    #[inline]
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -30,6 +33,13 @@ impl From<Id> for meta::Id {
 impl From<meta::Id> for Id {
     fn from(id: meta::Id) -> Self {
         Self(id.0)
+    }
+}
+
+impl Borrow<str> for Id {
+    #[inline]
+    fn borrow(&self) -> &str {
+        self.as_str()
     }
 }
 

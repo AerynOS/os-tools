@@ -186,7 +186,7 @@ impl Database {
                     .load_iter::<model::License, _>(conn)?
                     .try_for_each::<_, Result<_, Error>>(|result| {
                         let row = result?;
-                        if let Some(meta) = entries.get_mut(&row.package.into()) {
+                        if let Some(meta) = entries.get_mut(row.package.as_str()) {
                             meta.licenses.push(row.license);
                         }
                         Ok(())
@@ -197,7 +197,7 @@ impl Database {
                     .load_iter::<model::Dependency, _>(conn)?
                     .try_for_each::<_, Result<_, Error>>(|result| {
                         let row = result?;
-                        if let Some(meta) = entries.get_mut(&row.package.into()) {
+                        if let Some(meta) = entries.get_mut(row.package.as_str()) {
                             meta.dependencies.insert(row.dependency);
                         }
                         Ok(())
@@ -208,7 +208,7 @@ impl Database {
                     .load_iter::<model::Provider, _>(conn)?
                     .try_for_each::<_, Result<_, Error>>(|result| {
                         let row = result?;
-                        if let Some(meta) = entries.get_mut(&row.package.into()) {
+                        if let Some(meta) = entries.get_mut(row.package.as_str()) {
                             meta.providers.insert(row.provider);
                         }
                         Ok(())
@@ -219,7 +219,7 @@ impl Database {
                     .load_iter::<model::Conflict, _>(conn)?
                     .try_for_each::<_, Result<_, Error>>(|result| {
                         let row = result?;
-                        if let Some(meta) = entries.get_mut(&row.package.into()) {
+                        if let Some(meta) = entries.get_mut(row.package.as_str()) {
                             meta.conflicts.insert(row.conflict);
                         }
                         Ok(())
