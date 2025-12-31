@@ -45,9 +45,8 @@ pub trait BlitFile: Clone + Sized + Debug + From<AStr> {
 struct File<T> {
     id: AStr,
     path: AStr,
-    // Cache these to avoid reallocation
-    file_name: Option<String>,
-    parent: Option<String>,
+    file_name: Option<AStr>,
+    parent: Option<AStr>,
     kind: Kind,
     inner: T,
 }
@@ -55,8 +54,8 @@ struct File<T> {
 impl<T: BlitFile> File<T> {
     pub fn new(inner: T) -> Self {
         let path = inner.path();
-        let file_name = path::file_name(&path).map(String::from);
-        let parent = path::parent(&path).map(String::from);
+        let file_name = path::file_name(&path).map(AStr::from);
+        let parent = path::parent(&path).map(AStr::from);
 
         Self {
             id: inner.id(),
