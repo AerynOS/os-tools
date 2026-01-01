@@ -12,6 +12,7 @@ use thiserror::Error;
 pub mod format;
 
 /// Grouped management of a set of triggers
+#[derive(Debug)]
 pub struct Collection<'a> {
     handlers: Vec<ExtractedHandler>,
     triggers: BTreeMap<String, &'a Trigger>,
@@ -62,11 +63,13 @@ impl<'a> Collection<'a> {
     }
 
     /// Process a batch set of paths and record the "hit"
-    pub fn process_paths(&mut self, paths: impl Iterator<Item = String>) {
+    pub fn process_paths<T: AsRef<str>>(&mut self, paths: impl Iterator<Item = T>) {
         let results = paths.into_iter().flat_map(|p| {
-            self.handlers
-                .iter()
-                .filter_map(move |h| h.pattern.match_path(&p).map(|m| (h.id.clone(), h.handler.compiled(&m))))
+            self.handlers.iter().filter_map(move |h| {
+                h.pattern
+                    .match_path(p.as_ref())
+                    .map(|m| (h.id.clone(), h.handler.compiled(&m)))
+            })
         });
 
         for (id, handler) in results {
