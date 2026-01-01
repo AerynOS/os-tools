@@ -6,6 +6,7 @@
 use std::collections::BTreeMap;
 
 use astr::AStr;
+use elsa::FrozenVec;
 
 use crate::path;
 use crate::tree::{Kind, Tree};
@@ -51,7 +52,7 @@ impl<T: BlitFile> TreeBuilder<T> {
         let file = File::new(item);
 
         // Find all parent paths
-        if let Some(parent) = &file.parent {
+        if let Some(parent) = file.parent() {
             let mut leading_path: Option<AStr> = None;
             // Build a set of parent paths skipping `/`, yielding `usr`, `usr/bin`, etc.
             for component in path::components(parent) {
@@ -64,6 +65,7 @@ impl<T: BlitFile> TreeBuilder<T> {
                     .insert(full_path.clone(), File::new(full_path.into()));
             }
         }
+
         self.explicit.push(file);
     }
 
@@ -73,7 +75,7 @@ impl<T: BlitFile> TreeBuilder<T> {
 
         // Walk again to remove accidental dupes
         for i in self.explicit.iter() {
-            self.implicit_dirs.remove(&i.path);
+            self.implicit_dirs.remove(&*i.path);
         }
     }
 
@@ -85,10 +87,11 @@ impl<T: BlitFile> TreeBuilder<T> {
             .iter()
             .filter(|f| matches!(f.kind, Kind::Directory))
             .chain(self.implicit_dirs.values())
-            .map(|d| (&d.path, d))
+            .map(|d| (&*d.path, d))
             .collect::<BTreeMap<_, _>>();
 
         // build a set of redirects
+        let scratch = FrozenVec::new();
         let mut redirects = BTreeMap::new();
 
         // Resolve symlinks-to-dirs
@@ -96,14 +99,15 @@ impl<T: BlitFile> TreeBuilder<T> {
             if let Kind::Symlink(target) = &link.kind {
                 // Resolve the link.
                 let target = if target.starts_with('/') {
-                    target.clone()
-                } else if let Some(parent) = &link.parent {
-                    path::join(parent, target)
+                    &**target
+                } else if let Some(parent) = link.parent() {
+                    scratch.push(path::join(parent, target));
+                    scratch.last().unwrap()
                 } else {
-                    target.clone()
+                    &**target
                 };
                 if all_dirs.contains_key(&target) {
-                    redirects.insert(&link.path, target);
+                    redirects.insert(&*link.path, target);
                 }
             }
         }
@@ -123,14 +127,14 @@ impl<T: BlitFile> TreeBuilder<T> {
             // New node for this guy
             let node = tree.new_node(entry.clone());
 
-            if let Some(parent) = &entry.parent {
+            if let Some(parent) = entry.parent() {
                 tree.add_child_to_node(node, parent)?;
             }
         }
 
         // Reparent any symlink redirects.
         for (source_tree, target_tree) in redirects {
-            tree.reparent(source_tree, &target_tree)?;
+            tree.reparent(source_tree, target_tree)?;
         }
         Ok(tree)
     }
