@@ -9,55 +9,21 @@ use std::collections::HashMap;
 use std::vec;
 
 use astr::AStr;
-use elsa::FrozenVec;
 use indextree::{Arena, Descendants, NodeId};
 use snafu::Snafu;
 
 use crate::path::{self, VfsPath};
 
 pub mod builder;
+mod kind;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Kind(usize);
-
-impl Kind {
-    /// Regular path
-    pub const REGULAR: Self = Self(usize::MAX - 1);
-
-    /// Directory (parenting node)
-    pub const DIRECTORY: Self = Self(usize::MAX);
-
-    // Every other value is a symlink
-    pub fn symlink(target: AStr, symlink_targets: &FrozenVec<AStr>) -> Self {
-        symlink_targets.push(target);
-        Self(symlink_targets.len() - 1)
-    }
-
-    #[inline]
-    pub fn is_symlink(self) -> bool {
-        self.0 < usize::MAX - 1
-    }
-
-    pub fn as_symlink(self, symlink_targets: &FrozenVec<AStr>) -> Option<&str> {
-        if self.is_symlink() {
-            Some(&symlink_targets[self.0])
-        } else {
-            None
-        }
-    }
-}
-
-impl Default for Kind {
-    fn default() -> Self {
-        Self::DIRECTORY
-    }
-}
+pub use self::kind::Kind;
 
 /// Simple generic interface for blittable files while retaining details.
 ///
 /// All implementations should return a directory typed blitfile for a PathBuf.
 pub trait BlitFile: Clone + Sized + Debug + From<AStr> {
-    fn kind(&self, symlink_targets: &FrozenVec<AStr>) -> Kind;
+    fn kind(&self) -> Kind;
     fn path(&self) -> AStr;
     fn id(&self) -> AStr;
 
@@ -74,13 +40,13 @@ struct File<T> {
 }
 
 impl<T: BlitFile> File<T> {
-    pub fn new(inner: T, symlink_targets: &FrozenVec<AStr>) -> Self {
+    pub fn new(inner: T) -> Self {
         let path = VfsPath::new(inner.path());
 
         Self {
             id: inner.id(),
             path,
-            kind: inner.kind(symlink_targets),
+            kind: inner.kind(),
             inner,
         }
     }
@@ -184,12 +150,7 @@ impl<T: BlitFile> Tree<T> {
 
     /// For all descendents of the given source tree, return a set of the reparented nodes,
     /// and remove the originals from the tree
-    fn reparent(
-        &mut self,
-        source_path: &str,
-        target_path: &str,
-        symlink_targets: &FrozenVec<AStr>,
-    ) -> Result<(), Error> {
+    fn reparent(&mut self, source_path: &str, target_path: &str) -> Result<(), Error> {
         let mut mutations = vec![];
         let mut orphans = vec![];
         if let Some(source) = self.map.get(source_path) {
@@ -202,7 +163,7 @@ impl<T: BlitFile> Tree<T> {
             for i in mutations {
                 let original = self.arena.get(i).unwrap().get();
                 let relapath = path::join(target_path, original.path.strip_prefix(source_path).unwrap());
-                orphans.push(File::new(original.inner.cloned_to(relapath), symlink_targets));
+                orphans.push(File::new(original.inner.cloned_to(relapath)));
             }
 
             // Remove descendents
@@ -246,15 +207,14 @@ impl<T: BlitFile> Tree<T> {
         let item = node.get();
         let partial = item.file_name();
 
-        match item.kind {
-            Kind::DIRECTORY => {
-                let children = start
-                    .children(&self.arena)
-                    .map(|c| self.structured_children(&c))
-                    .collect::<Vec<_>>();
-                Element::Directory(partial, &item.inner, children)
-            }
-            _ => Element::Child(partial, &item.inner),
+        if item.kind.is_directory() {
+            let children = start
+                .children(&self.arena)
+                .map(|c| self.structured_children(&c))
+                .collect::<Vec<_>>();
+            Element::Directory(partial, &item.inner, children)
+        } else {
+            Element::Child(partial, &item.inner)
         }
     }
 }

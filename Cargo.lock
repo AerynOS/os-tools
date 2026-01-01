@@ -1886,7 +1886,6 @@ dependencies = [
  "derive_more",
  "diesel",
  "diesel_migrations",
- "elsa",
  "fnmatch",
  "fs-err",
  "futures-util",

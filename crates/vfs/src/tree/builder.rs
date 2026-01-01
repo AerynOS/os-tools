@@ -9,7 +9,7 @@ use astr::AStr;
 use elsa::FrozenVec;
 
 use crate::path;
-use crate::tree::{Kind, Tree};
+use crate::tree::Tree;
 
 use super::{BlitFile, Error, File};
 
@@ -20,8 +20,6 @@ pub struct TreeBuilder<T: BlitFile> {
 
     // Implicitly created paths
     implicit_dirs: BTreeMap<AStr, File<T>>,
-
-    symlink_targets: FrozenVec<AStr>,
 }
 
 /// Special sort algorithm for files by directory
@@ -46,13 +44,12 @@ impl<T: BlitFile> TreeBuilder<T> {
         TreeBuilder {
             explicit: vec![],
             implicit_dirs: BTreeMap::new(),
-            symlink_targets: FrozenVec::new(),
         }
     }
 
     /// Push an item to the builder - we don't care if we have duplicates yet
     pub fn push(&mut self, item: T) {
-        let file = File::new(item, &self.symlink_targets);
+        let file = File::new(item);
 
         // Find all parent paths
         if let Some(parent) = file.parent() {
@@ -65,7 +62,7 @@ impl<T: BlitFile> TreeBuilder<T> {
                 };
                 leading_path = Some(full_path.clone());
                 self.implicit_dirs
-                    .insert(full_path.clone(), File::new(full_path.into(), &self.symlink_targets));
+                    .insert(full_path.clone(), File::new(full_path.into()));
             }
         }
 
@@ -88,7 +85,7 @@ impl<T: BlitFile> TreeBuilder<T> {
         let all_dirs = self
             .explicit
             .iter()
-            .filter(|f| matches!(f.kind, Kind::DIRECTORY))
+            .filter(|f| f.kind.is_directory())
             .chain(self.implicit_dirs.values())
             .map(|d| (&*d.path, d))
             .collect::<BTreeMap<_, _>>();
@@ -99,7 +96,7 @@ impl<T: BlitFile> TreeBuilder<T> {
 
         // Resolve symlinks-to-dirs
         for link in self.explicit.iter() {
-            if let Some(target) = link.kind.as_symlink(&self.symlink_targets) {
+            if let Some(target) = link.kind.as_symlink() {
                 // Resolve the link.
                 let target = if target.starts_with('/') {
                     target
@@ -118,7 +115,7 @@ impl<T: BlitFile> TreeBuilder<T> {
         // Insert everything WITHOUT redirects, directory first.
         let mut full_set = all_dirs
             .into_values()
-            .chain(self.explicit.iter().filter(|m| !matches!(m.kind, Kind::DIRECTORY)))
+            .chain(self.explicit.iter().filter(|m| !m.kind.is_directory()))
             .collect::<Vec<_>>();
         full_set.sort_by(|a, b| sorted_paths(a, b));
 
@@ -137,7 +134,7 @@ impl<T: BlitFile> TreeBuilder<T> {
 
         // Reparent any symlink redirects.
         for (source_tree, target_tree) in redirects {
-            tree.reparent(source_tree, target_tree, &self.symlink_targets)?;
+            tree.reparent(source_tree, target_tree)?;
         }
         Ok(tree)
     }
@@ -146,13 +143,12 @@ impl<T: BlitFile> TreeBuilder<T> {
 #[cfg(test)]
 mod tests {
     use astr::AStr;
-    use elsa::FrozenVec;
 
     use crate::tree::Kind;
 
     use super::{BlitFile, TreeBuilder};
 
-    #[derive(Clone, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Clone, Default, Debug)]
     struct CustomFile {
         path: AStr,
         kind: Kind,
@@ -174,7 +170,7 @@ mod tests {
             self.path.clone()
         }
 
-        fn kind(&self, _: &FrozenVec<AStr>) -> Kind {
+        fn kind(&self) -> Kind {
             self.kind.clone()
         }
 
@@ -192,7 +188,7 @@ mod tests {
         }
     }
 
-    /* #[test]
+    #[test]
     fn test_simple_root() {
         let mut b: TreeBuilder<CustomFile> = TreeBuilder::new();
         let paths = vec![
@@ -203,7 +199,7 @@ mod tests {
             },
             CustomFile {
                 path: "/usr/bin/rnano".into(),
-                kind: Kind::Symlink("nano".into()),
+                kind: Kind::symlink("nano".into()),
                 id: "nano".into(),
             },
             CustomFile {
@@ -213,7 +209,7 @@ mod tests {
             },
             CustomFile {
                 path: "/var/run/lock".into(),
-                kind: Kind::Symlink("/run/lock".into()),
+                kind: Kind::symlink("/run/lock".into()),
                 id: "baselayout".into(),
             },
             CustomFile {
@@ -227,5 +223,5 @@ mod tests {
         }
         b.bake();
         b.tree().unwrap();
-    } */
+    }
 }
