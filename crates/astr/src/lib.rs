@@ -1,9 +1,12 @@
 use std::{
     borrow::{Borrow, Cow},
     fmt,
+    hash::Hash,
     ops::Deref,
     path::Path,
 };
+
+use triomphe::{Arc, HeaderWithLength};
 
 mod diesel;
 
@@ -11,12 +14,15 @@ mod diesel;
 ///
 /// Cloning doesn't allocate. As of the time of writing, uses reference
 /// counting. Implementation may change.
-#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct AStr(triomphe::Arc<str>);
+#[derive(Clone)]
+pub struct AStr(triomphe::ThinArc<(), u8>);
 
 impl AStr {
+    #[inline]
     pub fn as_str(&self) -> &str {
-        &self.0
+        // SAFETY: We only ever store UTF-8,
+        // would use ThinArc<(), str> if possible
+        unsafe { str::from_utf8_unchecked(&self.0.slice) }
     }
 }
 
@@ -29,33 +35,37 @@ impl Default for AStr {
 impl Deref for AStr {
     type Target = str;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
-        &self.0
+        self.as_str()
     }
 }
 
 impl Borrow<str> for AStr {
+    #[inline]
     fn borrow(&self) -> &str {
-        &self.0
+        self.as_str()
     }
 }
 
 impl fmt::Debug for AStr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
+        self.as_str().fmt(f)
     }
 }
 
 impl fmt::Display for AStr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
+        self.as_str().fmt(f)
     }
 }
 
 impl From<&str> for AStr {
-    #[inline]
     fn from(value: &str) -> Self {
-        Self(value.into())
+        Self(Arc::into_thin(Arc::from_header_and_slice(
+            HeaderWithLength::new((), value.len()),
+            value.as_bytes(),
+        )))
     }
 }
 
@@ -69,7 +79,7 @@ impl From<&AStr> for AStr {
 impl From<String> for AStr {
     #[inline]
     fn from(value: String) -> Self {
-        Self(value.into())
+        Self::from(value.as_str())
     }
 }
 
@@ -88,13 +98,62 @@ impl<'a> From<&'a AStr> for Cow<'a, str> {
 }
 
 impl AsRef<str> for AStr {
+    #[inline]
     fn as_ref(&self) -> &str {
-        &self.0
+        self.as_str()
     }
 }
 
 impl AsRef<Path> for AStr {
+    #[inline]
     fn as_ref(&self) -> &Path {
         self.as_str().as_ref()
+    }
+}
+
+impl PartialEq for AStr {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_str() == other.as_str()
+    }
+}
+
+impl Eq for AStr {}
+
+impl PartialOrd for AStr {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for AStr {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.as_str().cmp(other.as_str())
+    }
+}
+
+impl Hash for AStr {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.as_str().hash(state);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AStr;
+
+    #[test]
+    fn basic_use() {
+        let empty = AStr::from("");
+        let empty2 = empty.clone();
+        assert_eq!(format!("{empty}{empty2}{empty}"), "");
+
+        let x = AStr::from("x");
+        assert_eq!(format!("{x}x{x}"), "xxx");
+    }
+
+    #[test]
+    fn long_string() {
+        let foo = AStr::from("/foo/bar/helloworld");
+        assert_eq!(foo.as_str(), "/foo/bar/helloworld");
     }
 }
