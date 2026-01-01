@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use astr::{AStr, CowAStr};
 
 use crate::path;
-use crate::tree::{Kind, Tree};
+use crate::tree::Tree;
 
 use super::{BlitFile, Error, File};
 
@@ -94,7 +94,7 @@ impl<T: BlitFile> TreeBuilder<T> {
 
         // Resolve symlinks-to-dirs
         for link in self.explicit.iter() {
-            if let Kind::Symlink(target) = &link.kind {
+            if let Some(target) = link.kind.as_symlink() {
                 // Resolve the link.
                 let target = if target.starts_with('/') {
                     CowAStr::Borrowed(target)
@@ -156,7 +156,7 @@ mod tests {
         fn from(value: AStr) -> Self {
             Self {
                 path: value,
-                kind: Kind::Directory,
+                kind: Kind::DIRECTORY,
                 id: "Virtual".into(),
             }
         }
@@ -191,27 +191,27 @@ mod tests {
         let paths = vec![
             CustomFile {
                 path: "/usr/bin/nano".into(),
-                kind: Kind::Regular,
+                kind: Kind::REGULAR,
                 id: "nano".into(),
             },
             CustomFile {
                 path: "/usr/bin/rnano".into(),
-                kind: Kind::Symlink("nano".into()),
+                kind: Kind::symlink("nano".into()),
                 id: "nano".into(),
             },
             CustomFile {
                 path: "/usr/share/nano".into(),
-                kind: Kind::Directory,
+                kind: Kind::DIRECTORY,
                 id: "nano".into(),
             },
             CustomFile {
                 path: "/var/run/lock".into(),
-                kind: Kind::Symlink("/run/lock".into()),
+                kind: Kind::symlink("/run/lock".into()),
                 id: "baselayout".into(),
             },
             CustomFile {
                 path: "/var/run/lock/subsys/1".into(),
-                kind: Kind::Regular,
+                kind: Kind::REGULAR,
                 id: "baselayout".into(),
             },
         ];
