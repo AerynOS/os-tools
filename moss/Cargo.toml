@@ -49,6 +49,7 @@ url.workspace = true
 xxhash-rust.workspace = true
 zbus.workspace = true
 astr.workspace = true
+elsa = "1.11.2"
 
 [package.metadata.cargo-machete]
 # Needed for unixepoch() in src/db/state/migrations/2025-03-04-201550_init/up.sql

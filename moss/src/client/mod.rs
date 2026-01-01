@@ -18,6 +18,7 @@ use std::{
 };
 
 use astr::AStr;
+use elsa::FrozenVec;
 use fs_err as fs;
 use futures_util::{StreamExt, TryStreamExt, stream};
 use nix::{
@@ -1131,11 +1132,11 @@ pub struct PendingFile {
 
 impl BlitFile for PendingFile {
     /// Match internal kind to minimalist vfs kind
-    fn kind(&self) -> vfs::tree::Kind {
+    fn kind(&self, symlink_targets: &FrozenVec<AStr>) -> vfs::tree::Kind {
         match &self.layout.entry {
-            layout::Entry::Symlink(source, _) => vfs::tree::Kind::Symlink(source.clone()),
-            layout::Entry::Directory(_) => vfs::tree::Kind::Directory,
-            _ => vfs::tree::Kind::Regular,
+            layout::Entry::Symlink(source, _) => vfs::tree::Kind::symlink(source.clone(), symlink_targets),
+            layout::Entry::Directory(_) => vfs::tree::Kind::DIRECTORY,
+            _ => vfs::tree::Kind::REGULAR,
         }
     }
 

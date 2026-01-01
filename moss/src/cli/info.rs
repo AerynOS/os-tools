@@ -173,9 +173,9 @@ fn print_files(vfs: vfs::Tree<client::PendingFile>) {
     let files = vfs
         .iter()
         .filter_map(|file| {
-            if matches!(file.kind(), vfs::tree::Kind::Directory) {
+            /* if matches!(file.kind(), vfs::tree::Kind::Directory) {
                 return None;
-            }
+            } */
 
             let path = file.path();
             let meta = match &file.layout.entry {
