@@ -6,6 +6,7 @@ rust-version.workspace = true
 
 [dependencies]
 diesel.workspace = true
+stable_deref_trait = "1.2.1"
 triomphe.workspace = true
 
 [lints]

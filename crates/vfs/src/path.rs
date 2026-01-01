@@ -1,4 +1,7 @@
+use std::ops::Deref;
+
 use astr::AStr;
+use derive_more::Debug;
 
 pub fn join(a: &str, b: impl AsRef<str> + Into<AStr>) -> AStr {
     let b_ = b.as_ref();
@@ -11,8 +14,58 @@ pub fn join(a: &str, b: impl AsRef<str> + Into<AStr>) -> AStr {
     }
 }
 
-pub fn file_name(path: &str) -> Option<&str> {
-    path.trim_end_matches('/').rsplit('/').next()
+#[derive(Clone, Debug)]
+#[debug("{path:?}")]
+pub struct VfsPath {
+    path: AStr,
+    file_name_start_idx: u32,
+    parent_end_idx: u32,
+}
+
+impl VfsPath {
+    pub fn new(path: AStr) -> Self {
+        assert!(path.starts_with('/'));
+        if path.len() > 1 {
+            assert!(!path.ends_with('/'));
+        }
+
+        let file_name_start_idx = (path.rfind('/').unwrap() + 1).try_into().unwrap();
+        let parent_end_idx = if file_name_start_idx == 1 {
+            1
+        } else {
+            file_name_start_idx - 1
+        };
+        Self {
+            path,
+            file_name_start_idx,
+            parent_end_idx,
+        }
+    }
+
+    pub fn astr(&self) -> AStr {
+        self.path.clone()
+    }
+
+    pub fn file_name(&self) -> &str {
+        &self.path[self.file_name_start_idx as usize..]
+    }
+
+    pub fn parent(&self) -> Option<&str> {
+        (self.path.len() > 1).then(|| &self.path[..self.parent_end_idx as usize])
+    }
+}
+
+impl Deref for VfsPath {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.path
+    }
+}
+
+/*pub fn file_name(path: &str) -> Option<&str> {
+    let (_, file_name) = path.trim_end_matches('/').rsplit_once('/')?;
+    Some(file_name)
 }
 
 pub fn parent(path: &str) -> Option<&str> {
@@ -20,7 +73,7 @@ pub fn parent(path: &str) -> Option<&str> {
         // We had to have split on a direct descendent of `/`
         if parent.is_empty() { "/" } else { parent }
     })
-}
+}*/
 
 pub fn components(path: &str) -> impl Iterator<Item = &str> {
     path.starts_with('/')

@@ -1133,9 +1133,9 @@ impl BlitFile for PendingFile {
     /// Match internal kind to minimalist vfs kind
     fn kind(&self) -> vfs::tree::Kind {
         match &self.layout.entry {
-            layout::Entry::Symlink(source, _) => vfs::tree::Kind::Symlink(source.clone()),
-            layout::Entry::Directory(_) => vfs::tree::Kind::Directory,
-            _ => vfs::tree::Kind::Regular,
+            layout::Entry::Symlink(source, _) => vfs::tree::Kind::symlink(source.clone()),
+            layout::Entry::Directory(_) => vfs::tree::Kind::DIRECTORY,
+            _ => vfs::tree::Kind::REGULAR,
         }
     }
 

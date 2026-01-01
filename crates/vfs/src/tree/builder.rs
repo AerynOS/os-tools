@@ -6,9 +6,10 @@
 use std::collections::BTreeMap;
 
 use astr::AStr;
+use elsa::FrozenVec;
 
 use crate::path;
-use crate::tree::{Kind, Tree};
+use crate::tree::Tree;
 
 use super::{BlitFile, Error, File};
 
@@ -51,7 +52,7 @@ impl<T: BlitFile> TreeBuilder<T> {
         let file = File::new(item);
 
         // Find all parent paths
-        if let Some(parent) = &file.parent {
+        if let Some(parent) = file.parent() {
             let mut leading_path: Option<AStr> = None;
             // Build a set of parent paths skipping `/`, yielding `usr`, `usr/bin`, etc.
             for component in path::components(parent) {
@@ -64,6 +65,7 @@ impl<T: BlitFile> TreeBuilder<T> {
                     .insert(full_path.clone(), File::new(full_path.into()));
             }
         }
+
         self.explicit.push(file);
     }
 
@@ -73,7 +75,7 @@ impl<T: BlitFile> TreeBuilder<T> {
 
         // Walk again to remove accidental dupes
         for i in self.explicit.iter() {
-            self.implicit_dirs.remove(&i.path);
+            self.implicit_dirs.remove(&*i.path);
         }
     }
 
@@ -83,27 +85,29 @@ impl<T: BlitFile> TreeBuilder<T> {
         let all_dirs = self
             .explicit
             .iter()
-            .filter(|f| matches!(f.kind, Kind::Directory))
+            .filter(|f| f.kind.is_directory())
             .chain(self.implicit_dirs.values())
-            .map(|d| (&d.path, d))
+            .map(|d| (&*d.path, d))
             .collect::<BTreeMap<_, _>>();
 
         // build a set of redirects
+        let scratch = FrozenVec::new();
         let mut redirects = BTreeMap::new();
 
         // Resolve symlinks-to-dirs
         for link in self.explicit.iter() {
-            if let Kind::Symlink(target) = &link.kind {
+            if let Some(target) = link.kind.as_symlink() {
                 // Resolve the link.
                 let target = if target.starts_with('/') {
-                    target.clone()
-                } else if let Some(parent) = &link.parent {
-                    path::join(parent, target)
+                    target
+                } else if let Some(parent) = link.parent() {
+                    scratch.push(path::join(parent, target));
+                    scratch.last().unwrap()
                 } else {
-                    target.clone()
+                    target
                 };
                 if all_dirs.contains_key(&target) {
-                    redirects.insert(&link.path, target);
+                    redirects.insert(&*link.path, target);
                 }
             }
         }
@@ -111,7 +115,7 @@ impl<T: BlitFile> TreeBuilder<T> {
         // Insert everything WITHOUT redirects, directory first.
         let mut full_set = all_dirs
             .into_values()
-            .chain(self.explicit.iter().filter(|m| !matches!(m.kind, Kind::Directory)))
+            .chain(self.explicit.iter().filter(|m| !m.kind.is_directory()))
             .collect::<Vec<_>>();
         full_set.sort_by(|a, b| sorted_paths(a, b));
 
@@ -123,14 +127,14 @@ impl<T: BlitFile> TreeBuilder<T> {
             // New node for this guy
             let node = tree.new_node(entry.clone());
 
-            if let Some(parent) = &entry.parent {
+            if let Some(parent) = entry.parent() {
                 tree.add_child_to_node(node, parent)?;
             }
         }
 
         // Reparent any symlink redirects.
         for (source_tree, target_tree) in redirects {
-            tree.reparent(source_tree, &target_tree)?;
+            tree.reparent(source_tree, target_tree)?;
         }
         Ok(tree)
     }
@@ -144,7 +148,7 @@ mod tests {
 
     use super::{BlitFile, TreeBuilder};
 
-    #[derive(Clone, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Clone, Default, Debug)]
     struct CustomFile {
         path: AStr,
         kind: Kind,
@@ -155,7 +159,7 @@ mod tests {
         fn from(value: AStr) -> Self {
             Self {
                 path: value,
-                kind: Kind::Directory,
+                kind: Kind::DIRECTORY,
                 id: "Virtual".into(),
             }
         }
@@ -190,27 +194,27 @@ mod tests {
         let paths = vec![
             CustomFile {
                 path: "/usr/bin/nano".into(),
-                kind: Kind::Regular,
+                kind: Kind::REGULAR,
                 id: "nano".into(),
             },
             CustomFile {
                 path: "/usr/bin/rnano".into(),
-                kind: Kind::Symlink("nano".into()),
+                kind: Kind::symlink("nano".into()),
                 id: "nano".into(),
             },
             CustomFile {
                 path: "/usr/share/nano".into(),
-                kind: Kind::Directory,
+                kind: Kind::DIRECTORY,
                 id: "nano".into(),
             },
             CustomFile {
                 path: "/var/run/lock".into(),
-                kind: Kind::Symlink("/run/lock".into()),
+                kind: Kind::symlink("/run/lock".into()),
                 id: "baselayout".into(),
             },
             CustomFile {
                 path: "/var/run/lock/subsys/1".into(),
-                kind: Kind::Regular,
+                kind: Kind::REGULAR,
                 id: "baselayout".into(),
             },
         ];

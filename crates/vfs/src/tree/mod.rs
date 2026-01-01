@@ -12,22 +12,12 @@ use astr::AStr;
 use indextree::{Arena, Descendants, NodeId};
 use snafu::Snafu;
 
-use crate::path;
+use crate::path::{self, VfsPath};
 
 pub mod builder;
+mod kind;
 
-#[derive(Clone, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Kind {
-    // Regular path
-    Regular,
-
-    // Directory (parenting node)
-    #[default]
-    Directory,
-
-    // Symlink to somewhere else.
-    Symlink(AStr),
-}
+pub use self::kind::Kind;
 
 /// Simple generic interface for blittable files while retaining details.
 ///
@@ -44,27 +34,31 @@ pub trait BlitFile: Clone + Sized + Debug + From<AStr> {
 #[derive(Debug, Clone)]
 struct File<T> {
     id: AStr,
-    path: AStr,
-    file_name: Option<AStr>,
-    parent: Option<AStr>,
+    path: VfsPath,
     kind: Kind,
     inner: T,
 }
 
 impl<T: BlitFile> File<T> {
     pub fn new(inner: T) -> Self {
-        let path = inner.path();
-        let file_name = path::file_name(&path).map(AStr::from);
-        let parent = path::parent(&path).map(AStr::from);
+        let path = VfsPath::new(inner.path());
 
         Self {
             id: inner.id(),
             path,
-            file_name,
-            parent,
             kind: inner.kind(),
             inner,
         }
+    }
+
+    #[inline]
+    fn file_name(&self) -> &str {
+        self.path.file_name()
+    }
+
+    #[inline]
+    fn parent(&self) -> Option<&str> {
+        self.path.parent()
     }
 }
 
@@ -98,7 +92,7 @@ impl<T: BlitFile> Tree<T> {
 
     /// Generate a new node, store the path mapping for it
     fn new_node(&mut self, data: File<T>) -> NodeId {
-        let path = data.path.clone();
+        let path = data.path.astr();
         let node = self.arena.new_node(data);
         self.map.insert(path, node);
         self.length += 1;
@@ -123,7 +117,7 @@ impl<T: BlitFile> Tree<T> {
             .children(&self.arena)
             .filter_map(|n| {
                 let n = self.arena.get(n)?.get();
-                if n.file_name == node.get().file_name {
+                if n.file_name() == node.get().file_name() {
                     Some(n)
                 } else {
                     None
@@ -132,7 +126,7 @@ impl<T: BlitFile> Tree<T> {
             .collect::<Vec<_>>();
         if !others.is_empty() {
             let e = Error::Duplicate {
-                node_path: node.get().path.clone(),
+                node_path: node.get().path.astr(),
                 node_id: node.get().id.clone(),
                 other_id: others.first().unwrap().id.clone(),
             };
@@ -186,7 +180,7 @@ impl<T: BlitFile> Tree<T> {
                 Some(n) => *n,
                 None => self.new_node(orphan.clone()),
             };
-            if let Some(parent) = &orphan.parent {
+            if let Some(parent) = orphan.parent() {
                 self.add_child_to_node(node, parent)?;
             }
         }
@@ -211,17 +205,16 @@ impl<T: BlitFile> Tree<T> {
     fn structured_children(&self, start: &NodeId) -> Element<'_, T> {
         let node = &self.arena[*start];
         let item = node.get();
-        let partial = item.file_name.as_deref().unwrap_or_default();
+        let partial = item.file_name();
 
-        match item.kind {
-            Kind::Directory => {
-                let children = start
-                    .children(&self.arena)
-                    .map(|c| self.structured_children(&c))
-                    .collect::<Vec<_>>();
-                Element::Directory(partial, &item.inner, children)
-            }
-            _ => Element::Child(partial, &item.inner),
+        if item.kind.is_directory() {
+            let children = start
+                .children(&self.arena)
+                .map(|c| self.structured_children(&c))
+                .collect::<Vec<_>>();
+            Element::Directory(partial, &item.inner, children)
+        } else {
+            Element::Child(partial, &item.inner)
         }
     }
 }
