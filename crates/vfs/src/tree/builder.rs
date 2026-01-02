@@ -144,7 +144,7 @@ mod tests {
 
     use super::{BlitFile, TreeBuilder};
 
-    #[derive(Clone, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+    #[derive(Clone, Debug)]
     struct CustomFile {
         path: AStr,
         kind: Kind,
