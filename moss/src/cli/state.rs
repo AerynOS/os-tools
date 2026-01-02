@@ -70,6 +70,12 @@ pub fn command() -> Command {
                 .arg(arg!(--verbose "Vebose output").action(ArgAction::SetTrue)),
         )
         .subcommand(Export::command())
+        // For profiling only, hence hidden.
+        //
+        // Builds a VFS of the currently-active state, and throws it away again.
+        // Run this through hyperfine / valgrind / heaptrack to profile the VFS
+        // code.
+        .subcommand(Command::new("build-vfs").hide(true))
 }
 
 #[derive(Debug, Parser)]
@@ -89,6 +95,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         Some(("active", _)) => active(installation),
         Some(("list", _)) => list(installation),
         Some(("activate", args)) => activate(args, installation),
+        Some(("build-vfs", _)) => build_vfs(installation),
         Some(("query", args)) => query(args, installation),
         Some(("prune", args)) => prune(args, installation),
         Some(("remove", args)) => remove(args, installation),
@@ -139,6 +146,20 @@ pub fn activate(args: &ArgMatches, installation: Installation) -> Result<(), Err
         new_id.to_string().bold(),
         format!("({old_id} archived)").dim()
     );
+
+    Ok(())
+}
+
+pub fn build_vfs(installation: Installation) -> Result<(), Error> {
+    let id = installation.active_state.unwrap();
+    let client = Client::new(environment::NAME, installation)?;
+    let new = client
+        .state_db
+        .get(id)
+        .map_err(|_| client::Error::StateDoesntExist(id))?;
+    let fstree = client.vfs(new.selections.iter().map(|selection| &selection.package))?;
+
+    std::hint::black_box(fstree);
 
     Ok(())
 }
