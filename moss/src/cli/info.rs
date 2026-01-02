@@ -173,7 +173,7 @@ fn print_files(vfs: vfs::Tree<client::PendingFile>) {
     let files = vfs
         .iter()
         .filter_map(|file| {
-            if matches!(file.kind(), vfs::tree::Kind::Directory) {
+            if file.kind().is_directory() {
                 return None;
             }
 

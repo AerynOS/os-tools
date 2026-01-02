@@ -83,7 +83,7 @@ impl<T: BlitFile> TreeBuilder<T> {
         let all_dirs = self
             .explicit
             .iter()
-            .filter(|f| matches!(f.kind, Kind::Directory))
+            .filter(|f| f.kind.is_directory())
             .chain(self.implicit_dirs.values())
             .map(|d| (&d.path, d))
             .collect::<BTreeMap<_, _>>();
@@ -111,7 +111,7 @@ impl<T: BlitFile> TreeBuilder<T> {
         // Insert everything WITHOUT redirects, directory first.
         let mut full_set = all_dirs
             .into_values()
-            .chain(self.explicit.iter().filter(|m| !matches!(m.kind, Kind::Directory)))
+            .chain(self.explicit.iter().filter(|m| !m.kind.is_directory()))
             .collect::<Vec<_>>();
         full_set.sort_by(|a, b| sorted_paths(a, b));
 

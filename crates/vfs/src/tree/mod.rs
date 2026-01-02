@@ -29,6 +29,13 @@ pub enum Kind {
     Symlink(AStr),
 }
 
+impl Kind {
+    #[must_use]
+    pub fn is_directory(&self) -> bool {
+        matches!(self, Self::Directory)
+    }
+}
+
 /// Simple generic interface for blittable files while retaining details.
 ///
 /// All implementations should return a directory typed blitfile for a PathBuf.
@@ -213,15 +220,14 @@ impl<T: BlitFile> Tree<T> {
         let item = node.get();
         let partial = item.file_name.as_deref().unwrap_or_default();
 
-        match item.kind {
-            Kind::Directory => {
-                let children = start
-                    .children(&self.arena)
-                    .map(|c| self.structured_children(&c))
-                    .collect::<Vec<_>>();
-                Element::Directory(partial, &item.inner, children)
-            }
-            _ => Element::Child(partial, &item.inner),
+        if item.kind.is_directory() {
+            let children = start
+                .children(&self.arena)
+                .map(|c| self.structured_children(&c))
+                .collect::<Vec<_>>();
+            Element::Directory(partial, &item.inner, children)
+        } else {
+            Element::Child(partial, &item.inner)
         }
     }
 }
