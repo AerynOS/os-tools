@@ -6,9 +6,13 @@ use std::{
     path::Path,
 };
 
+use stable_deref_trait::StableDeref;
 use triomphe::{Arc, HeaderWithLength};
 
+mod cow;
 mod diesel;
+
+pub use self::cow::CowAStr;
 
 /// String 'atom'.
 ///
@@ -40,6 +44,8 @@ impl Deref for AStr {
         self.as_str()
     }
 }
+
+unsafe impl StableDeref for AStr {}
 
 impl Borrow<str> for AStr {
     #[inline]

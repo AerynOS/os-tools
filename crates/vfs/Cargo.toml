@@ -7,6 +7,7 @@ edition.workspace = true
 
 [dependencies]
 astr.workspace = true
+derive_more.workspace = true
 indextree.workspace = true
 snafu.workspace = true
 
