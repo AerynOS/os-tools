@@ -15,26 +15,9 @@ use snafu::Snafu;
 use crate::path::{self, VfsPath};
 
 pub mod builder;
+mod kind;
 
-#[derive(Clone, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Kind {
-    // Regular path
-    Regular,
-
-    // Directory (parenting node)
-    #[default]
-    Directory,
-
-    // Symlink to somewhere else.
-    Symlink(AStr),
-}
-
-impl Kind {
-    #[must_use]
-    pub fn is_directory(&self) -> bool {
-        matches!(self, Self::Directory)
-    }
-}
+pub use self::kind::Kind;
 
 /// Simple generic interface for blittable files while retaining details.
 ///
