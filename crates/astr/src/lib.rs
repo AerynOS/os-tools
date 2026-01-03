@@ -9,7 +9,10 @@ use std::{
 use stable_deref_trait::StableDeref;
 use triomphe::{Arc, HeaderWithLength};
 
+mod cow;
 mod diesel;
+
+pub use self::cow::CowAStr;
 
 /// String 'atom'.
 ///

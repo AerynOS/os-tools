@@ -5,8 +5,7 @@
 //! Build a vfs tree incrementally
 use std::collections::BTreeMap;
 
-use astr::AStr;
-use elsa::FrozenVec;
+use astr::{AStr, CowAStr};
 
 use crate::path;
 use crate::tree::{Kind, Tree};
@@ -91,7 +90,6 @@ impl<T: BlitFile> TreeBuilder<T> {
             .collect::<BTreeMap<_, _>>();
 
         // build a set of redirects
-        let scratch = FrozenVec::new();
         let mut redirects = BTreeMap::new();
 
         // Resolve symlinks-to-dirs
@@ -99,14 +97,13 @@ impl<T: BlitFile> TreeBuilder<T> {
             if let Kind::Symlink(target) = &link.kind {
                 // Resolve the link.
                 let target = if target.starts_with('/') {
-                    &**target
+                    CowAStr::Borrowed(target)
                 } else if let Some(parent) = link.parent() {
-                    scratch.push(path::join(parent, target));
-                    scratch.last().unwrap()
+                    CowAStr::Owned(path::join(parent, target))
                 } else {
-                    &**target
+                    CowAStr::Borrowed(target)
                 };
-                if all_dirs.contains_key(&target) {
+                if all_dirs.contains_key(&**target) {
                     redirects.insert(&*link.path, target);
                 }
             }
@@ -134,7 +131,7 @@ impl<T: BlitFile> TreeBuilder<T> {
 
         // Reparent any symlink redirects.
         for (source_tree, target_tree) in redirects {
-            tree.reparent(source_tree, target_tree)?;
+            tree.reparent(source_tree, &target_tree)?;
         }
         Ok(tree)
     }
