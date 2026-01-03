@@ -73,7 +73,7 @@ impl<T: BlitFile> TreeBuilder<T> {
         self.explicit.sort_by(sorted_paths);
 
         // Walk again to remove accidental dupes
-        for i in self.explicit.iter() {
+        for i in &self.explicit {
             self.implicit_dirs.remove(&*i.path);
         }
     }
@@ -93,7 +93,7 @@ impl<T: BlitFile> TreeBuilder<T> {
         let mut redirects = BTreeMap::new();
 
         // Resolve symlinks-to-dirs
-        for link in self.explicit.iter() {
+        for link in &self.explicit {
             if let Kind::Symlink(target) = &link.kind {
                 // Resolve the link.
                 let target = if target.starts_with('/') {
