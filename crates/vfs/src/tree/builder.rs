@@ -5,7 +5,7 @@
 //! Build a vfs tree incrementally
 use std::collections::BTreeMap;
 
-use astr::{AStr, CowAStr};
+use astr::AStr;
 
 use crate::path;
 use crate::tree::{Kind, Tree};
@@ -80,43 +80,54 @@ impl<T: BlitFile> TreeBuilder<T> {
 
     /// Generate the final tree by baking all inputs
     pub fn tree(self) -> Result<Tree<T>, Error> {
+        let estimated_capacity = self.implicit_dirs.len() + self.explicit.len();
+
+        // Pre-allocate some space to avoid excessive reallocation.
+        //
+        // Numbers are chosen such that with the real-world vfs profiled
+        // locally, we're still a decent bit lower than the size these will
+        // end up at (so we don't allocate more than we need).
+        let mut dirs = Vec::with_capacity(self.explicit.len() / 512);
+        let mut non_dirs = Vec::with_capacity(self.explicit.len() / 4);
+        for file in self.explicit {
+            if file.kind.is_directory() {
+                dirs.push(file);
+            } else {
+                non_dirs.push(file);
+            }
+        }
+
         // Chain all directories, replace implicits with explicit
-        let all_dirs = self
-            .explicit
-            .iter()
-            .filter(|f| f.kind.is_directory())
-            .chain(self.implicit_dirs.values())
-            .map(|d| (&*d.path, d))
+        let all_dirs = dirs
+            .into_iter()
+            .chain(self.implicit_dirs.into_values())
+            .map(|d| (d.path.astr(), d))
             .collect::<BTreeMap<_, _>>();
 
         // build a set of redirects
         let mut redirects = BTreeMap::new();
 
         // Resolve symlinks-to-dirs
-        for link in &self.explicit {
+        for link in &non_dirs {
             if let Kind::Symlink(target) = &link.kind {
                 // Resolve the link.
                 let target = if target.starts_with('/') {
-                    CowAStr::Borrowed(target)
+                    target.clone()
                 } else if let Some(parent) = link.parent() {
-                    CowAStr::Owned(path::join(parent, target))
+                    path::join(parent, target)
                 } else {
-                    CowAStr::Borrowed(target)
+                    target.clone()
                 };
-                if all_dirs.contains_key(&**target) {
-                    redirects.insert(&*link.path, target);
+                if all_dirs.contains_key(&target) {
+                    redirects.insert(link.path.astr(), target);
                 }
             }
         }
 
         // Insert everything WITHOUT redirects, directory first.
-        let mut full_set = all_dirs
-            .into_values()
-            .chain(self.explicit.iter().filter(|m| !m.kind.is_directory()))
-            .collect::<Vec<_>>();
+        let mut full_set = all_dirs.into_values().chain(non_dirs).collect::<Vec<_>>();
         full_set.sort_by(|a, b| sorted_paths(a, b));
 
-        let estimated_capacity = self.implicit_dirs.len() + self.explicit.len();
         let mut tree: Tree<T> = Tree::with_capacity(estimated_capacity);
 
         // Build the initial full tree now.
@@ -131,7 +142,7 @@ impl<T: BlitFile> TreeBuilder<T> {
 
         // Reparent any symlink redirects.
         for (source_tree, target_tree) in redirects {
-            tree.reparent(source_tree, &target_tree)?;
+            tree.reparent(&source_tree, &target_tree)?;
         }
         Ok(tree)
     }
