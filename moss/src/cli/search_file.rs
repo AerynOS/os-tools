@@ -51,7 +51,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
                 let resolved = client.registry.by_id(&id).next();
                 if let Some(pkg) = resolved {
                     let name = pkg.meta.name;
-                    println!("{prefix}{file} from {}", name.to_string().bold());
+                    println!("{prefix}{file} from {}", name.as_str().bold());
                 }
             }
         }

@@ -578,7 +578,7 @@ impl Client {
                         .with_message(format!(
                             "{} {}",
                             "Downloading".blue(),
-                            package.meta.name.to_string().bold(),
+                            package.meta.name.as_str().bold(),
                         ))
                         .with_style(
                             ProgressStyle::with_template(
