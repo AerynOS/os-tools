@@ -284,7 +284,7 @@ fn update(
 async fn fetch_hash(uri: Url, mpb: &MultiProgress) -> Result<String, Error> {
     let pb = mpb.add(
         ProgressBar::new(u64::MAX)
-            .with_message(format!("{} {}", "Fetching".blue(), uri.to_string().bold()))
+            .with_message(format!("{} {}", "Fetching".blue(), uri.as_str().bold()))
             .with_style(
                 ProgressStyle::with_template(" {spinner} {wide_msg} {binary_bytes_per_sec:>.dim} ")
                     .unwrap()

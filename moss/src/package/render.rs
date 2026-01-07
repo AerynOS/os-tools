@@ -37,7 +37,7 @@ impl ColumnDisplay for &Package {
         _ = write!(
             writer,
             "{} {:width$}{}-{}",
-            self.meta.name.to_string().bold(),
+            self.meta.name.as_str().bold(),
             " ",
             self.meta.version_identifier.clone().magenta(),
             self.meta.source_release.to_string().dim(),
@@ -72,7 +72,7 @@ impl<'a> ColumnDisplay for package::Update<'a> {
         _ = write!(
             writer,
             "{} {:width$}{old_version_diff} -> {new_version_diff}",
-            self.new.meta.name.to_string().bold(),
+            self.new.meta.name.as_str().bold(),
             " ",
         );
 

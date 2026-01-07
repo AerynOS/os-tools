@@ -84,7 +84,7 @@ impl ColumnDisplay for Output {
         let _ = write!(
             writer,
             "{}{:width$}  {}",
-            self.name.to_string().bold(),
+            self.name.as_str().bold(),
             " ".repeat(width),
             self.summary
         );

@@ -141,7 +141,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
 
     // Print each package to stdout
     for package in &removed {
-        println!("{} {}", "Removed".red(), package.meta.name.to_string().bold());
+        println!("{} {}", "Removed".red(), package.meta.name.as_str().bold());
     }
 
     // Map finalized state to a [`Selection`] by referencing
