@@ -49,6 +49,7 @@ url.workspace = true
 xxhash-rust.workspace = true
 zbus.workspace = true
 astr.workspace = true
+rustix-uring = { git = "https://github.com/joebonrichie/rustix-uring", version = "0.6.0", rev = "9903d8f95c3002b795849a65a1c1b07adcbbd550" }
 
 [package.metadata.cargo-machete]
 # Needed for unixepoch() in src/db/state/migrations/2025-03-04-201550_init/up.sql

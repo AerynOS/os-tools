@@ -11,10 +11,11 @@
 
 use std::{
     borrow::Borrow,
+    ffi::CString,
     fmt, io,
     os::{fd::RawFd, unix::fs::symlink},
     path::{Path, PathBuf},
-    sync::{Arc, RwLock},
+    sync::{Arc, Mutex, RwLock},
     time::{Duration, Instant},
 };
 
@@ -30,6 +31,11 @@ use nix::{
 };
 use postblit::TriggerScope;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rustix_uring::{
+    IoUring, opcode,
+    squeue::Flags,
+    types::{self, AtFlags},
+};
 use stone::{payload::layout, read::PayloadKind};
 use thiserror::Error;
 use tui::{MultiProgress, ProgressBar, ProgressStyle, Styled};
@@ -779,6 +785,8 @@ impl Client {
         // multithreading when CLONE into a user namespace / "container"
         let rayon_runtime = rayon::ThreadPoolBuilder::new().build().expect("rayon runtime");
 
+        let ring = Arc::new(Mutex::new(IoUring::new(512).expect("bro")));
+
         //rayon_runtime.install(|| -> Result<(), Error> {
         if let Some(root) = tree.structured() {
             let _ = mkdir(&blit_target, Mode::from_bits_truncate(0o755));
@@ -788,7 +796,7 @@ impl Client {
                 let current_span = tracing::Span::current();
                 children.into_iter().try_for_each(|child| {
                     let _guard = current_span.enter();
-                    self.blit_element(root_dir, cache_fd, child, &progress, &stats)
+                    self.blit_element(root_dir, cache_fd, child, &progress, &stats, Arc::clone(&ring))
                 })?;
             }
 
@@ -824,6 +832,7 @@ impl Client {
         element: Element<'_, PendingFile>,
         progress: &ProgressBar,
         stats: &Arc<RwLock<BlitStats>>,
+        ring: Arc<Mutex<IoUring>>,
     ) -> Result<(), Error> {
         progress.inc(1);
 
@@ -844,7 +853,7 @@ impl Client {
         match element {
             Element::Directory(name, item, children) => {
                 // Construct within the parent
-                self.blit_element_item(parent, cache, name, item, stats)?;
+                self.blit_element_item(parent, cache, name, item, stats, Arc::clone(&ring))?;
 
                 // open the new dir
                 let newdir = fcntl::openat(parent, name, OFlag::O_RDONLY | OFlag::O_DIRECTORY, Mode::empty())?;
@@ -852,7 +861,7 @@ impl Client {
                 let current_span = tracing::Span::current();
                 children.into_iter().try_for_each(|child| {
                     let _guard = current_span.enter();
-                    self.blit_element(newdir, cache, child, progress, stats)
+                    self.blit_element(newdir, cache, child, progress, stats, Arc::clone(&ring))
                 })?;
 
                 close(newdir)?;
@@ -860,7 +869,7 @@ impl Client {
                 Ok(())
             }
             Element::Child(name, item) => {
-                self.blit_element_item(parent, cache, name, item, stats)?;
+                self.blit_element_item(parent, cache, name, item, stats, Arc::clone(&ring))?;
 
                 Ok(())
             }
@@ -882,7 +891,10 @@ impl Client {
         subpath: &str,
         item: &PendingFile,
         stats: &Arc<RwLock<BlitStats>>,
+        ring: Arc<Mutex<IoUring>>,
     ) -> Result<(), Error> {
+        let subpath_c = CString::new(subpath).unwrap();
+
         match &item.layout.entry {
             layout::Entry::Regular(id, _) => {
                 let hash = format!("{id:02x}");
@@ -909,21 +921,39 @@ impl Client {
                     }
                     // Regular file
                     _ => {
-                        linkat(
-                            Some(cache),
-                            fp.to_str().unwrap(),
-                            Some(parent),
-                            subpath,
-                            nix::unistd::LinkatFlags::NoSymlinkFollow,
-                        )?;
+                        let fp_c = CString::new(fp.to_str().unwrap()).unwrap();
 
-                        // Fix permissions
-                        fchmodat(
-                            Some(parent),
-                            subpath,
-                            Mode::from_bits_truncate(item.layout.mode),
-                            nix::sys::stat::FchmodatFlags::NoFollowSymlink,
-                        )?;
+                        let link_e =
+                            opcode::LinkAt::new(types::Fd(cache), fp_c.as_ptr(), types::Fd(parent), subpath_c.as_ptr())
+                                .build()
+                                .flags(Flags::IO_LINK);
+
+                        let fchmod_e = opcode::FchmodAt::new(
+                            types::Fd(parent),
+                            subpath_c.as_ptr(),
+                            types::Mode::from_bits_truncate(item.layout.mode),
+                        )
+                        .flags(AtFlags::SYMLINK_NOFOLLOW)
+                        .build()
+                        .flags(Flags::IO_LINK);
+
+                        let ring_raw = ring.lock().unwrap();
+                        unsafe {
+                            let mut sq = ring_raw.submission_shared();
+                            sq.push_multiple(&[link_e, fchmod_e]).expect("submission queue is full");
+                        }
+                        ring_raw.submit_and_wait(2).expect("link/fchmod");
+
+                        unsafe {
+                            for cqe in ring_raw.completion_shared() {
+                                if let Err(e) = cqe.result() {
+                                    return Err(io::Error::from_raw_os_error(e.raw_os_error()).into());
+                                }
+                            }
+                        }
+
+                        let mut stats_raw = stats.write().unwrap();
+                        stats_raw.num_files += 1;
                     }
                 }
 
@@ -933,14 +963,55 @@ impl Client {
                 }
             }
             layout::Entry::Symlink(source, _) => {
-                symlinkat(source.as_str(), Some(parent), subpath)?;
+                let source_c = CString::new(source.as_str()).unwrap();
+
+                let symlink_e =
+                    opcode::SymlinkAt::new(types::Fd(parent), source_c.as_ptr(), subpath_c.as_ptr()).build();
+
+                let ring_raw = ring.lock().unwrap();
+                unsafe {
+                    ring_raw
+                        .submission_shared()
+                        .push(&symlink_e)
+                        .expect("submission queue is full");
+                }
+                ring_raw.submit_and_wait(1).expect("symlink king");
+
+                unsafe {
+                    let cqe = ring_raw.completion_shared().next().expect("completion queue was empty");
+
+                    if let Err(e) = cqe.result() {
+                        return Err(io::Error::from_raw_os_error(e.raw_os_error()).into());
+                    }
+                }
+
                 let mut stats_raw = stats.write().unwrap();
                 {
                     stats_raw.num_symlinks += 1;
                 }
             }
             layout::Entry::Directory(_) => {
-                mkdirat(parent, subpath, Mode::from_bits_truncate(item.layout.mode))?;
+                let mkdir_e = opcode::MkDirAt::new(types::Fd(parent), subpath_c.as_ptr())
+                    .mode(types::Mode::from_bits_truncate(item.layout.mode))
+                    .build();
+
+                let ring_raw = ring.lock().unwrap();
+                unsafe {
+                    ring_raw
+                        .submission_shared()
+                        .push(&mkdir_e)
+                        .expect("submission queue is full");
+                }
+                ring_raw.submit_and_wait(1).expect("yes queen");
+
+                unsafe {
+                    let cqe = ring_raw.completion_shared().next().expect("completion queue was empty");
+
+                    if let Err(e) = cqe.result() {
+                        return Err(io::Error::from_raw_os_error(e.raw_os_error()).into());
+                    }
+                }
+
                 let mut stats_raw = stats.write().unwrap();
                 {
                     stats_raw.num_dirs += 1;
@@ -1295,4 +1366,6 @@ pub enum Error {
     LoadSystemModel(#[from] system_model::LoadError),
     #[error("update system model")]
     UpdateSystemModel(#[from] system_model::UpdateError),
+    //#[error("rustix uring failed")]
+    //RustixUring(#[from] rustix_uring::Errno),
 }
