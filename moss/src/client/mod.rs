@@ -934,8 +934,7 @@ impl Client {
                             types::Mode::from_bits_truncate(item.layout.mode),
                         )
                         .flags(AtFlags::SYMLINK_NOFOLLOW)
-                        .build()
-                        .flags(Flags::IO_LINK);
+                        .build();
 
                         let ring_raw = ring.lock().unwrap();
                         unsafe {
