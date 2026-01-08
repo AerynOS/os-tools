@@ -14,6 +14,7 @@ use std::{
     fmt, io,
     os::{fd::RawFd, unix::fs::symlink},
     path::{Path, PathBuf},
+    sync::{Arc, RwLock},
     time::{Duration, Instant},
 };
 
@@ -755,7 +756,7 @@ impl Client {
         progress.tick();
 
         let now = Instant::now();
-        let mut stats = BlitStats::default();
+        let stats = Arc::new(RwLock::new(BlitStats::default()));
 
         let tree = self.vfs(packages)?;
 
@@ -778,34 +779,30 @@ impl Client {
         // multithreading when CLONE into a user namespace / "container"
         let rayon_runtime = rayon::ThreadPoolBuilder::new().build().expect("rayon runtime");
 
-        rayon_runtime.install(|| -> Result<(), Error> {
-            if let Some(root) = tree.structured() {
-                let _ = mkdir(&blit_target, Mode::from_bits_truncate(0o755));
-                let root_dir = fcntl::open(&blit_target, OFlag::O_DIRECTORY | OFlag::O_RDONLY, Mode::empty())?;
+        //rayon_runtime.install(|| -> Result<(), Error> {
+        if let Some(root) = tree.structured() {
+            let _ = mkdir(&blit_target, Mode::from_bits_truncate(0o755));
+            let root_dir = fcntl::open(&blit_target, OFlag::O_DIRECTORY | OFlag::O_RDONLY, Mode::empty())?;
 
-                if let Element::Directory(_, _, children) = root {
-                    let current_span = tracing::Span::current();
-                    stats = stats.merge(
-                        children
-                            .into_par_iter()
-                            .map(|child| {
-                                let _guard = current_span.enter();
-                                self.blit_element(root_dir, cache_fd, child, &progress)
-                            })
-                            .try_reduce(BlitStats::default, |a, b| Ok(a.merge(b)))?,
-                    );
-                }
-
-                close(root_dir)?;
+            if let Element::Directory(_, _, children) = root {
+                let current_span = tracing::Span::current();
+                children.into_iter().try_for_each(|child| {
+                    let _guard = current_span.enter();
+                    self.blit_element(root_dir, cache_fd, child, &progress, &stats)
+                })?;
             }
 
-            Ok(())
-        })?;
+            close(root_dir)?;
+        }
+
+        //    Ok(())
+        //})?;
 
         progress.finish_and_clear();
 
         let elapsed = now.elapsed();
-        let num_entries = stats.num_entries();
+        let stats_raw = stats.write().unwrap();
+        let num_entries = stats_raw.num_entries();
 
         println!(
             "\n{} entries blitted in {} {}",
@@ -826,9 +823,8 @@ impl Client {
         cache: RawFd,
         element: Element<'_, PendingFile>,
         progress: &ProgressBar,
-    ) -> Result<BlitStats, Error> {
-        let mut stats = BlitStats::default();
-
+        stats: &Arc<RwLock<BlitStats>>,
+    ) -> Result<(), Error> {
         progress.inc(1);
 
         let (_, item) = match &element {
@@ -848,30 +844,25 @@ impl Client {
         match element {
             Element::Directory(name, item, children) => {
                 // Construct within the parent
-                self.blit_element_item(parent, cache, name, item, &mut stats)?;
+                self.blit_element_item(parent, cache, name, item, stats)?;
 
                 // open the new dir
                 let newdir = fcntl::openat(parent, name, OFlag::O_RDONLY | OFlag::O_DIRECTORY, Mode::empty())?;
 
                 let current_span = tracing::Span::current();
-                stats = stats.merge(
-                    children
-                        .into_par_iter()
-                        .map(|child| {
-                            let _guard = current_span.enter();
-                            self.blit_element(newdir, cache, child, progress)
-                        })
-                        .try_reduce(BlitStats::default, |a, b| Ok(a.merge(b)))?,
-                );
+                children.into_iter().try_for_each(|child| {
+                    let _guard = current_span.enter();
+                    self.blit_element(newdir, cache, child, progress, stats)
+                })?;
 
                 close(newdir)?;
 
-                Ok(stats)
+                Ok(())
             }
             Element::Child(name, item) => {
-                self.blit_element_item(parent, cache, name, item, &mut stats)?;
+                self.blit_element_item(parent, cache, name, item, stats)?;
 
-                Ok(stats)
+                Ok(())
             }
         }
     }
@@ -890,7 +881,7 @@ impl Client {
         cache: RawFd,
         subpath: &str,
         item: &PendingFile,
-        stats: &mut BlitStats,
+        stats: &Arc<RwLock<BlitStats>>,
     ) -> Result<(), Error> {
         match &item.layout.entry {
             layout::Entry::Regular(id, _) => {
@@ -936,15 +927,24 @@ impl Client {
                     }
                 }
 
-                stats.num_files += 1;
+                let mut stats_raw = stats.write().unwrap();
+                {
+                    stats_raw.num_files += 1;
+                }
             }
             layout::Entry::Symlink(source, _) => {
                 symlinkat(source.as_str(), Some(parent), subpath)?;
-                stats.num_symlinks += 1;
+                let mut stats_raw = stats.write().unwrap();
+                {
+                    stats_raw.num_symlinks += 1;
+                }
             }
             layout::Entry::Directory(_) => {
                 mkdirat(parent, subpath, Mode::from_bits_truncate(item.layout.mode))?;
-                stats.num_dirs += 1;
+                let mut stats_raw = stats.write().unwrap();
+                {
+                    stats_raw.num_dirs += 1;
+                }
             }
 
             // unimplemented
