@@ -27,6 +27,9 @@ enum Fragment {
     MatchOne,
 
     /// `*`
+    MatchAnyExceptForwardSlash,
+
+    /// `**`
     MatchAny,
 
     /// `\`
@@ -77,6 +80,10 @@ impl<'a> StringWalker<'a> {
 
     pub fn eat(&mut self, much: usize) {
         self.index += much;
+    }
+
+    pub fn peek(&self) -> Option<char> {
+        self.data.get(self.index..self.index + 1).and_then(|s| s.chars().nth(0))
     }
 
     /// Find next occurrence of the character, and substring up to it
@@ -161,7 +168,11 @@ fn fragments_from_string(s: &str) -> Result<Vec<Fragment>, Error> {
     while let Some(ch) = walker.next() {
         let next_token = match ch {
             '?' => Some(Fragment::MatchOne),
-            '*' => Some(Fragment::MatchAny),
+            '*' if walker.peek() == Some('*') => {
+                walker.eat(1);
+                Some(Fragment::MatchAny)
+            }
+            '*' => Some(Fragment::MatchAnyExceptForwardSlash),
             '\\' => Some(Fragment::BackSlash),
             '/' => Some(Fragment::ForwardSlash),
             '.' => Some(Fragment::Dot),
@@ -211,7 +222,8 @@ fn fragment_to_regex_str(fragment: &Fragment) -> (String, Vec<String>) {
     let mut groups = vec![];
     let string = match fragment {
         Fragment::MatchOne => ".".into(),
-        Fragment::MatchAny => "[^\\/]*".into(),
+        Fragment::MatchAnyExceptForwardSlash => "[^\\/]*".into(),
+        Fragment::MatchAny => ".*".into(),
         Fragment::BackSlash => "\\".into(),
         Fragment::ForwardSlash => "\\/".into(),
         Fragment::Dot => "\\.".into(),
@@ -310,5 +322,11 @@ pub mod path_tests {
 
         let wide = k.match_path("/usr/lib/modules/6.6.67-51.kvm/kernel/net/netfilter/nft_hash.ko.zst");
         assert!(wide.is_none());
+    }
+
+    #[test]
+    fn test_match_any_regex() {
+        let pattern = "/usr/share/fonts/**/*.ttf".parse::<Pattern>().unwrap();
+        assert_eq!(pattern.regex.as_str(), r#"^\/usr\/share\/fonts\/.*\/[^\/]*\.ttf$"#);
     }
 }
