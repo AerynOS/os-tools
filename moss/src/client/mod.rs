@@ -950,9 +950,6 @@ impl Client {
                                 }
                             }
                         }
-
-                        let mut stats_raw = stats.write().unwrap();
-                        stats_raw.num_files += 1;
                     }
                 }
 
