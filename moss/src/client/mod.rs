@@ -785,7 +785,9 @@ impl Client {
         // multithreading when CLONE into a user namespace / "container"
         let rayon_runtime = rayon::ThreadPoolBuilder::new().build().expect("rayon runtime");
 
-        let ring = Arc::new(Mutex::new(IoUring::new(512).expect("bro")));
+        let ring = Arc::new(Mutex::new(
+            IoUring::builder().setup_sqpoll(10000).build(512).expect("bro"),
+        ));
 
         //rayon_runtime.install(|| -> Result<(), Error> {
         if let Some(root) = tree.structured() {
