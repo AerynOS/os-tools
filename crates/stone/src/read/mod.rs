@@ -80,6 +80,7 @@ impl<R: Read> PayloadReader<R> {
         Ok(match compression {
             Compression::None => PayloadReader::Plain(reader),
             Compression::Zstd => PayloadReader::Zstd(Zstd::new(reader)?),
+            Compression::Unknown => return Err(Error::UnknownCompression),
         })
     }
 }
@@ -100,6 +101,11 @@ pub enum PayloadKind {
     Layout(Payload<Vec<Layout>>),
     Index(Payload<Vec<Index>>),
     Content(Payload<Content>),
+
+    /// Payload type not known / supported by this decoder
+    Unknown(Payload<()>),
+    /// Payload compression type not known / supported by this decoder
+    UnknownCompression(Payload<()>),
 }
 
 impl PayloadKind {
@@ -109,6 +115,14 @@ impl PayloadKind {
                 hasher.reset();
                 let mut hashed = digest::Reader::new(&mut reader, hasher);
                 let mut framed = (&mut hashed).take(header.stored_size);
+
+                // Don't try to decode if unknown compression (we can't) & instead skip this payload
+                // so we can continue decoding
+                if matches!(header.compression, Compression::Unknown) {
+                    reader.seek(SeekFrom::Current(header.stored_size as i64))?;
+
+                    return Ok(Some(PayloadKind::UnknownCompression(Payload { header, body: () })));
+                }
 
                 let payload = match header.kind {
                     payload::Kind::Meta => PayloadKind::Meta(Payload {
@@ -150,11 +164,16 @@ impl PayloadKind {
                             body: Content { offset },
                         })
                     }
-                    payload::Kind::Dumb => unimplemented!("??"),
+                    payload::Kind::Unknown => {
+                        // Skip past, we don't know how to decode this
+                        reader.seek(SeekFrom::Current(header.stored_size as i64))?;
+
+                        PayloadKind::Unknown(Payload { header, body: () })
+                    }
                 };
 
-                // Validate hash for non-content payloads
-                if !matches!(header.kind, payload::Kind::Content) {
+                // Validate hash for known, non-content payloads
+                if !matches!(header.kind, payload::Kind::Content | payload::Kind::Unknown) {
                     validate_checksum(hasher, &header)?;
                 }
 
@@ -208,6 +227,15 @@ impl PayloadKind {
             PayloadKind::Layout(_) => "Layout",
             PayloadKind::Index(_) => "Index",
             PayloadKind::Content(_) => "Content",
+            PayloadKind::Unknown(_) => "Unknown payload type",
+            PayloadKind::UnknownCompression(payload) => match payload.header.kind {
+                payload::Kind::Unknown => "Unknown payload type & compression",
+                payload::Kind::Meta => "Meta - unknown compression",
+                payload::Kind::Content => "Content - unknown compression",
+                payload::Kind::Layout => "Layout - unknown compression",
+                payload::Kind::Index => "Index - unknown compression",
+                payload::Kind::Attributes => "Attributes - unknown compression",
+            },
         }
     }
 }
@@ -227,6 +255,8 @@ fn validate_checksum(hasher: &digest::Hasher, header: &payload::Header) -> Resul
 pub enum Error {
     #[error("Multiple content payloads not allowed")]
     MultipleContent,
+    #[error("Unknown payload compression")]
+    UnknownCompression,
     #[error("header decode")]
     HeaderDecode(#[from] header::DecodeError),
     #[error("payload decode")]
