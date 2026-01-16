@@ -17,9 +17,9 @@ pub struct Meta {
     pub kind: Kind,
 }
 
-#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display)]
 #[strum(serialize_all = "lowercase")]
+#[repr(u8)]
 pub enum Dependency {
     /// Just the plain name of a package
     #[strum(serialize = "name")]
@@ -50,9 +50,10 @@ pub enum Dependency {
 
     /// An emul32-compatible pkgconfig .pc dependency (lib32/*.pc)
     PkgConfig32,
+
+    Unknown = 255,
 }
 
-#[repr(u8)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Kind {
     Int8(i8),
@@ -66,6 +67,7 @@ pub enum Kind {
     String(String),
     Dependency(Dependency, String),
     Provider(Dependency, String),
+    Unknown(Vec<u8>),
 }
 
 impl Kind {
@@ -85,58 +87,61 @@ impl Kind {
             Kind::Dependency(_, s) => s.len() + 2,
             // Plus dep size & nul terminator
             Kind::Provider(_, s) => s.len() + 2,
+            Kind::Unknown(data) => data.len(),
         }
     }
 }
 
-#[repr(u16)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u16)]
 pub enum Tag {
     // Name of the package
     Name = 1,
     // Architecture of the package
-    Architecture = 2,
+    Architecture,
     // Version of the package
-    Version = 3,
+    Version,
     // Summary of the package
-    Summary = 4,
+    Summary,
     // Description of the package
-    Description = 5,
+    Description,
     // Homepage for the package
-    Homepage = 6,
+    Homepage,
     // ID for the source package, used for grouping
-    SourceID = 7,
+    SourceID,
     // Runtime dependencies
-    Depends = 8,
+    Depends,
     // Provides some capability or name
-    Provides = 9,
+    Provides,
     // Conflicts with some capability or name
-    Conflicts = 10,
+    Conflicts,
     // Release number for the package
-    Release = 11,
+    Release,
     // SPDX license identifier
-    License = 12,
+    License,
     // Currently recorded build number
-    BuildRelease = 13,
+    BuildRelease,
     // Repository index specific (relative URI)
-    PackageURI = 14,
+    PackageURI,
     // Repository index specific (Package hash)
-    PackageHash = 15,
+    PackageHash,
     // Repository index specific (size on disk)
-    PackageSize = 16,
+    PackageSize,
     // A Build Dependency
-    BuildDepends = 17,
+    BuildDepends,
     // Upstream URI for the source
-    SourceURI = 18,
+    SourceURI,
     // Relative path for the source within the upstream URI
-    SourcePath = 19,
+    SourcePath,
     // Ref/commit of the upstream source
-    SourceRef = 20,
+    SourceRef,
+
+    Unknown = u16::MAX,
 }
 
 /// Helper to decode a dependency's encoded kind
-fn decode_dependency(i: u8) -> Result<Dependency, DecodeError> {
-    let result = match i {
+fn decode_dependency(i: u8) -> Dependency {
+    match i {
         0 => Dependency::PackageName,
         1 => Dependency::SharedLibrary,
         2 => Dependency::PkgConfig,
@@ -146,9 +151,8 @@ fn decode_dependency(i: u8) -> Result<Dependency, DecodeError> {
         6 => Dependency::Binary,
         7 => Dependency::SystemBinary,
         8 => Dependency::PkgConfig32,
-        _ => return Err(DecodeError::UnknownDependency(i)),
-    };
-    Ok(result)
+        _ => Dependency::Unknown,
+    }
 }
 
 impl Record for Meta {
@@ -176,7 +180,7 @@ impl Record for Meta {
             18 => Tag::SourceURI,
             19 => Tag::SourcePath,
             20 => Tag::SourceRef,
-            t => return Err(DecodeError::UnknownMetaTag(t)),
+            _ => Tag::Unknown,
         };
 
         let kind = reader.read_u8()?;
@@ -197,15 +201,15 @@ impl Record for Meta {
             9 => Kind::String(sanitize(reader.read_string(length as u64)?)),
             10 => Kind::Dependency(
                 // DependencyKind u8 subtracted from length
-                decode_dependency(reader.read_u8()?)?,
+                decode_dependency(reader.read_u8()?),
                 sanitize(reader.read_string(length as u64 - 1)?),
             ),
             11 => Kind::Provider(
                 // DependencyKind u8 subtracted from length
-                decode_dependency(reader.read_u8()?)?,
+                decode_dependency(reader.read_u8()?),
                 sanitize(reader.read_string(length as u64 - 1)?),
             ),
-            k => return Err(DecodeError::UnknownMetaKind(k)),
+            _ => Kind::Unknown(reader.read_vec(length as usize)?),
         };
 
         Ok(Self { tag, kind })
@@ -224,6 +228,7 @@ impl Record for Meta {
             Kind::String(_) => 9,
             Kind::Dependency(_, _) => 10,
             Kind::Provider(_, _) => 11,
+            Kind::Unknown(_) => 255,
         };
 
         writer.write_u32(self.kind.size() as u32)?;
@@ -249,6 +254,9 @@ impl Record for Meta {
                 writer.write_u8(*dep as u8)?;
                 writer.write_all(s.as_bytes())?;
                 writer.write_u8(b'\0')?;
+            }
+            Kind::Unknown(data) => {
+                writer.write_all(data)?;
             }
         }
 

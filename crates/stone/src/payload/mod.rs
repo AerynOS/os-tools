@@ -17,30 +17,32 @@ pub use self::layout::Layout;
 pub use self::meta::Meta;
 use crate::{ReadExt, WriteExt};
 
-#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
 pub enum Kind {
     // The Metadata store
     Meta = 1,
     // File store, i.e. hash indexed
-    Content = 2,
+    Content,
     // Map Files to Disk with basic UNIX permissions + types
-    Layout = 3,
+    Layout,
     // For indexing the deduplicated store
-    Index = 4,
+    Index,
     // Attribute storage
-    Attributes = 5,
-    // For Writer interim
-    Dumb = 6,
+    Attributes,
+
+    Unknown = 255,
 }
 
-#[repr(u8)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
 pub enum Compression {
     // Payload has no compression
     None = 1,
     // Payload uses ZSTD compression
-    Zstd = 2,
+    Zstd,
+
+    Unknown = 255,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -71,14 +73,13 @@ impl Header {
             3 => Kind::Layout,
             4 => Kind::Index,
             5 => Kind::Attributes,
-            6 => Kind::Dumb,
-            k => return Err(DecodeError::UnknownKind(k)),
+            _ => Kind::Unknown,
         };
 
         let compression = match reader.read_u8()? {
             1 => Compression::None,
             2 => Compression::Zstd,
-            d => return Err(DecodeError::UnknownCompression(d)),
+            _ => Compression::Unknown,
         };
 
         Ok(Self {
@@ -140,18 +141,6 @@ pub struct Payload<T> {
 
 #[derive(Debug, Error)]
 pub enum DecodeError {
-    #[error("Unknown header type: {0}")]
-    UnknownKind(u8),
-    #[error("Unknown header compression: {0}")]
-    UnknownCompression(u8),
-    #[error("Unknown metadata type: {0}")]
-    UnknownMetaKind(u8),
-    #[error("Unknown metadata tag: {0}")]
-    UnknownMetaTag(u16),
-    #[error("Unknown file type: {0}")]
-    UnknownFileType(u8),
-    #[error("Unknown dependency type: {0}")]
-    UnknownDependency(u8),
     #[error("io")]
     Io(#[from] io::Error),
 }
