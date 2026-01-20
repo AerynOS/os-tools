@@ -11,8 +11,8 @@ const INTEGRITY_CHECK: [u8; 21] = [0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0, 5, 
 ///
 /// Some types are now legacy as we're going to use Ion to define them.
 ///
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileType {
     /// Binary package
     Binary = 1,
@@ -25,8 +25,6 @@ pub enum FileType {
 
     /// (Legacy) build manifest
     BuildManifest,
-
-    Unknown = 255,
 }
 
 /// Header for the v1 format version
@@ -51,7 +49,7 @@ impl Header {
             2 => FileType::Delta,
             3 => FileType::Repository,
             4 => FileType::BuildManifest,
-            _ => FileType::Unknown,
+            f => return Err(DecodeError::UnknownFileType(f)),
         };
 
         Ok(Self {
@@ -78,4 +76,6 @@ impl Header {
 pub enum DecodeError {
     #[error("Corrupt header, failed integrity check")]
     Corrupt,
+    #[error("Unknown file type: {0}")]
+    UnknownFileType(u8),
 }

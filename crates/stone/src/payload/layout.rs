@@ -11,8 +11,8 @@ use crate::{ReadExt, WriteExt};
 
 /// Layout entries record their target file type so they can be rebuilt on
 /// the target installation.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum FileType {
     /// Regular file
     Regular = 1,
@@ -34,8 +34,6 @@ pub enum FileType {
 
     /// UNIX Socket
     Socket,
-
-    Unknown = 255,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,8 +47,6 @@ pub enum Entry {
     BlockDevice(AStr),
     Fifo(AStr),
     Socket(AStr),
-
-    Unknown(AStr, AStr),
 }
 
 impl Entry {
@@ -63,20 +59,18 @@ impl Entry {
             Entry::BlockDevice(_) => vec![],
             Entry::Fifo(_) => vec![],
             Entry::Socket(_) => vec![],
-            Entry::Unknown(source, _) => source.as_bytes().to_vec(),
         }
     }
 
     pub fn target(&self) -> &str {
         match self {
-            Entry::Regular(_, target)
-            | Entry::Symlink(_, target)
-            | Entry::Directory(target)
-            | Entry::CharacterDevice(target)
-            | Entry::BlockDevice(target)
-            | Entry::Fifo(target)
-            | Entry::Socket(target)
-            | Entry::Unknown(_, target) => target,
+            Entry::Regular(_, target) => target,
+            Entry::Symlink(_, target) => target,
+            Entry::Directory(target) => target,
+            Entry::CharacterDevice(target) => target,
+            Entry::BlockDevice(target) => target,
+            Entry::Fifo(target) => target,
+            Entry::Socket(target) => target,
         }
     }
 
@@ -89,7 +83,6 @@ impl Entry {
             Entry::BlockDevice(_) => 5,
             Entry::Fifo(_) => 6,
             Entry::Socket(_) => 7,
-            Entry::Unknown(..) => 255,
         }
     }
 }
@@ -125,13 +118,14 @@ impl Record for Layout {
             5 => FileType::BlockDevice,
             6 => FileType::Fifo,
             7 => FileType::Socket,
-            _ => FileType::Unknown,
+            t => return Err(DecodeError::UnknownFileType(t)),
         };
 
         let _padding = reader.read_array::<11>()?;
 
         // Make the layout entry *usable*
         let entry = match file_type {
+            // BUG: boulder stores xxh128 as le bytes not be
             FileType::Regular => {
                 let source = reader.read_vec(source_length as usize)?;
                 let hash = u128::from_be_bytes(source.try_into().unwrap());
@@ -142,16 +136,12 @@ impl Record for Layout {
                 sanitize(&reader.read_string(target_length as u64)?).into(),
             ),
             FileType::Directory => Entry::Directory(sanitize(&reader.read_string(target_length as u64)?).into()),
-            FileType::CharacterDevice => {
-                Entry::CharacterDevice(sanitize(&reader.read_string(target_length as u64)?).into())
+            _ => {
+                if source_length > 0 {
+                    let _ = reader.read_vec(source_length as usize);
+                }
+                unreachable!()
             }
-            FileType::BlockDevice => Entry::BlockDevice(sanitize(&reader.read_string(target_length as u64)?).into()),
-            FileType::Fifo => Entry::Fifo(sanitize(&reader.read_string(target_length as u64)?).into()),
-            FileType::Socket => Entry::Socket(sanitize(&reader.read_string(target_length as u64)?).into()),
-            FileType::Unknown => Entry::Unknown(
-                sanitize(&reader.read_string(source_length as u64)?).into(),
-                sanitize(&reader.read_string(target_length as u64)?).into(),
-            ),
         };
 
         Ok(Self {

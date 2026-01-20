@@ -947,12 +947,11 @@ impl Client {
                 stats.num_dirs += 1;
             }
 
-            // Unimplemented
-            layout::Entry::CharacterDevice(_)
-            | layout::Entry::BlockDevice(_)
-            | layout::Entry::Fifo(_)
-            | layout::Entry::Socket(_)
-            | layout::Entry::Unknown(..) => {}
+            // unimplemented
+            layout::Entry::CharacterDevice(_) => todo!(),
+            layout::Entry::BlockDevice(_) => todo!(),
+            layout::Entry::Fifo(_) => todo!(),
+            layout::Entry::Socket(_) => todo!(),
         };
 
         Ok(())
@@ -1155,7 +1154,6 @@ impl BlitFile for PendingFile {
             layout::Entry::BlockDevice(target) => target.clone(),
             layout::Entry::Fifo(target) => target.clone(),
             layout::Entry::Socket(target) => target.clone(),
-            layout::Entry::Unknown(.., target) => target.clone(),
         };
 
         vfs::path::join("/usr", &result)
@@ -1172,7 +1170,6 @@ impl BlitFile for PendingFile {
             layout::Entry::BlockDevice(_) => layout::Entry::BlockDevice(path),
             layout::Entry::Fifo(_) => layout::Entry::Fifo(path),
             layout::Entry::Socket(_) => layout::Entry::Socket(path),
-            layout::Entry::Unknown(source, _) => layout::Entry::Unknown(source.clone(), path),
         };
         new
     }
