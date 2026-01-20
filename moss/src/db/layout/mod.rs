@@ -197,7 +197,6 @@ fn decode_entry(
         "block-device" => Some(Entry::BlockDevice(entry_value1?)),
         "fifo" => Some(Entry::Fifo(entry_value1?)),
         "socket" => Some(Entry::Socket(entry_value1?)),
-        "unknown" => Some(Entry::Unknown(entry_value1?, entry_value2?)),
         _ => None,
     }
 }
@@ -213,7 +212,6 @@ fn encode_entry(entry: &payload::layout::Entry) -> (&'static str, Option<Cow<'_,
         Entry::BlockDevice(name) => ("block-device", Some(name.into()), None),
         Entry::Fifo(name) => ("fifo", Some(name.into()), None),
         Entry::Socket(name) => ("socket", Some(name.into()), None),
-        Entry::Unknown(a, b) => ("unknown", Some(a.into()), Some(b)),
     }
 }
 

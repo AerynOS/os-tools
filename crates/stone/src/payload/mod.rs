@@ -17,32 +17,30 @@ pub use self::layout::Layout;
 pub use self::meta::Meta;
 use crate::{ReadExt, WriteExt};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     // The Metadata store
     Meta = 1,
     // File store, i.e. hash indexed
-    Content,
+    Content = 2,
     // Map Files to Disk with basic UNIX permissions + types
-    Layout,
+    Layout = 3,
     // For indexing the deduplicated store
-    Index,
+    Index = 4,
     // Attribute storage
-    Attributes,
-
-    Unknown = 255,
+    Attributes = 5,
+    // For Writer interim
+    Dumb = 6,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(u8)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Compression {
     // Payload has no compression
     None = 1,
     // Payload uses ZSTD compression
-    Zstd,
-
-    Unknown = 255,
+    Zstd = 2,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -73,13 +71,14 @@ impl Header {
             3 => Kind::Layout,
             4 => Kind::Index,
             5 => Kind::Attributes,
-            _ => Kind::Unknown,
+            6 => Kind::Dumb,
+            k => return Err(DecodeError::UnknownKind(k)),
         };
 
         let compression = match reader.read_u8()? {
             1 => Compression::None,
             2 => Compression::Zstd,
-            _ => Compression::Unknown,
+            d => return Err(DecodeError::UnknownCompression(d)),
         };
 
         Ok(Self {
@@ -141,6 +140,18 @@ pub struct Payload<T> {
 
 #[derive(Debug, Error)]
 pub enum DecodeError {
+    #[error("Unknown header type: {0}")]
+    UnknownKind(u8),
+    #[error("Unknown header compression: {0}")]
+    UnknownCompression(u8),
+    #[error("Unknown metadata type: {0}")]
+    UnknownMetaKind(u8),
+    #[error("Unknown metadata tag: {0}")]
+    UnknownMetaTag(u16),
+    #[error("Unknown file type: {0}")]
+    UnknownFileType(u8),
+    #[error("Unknown dependency type: {0}")]
+    UnknownDependency(u8),
     #[error("io")]
     Io(#[from] io::Error),
 }

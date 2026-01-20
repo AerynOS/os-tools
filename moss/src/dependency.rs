@@ -61,10 +61,10 @@ pub enum Kind {
     PkgConfig32,
 }
 
-impl Kind {
-    pub fn from_stone_dependency(dependency: payload::meta::Dependency) -> Option<Self> {
-        Some(match dependency {
-            payload::meta::Dependency::Unknown => return None,
+/// Convert payload dependency types to our internal representation
+impl From<payload::meta::Dependency> for Kind {
+    fn from(dependency: payload::meta::Dependency) -> Self {
+        match dependency {
             payload::meta::Dependency::PackageName => Kind::PackageName,
             payload::meta::Dependency::SharedLibrary => Kind::SharedLibrary,
             payload::meta::Dependency::PkgConfig => Kind::PkgConfig,
@@ -74,7 +74,7 @@ impl Kind {
             payload::meta::Dependency::Binary => Kind::Binary,
             payload::meta::Dependency::SystemBinary => Kind::SystemBinary,
             payload::meta::Dependency::PkgConfig32 => Kind::PkgConfig32,
-        })
+        }
     }
 }
 
