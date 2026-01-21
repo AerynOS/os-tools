@@ -126,7 +126,7 @@ checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
 name = "astr"
-version = "0.25.6"
+version = "0.26.1"
 dependencies = [
  "diesel",
  "stable_deref_trait",
@@ -262,7 +262,7 @@ dependencies = [
 
 [[package]]
 name = "boulder"
-version = "0.25.6"
+version = "0.26.1"
 dependencies = [
  "astr",
  "chrono",
@@ -560,7 +560,7 @@ dependencies = [
 
 [[package]]
 name = "config"
-version = "0.25.6"
+version = "0.26.1"
 dependencies = [
  "dirs",
  "fs-err",
@@ -590,7 +590,7 @@ checksum = "7c74b8349d32d297c9134b8c88677813a227df8f779daa29bfc29c183fe3dca6"
 
 [[package]]
 name = "container"
-version = "0.25.6"
+version = "0.26.1"
 dependencies = [
  "fs-err",
  "nc",
@@ -750,7 +750,7 @@ dependencies = [
 
 [[package]]
 name = "dag"
-version = "0.25.6"
+version = "0.26.1"
 dependencies = [
  "petgraph",
 ]
@@ -1089,7 +1089,7 @@ dependencies = [
 
 [[package]]
 name = "fnmatch"
-version = "0.25.6"
+version = "0.26.1"
 dependencies = [
  "regex",
  "serde_core",
@@ -1890,7 +1890,7 @@ dependencies = [
 
 [[package]]
 name = "moss"
-version = "0.25.6"
+version = "0.26.1"
 dependencies = [
  "astr",
  "blsforme",
@@ -2833,7 +2833,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "stone"
-version = "0.25.6"
+version = "0.26.1"
 dependencies = [
  "astr",
  "criterion",
@@ -2845,7 +2845,7 @@ dependencies = [
 
 [[package]]
 name = "stone_recipe"
-version = "0.25.6"
+version = "0.26.1"
 dependencies = [
  "nom",
  "serde",
@@ -3160,7 +3160,7 @@ checksum = "ab16f14aed21ee8bfd8ec22513f7287cd4a91aa92e44edfe2c17ddd004e92607"
 
 [[package]]
 name = "tools_buildinfo"
-version = "0.25.6"
+version = "0.26.1"
 dependencies = [
  "chrono",
  "thiserror",
@@ -3283,7 +3283,7 @@ dependencies = [
 
 [[package]]
 name = "tracing_common"
-version = "0.25.6"
+version = "0.26.1"
 dependencies = [
  "tracing",
  "tracing-subscriber",
@@ -3291,7 +3291,7 @@ dependencies = [
 
 [[package]]
 name = "triggers"
-version = "0.25.6"
+version = "0.26.1"
 dependencies = [
  "dag",
  "fnmatch",
@@ -3314,7 +3314,7 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tui"
-version = "0.25.6"
+version = "0.26.1"
 dependencies = [
  "crossterm",
  "dialoguer",
