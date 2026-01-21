@@ -213,7 +213,7 @@ fn meta_string(meta: &payload::Meta, tag: payload::meta::Tag) -> Option<String> 
 fn meta_dependency(meta: &payload::Meta) -> Option<Dependency> {
     if let payload::meta::Kind::Dependency(kind, name) = meta.kind.clone() {
         Some(Dependency {
-            kind: dependency::Kind::from(kind),
+            kind: dependency::Kind::from_stone_dependency(kind)?,
             name,
         })
     } else {
@@ -224,7 +224,7 @@ fn meta_dependency(meta: &payload::Meta) -> Option<Dependency> {
 fn meta_provider(meta: &payload::Meta) -> Option<Provider> {
     match (meta.tag, meta.kind.clone()) {
         (payload::meta::Tag::Provides, payload::meta::Kind::Provider(kind, name)) => Some(Provider {
-            kind: dependency::Kind::from(kind),
+            kind: dependency::Kind::from_stone_dependency(kind)?,
             name: name.clone(),
         }),
         _ => None,
@@ -234,7 +234,7 @@ fn meta_provider(meta: &payload::Meta) -> Option<Provider> {
 fn meta_conflict(meta: &payload::Meta) -> Option<Provider> {
     match (meta.tag, meta.kind.clone()) {
         (payload::meta::Tag::Conflicts, payload::meta::Kind::Provider(kind, name)) => Some(Provider {
-            kind: dependency::Kind::from(kind),
+            kind: dependency::Kind::from_stone_dependency(kind)?,
             name: name.clone(),
         }),
         _ => None,
