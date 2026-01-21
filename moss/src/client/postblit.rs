@@ -9,6 +9,7 @@
 //! Note that currently we only load from `/usr/share/moss/triggers/{tx,sys.d}/*.yaml`
 //! and do not yet support local triggers
 use std::{
+    collections::HashSet,
     path::{Path, PathBuf},
     process,
 };
@@ -20,6 +21,7 @@ use serde::Deserialize;
 use thiserror::Error;
 use tracing::{error, warn};
 use triggers::format::{CompiledHandler, Handler, Trigger};
+use vfs::tree::BlitFile;
 
 use super::PendingFile;
 
@@ -106,15 +108,15 @@ pub(super) struct TriggerRunner<'a> {
     trigger: CompiledHandler,
 }
 
-/// Load all triggers matching the given scope and staging filesystem
+/// Load all triggers matching the given scope and the difference
+/// between the previous [`vfs::Tree`] and the current [`vfs::Tree`].
 ///
-/// # Arguments
-///
-/// * `scope`  - Trigger execution scope
-/// * `fstree` - Virtual filesystem tree populated with records of the staging filesystem
+/// Triggers are only run where a matching path has been added or
+/// removed in the `curr_vfs` compared to the `prev_vfs`
 pub(super) fn triggers<'a>(
     scope: TriggerScope<'a>,
-    fstree: &vfs::tree::Tree<PendingFile>,
+    prev_vfs: Option<&vfs::tree::Tree<PendingFile>>,
+    curr_vfs: &vfs::tree::Tree<PendingFile>,
 ) -> Result<Vec<TriggerRunner<'a>>, Error> {
     // Pre-calculate trigger root path once
     let trigger_root = {
@@ -142,14 +144,25 @@ pub(super) fn triggers<'a>(
             .collect_vec(),
     };
 
-    // Load trigger collection, process all the paths, convert to scoped TriggerRunner vec
+    // Get full set of paths that have changed (added or removed) between
+    // previous and current vfs
+    let prev_paths = prev_vfs
+        .map(|tree| tree.iter().map(|p| p.path()).collect::<HashSet<_>>())
+        .unwrap_or_default();
+    let curr_paths = curr_vfs.iter().map(|p| p.path()).collect::<HashSet<_>>();
+    let diff_paths = curr_paths.symmetric_difference(&prev_paths);
+
+    // Load trigger collection, process all the paths that have changed from previous state
     let mut collection = triggers::Collection::new(triggers.iter())?;
-    collection.process_paths(fstree.iter().map(|m| m.to_string()));
+    collection.process_paths(diff_paths);
+
+    // Convert to scoped TriggerRunner vec
     let computed_commands = collection
         .bake()?
         .into_iter()
         .map(|trigger| TriggerRunner { scope, trigger })
         .collect_vec();
+
     Ok(computed_commands)
 }
 
