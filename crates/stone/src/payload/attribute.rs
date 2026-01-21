@@ -4,17 +4,17 @@
 
 use std::io::{Read, Write};
 
-use super::{DecodeError, EncodeError, Record};
-use crate::{ReadExt, WriteExt};
+use super::{Record, StonePayloadDecodeError, StonePayloadEncodeError};
+use crate::ext::{ReadExt, WriteExt};
 
 #[derive(Debug, Clone)]
-pub struct Attribute {
+pub struct StonePayloadAttributeRecord {
     pub key: Vec<u8>,
     pub value: Vec<u8>,
 }
 
-impl Record for Attribute {
-    fn decode<R: Read>(mut reader: R) -> Result<Self, DecodeError> {
+impl Record for StonePayloadAttributeRecord {
+    fn decode<R: Read>(mut reader: R) -> Result<Self, StonePayloadDecodeError> {
         let key_length = reader.read_u64()?;
         let value_length = reader.read_u64()?;
 
@@ -24,7 +24,7 @@ impl Record for Attribute {
         Ok(Self { key, value })
     }
 
-    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), EncodeError> {
+    fn encode<W: Write>(&self, writer: &mut W) -> Result<(), StonePayloadEncodeError> {
         writer.write_u64(self.key.len() as u64)?;
         writer.write_u64(self.value.len() as u64)?;
         writer.write_all(&self.key)?;

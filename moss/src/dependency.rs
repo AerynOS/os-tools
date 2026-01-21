@@ -23,7 +23,7 @@
 use std::str::FromStr;
 
 use derive_more::Display;
-use stone::payload;
+use stone::StonePayloadMetaDependency;
 use thiserror::Error;
 
 /// Every dependency
@@ -62,24 +62,24 @@ pub enum Kind {
 }
 
 impl Kind {
-    pub fn from_stone_dependency(dependency: payload::meta::Dependency) -> Option<Self> {
+    pub fn from_stone_dependency(dependency: StonePayloadMetaDependency) -> Option<Self> {
         Some(match dependency {
-            payload::meta::Dependency::Unknown => return None,
-            payload::meta::Dependency::PackageName => Kind::PackageName,
-            payload::meta::Dependency::SharedLibrary => Kind::SharedLibrary,
-            payload::meta::Dependency::PkgConfig => Kind::PkgConfig,
-            payload::meta::Dependency::Interpreter => Kind::Interpreter,
-            payload::meta::Dependency::CMake => Kind::CMake,
-            payload::meta::Dependency::Python => Kind::Python,
-            payload::meta::Dependency::Binary => Kind::Binary,
-            payload::meta::Dependency::SystemBinary => Kind::SystemBinary,
-            payload::meta::Dependency::PkgConfig32 => Kind::PkgConfig32,
+            StonePayloadMetaDependency::PackageName => Kind::PackageName,
+            StonePayloadMetaDependency::SharedLibrary => Kind::SharedLibrary,
+            StonePayloadMetaDependency::PkgConfig => Kind::PkgConfig,
+            StonePayloadMetaDependency::Interpreter => Kind::Interpreter,
+            StonePayloadMetaDependency::CMake => Kind::CMake,
+            StonePayloadMetaDependency::Python => Kind::Python,
+            StonePayloadMetaDependency::Binary => Kind::Binary,
+            StonePayloadMetaDependency::SystemBinary => Kind::SystemBinary,
+            StonePayloadMetaDependency::PkgConfig32 => Kind::PkgConfig32,
+            StonePayloadMetaDependency::Unknown => return None,
         })
     }
 }
 
-/// Convert our [`Kind`] into a [`payload::meta::Dependency]``
-impl From<Kind> for payload::meta::Dependency {
+/// Convert our [`Kind`] into a [`Dependency]``
+impl From<Kind> for StonePayloadMetaDependency {
     fn from(kind: Kind) -> Self {
         match kind {
             Kind::PackageName => Self::PackageName,

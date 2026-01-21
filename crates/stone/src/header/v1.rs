@@ -11,47 +11,49 @@ const INTEGRITY_CHECK: [u8; 21] = [0, 0, 1, 0, 0, 2, 0, 0, 3, 0, 0, 4, 0, 0, 5, 
 ///
 /// Some types are now legacy as we're going to use Ion to define them.
 ///
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display)]
+#[strum(serialize_all = "kebab-case")]
 #[repr(u8)]
-pub enum FileType {
+pub enum StoneHeaderV1FileType {
     /// Binary package
     Binary = 1,
 
     /// Delta package
-    Delta,
+    Delta = 2,
 
     /// (Legacy) repository index
-    Repository,
+    Repository = 3,
 
     /// (Legacy) build manifest
-    BuildManifest,
+    BuildManifest = 4,
 
     Unknown = 255,
 }
 
 /// Header for the v1 format version
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Header {
+#[repr(C)]
+pub struct StoneHeaderV1 {
     pub num_payloads: u16,
-    pub file_type: FileType,
+    pub file_type: StoneHeaderV1FileType,
 }
 
-impl Header {
-    pub fn decode(bytes: [u8; 24]) -> Result<Self, DecodeError> {
+impl StoneHeaderV1 {
+    pub fn decode(bytes: [u8; 24]) -> Result<Self, StoneHeaderV1DecodeError> {
         let (num_payloads, rest) = bytes.split_at(2);
         let (integrity_check, file_type) = rest.split_at(21);
 
         if integrity_check != INTEGRITY_CHECK {
-            return Err(DecodeError::Corrupt);
+            return Err(StoneHeaderV1DecodeError::Corrupt);
         }
 
         let num_payloads = u16::from_be_bytes(num_payloads.try_into().unwrap());
         let file_type = match file_type[0] {
-            1 => FileType::Binary,
-            2 => FileType::Delta,
-            3 => FileType::Repository,
-            4 => FileType::BuildManifest,
-            _ => FileType::Unknown,
+            1 => StoneHeaderV1FileType::Binary,
+            2 => StoneHeaderV1FileType::Delta,
+            3 => StoneHeaderV1FileType::Repository,
+            4 => StoneHeaderV1FileType::BuildManifest,
+            _ => StoneHeaderV1FileType::Unknown,
         };
 
         Ok(Self {
@@ -75,7 +77,7 @@ impl Header {
 }
 
 #[derive(Debug, Error)]
-pub enum DecodeError {
+pub enum StoneHeaderV1DecodeError {
     #[error("Corrupt header, failed integrity check")]
     Corrupt,
 }

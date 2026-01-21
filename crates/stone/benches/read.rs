@@ -10,6 +10,7 @@ use std::{
 };
 
 use criterion::{Criterion, criterion_group, criterion_main};
+use stone::StoneDecodedPayload;
 
 fn read_unbuffered(path: impl AsRef<Path>) {
     read(File::open(path).unwrap());
@@ -24,7 +25,7 @@ fn read<R: Read + Seek>(reader: R) {
 
     let payloads = stone.payloads().unwrap().collect::<Result<Vec<_>, _>>().unwrap();
 
-    if let Some(content) = payloads.iter().find_map(stone::read::PayloadKind::content) {
+    if let Some(content) = payloads.iter().find_map(StoneDecodedPayload::content) {
         stone.unpack_content(content, &mut sink()).unwrap();
     }
 }

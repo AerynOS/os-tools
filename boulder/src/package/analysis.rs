@@ -9,7 +9,7 @@ use std::{
 };
 
 use moss::{Dependency, Provider};
-use stone::write::digest;
+use stone::StoneDigestWriterHasher;
 use tui::{ProgressBar, ProgressStyle, Styled};
 
 use crate::{Paths, Recipe};
@@ -25,12 +25,17 @@ pub struct Chain<'a> {
     recipe: &'a Recipe,
     paths: &'a Paths,
     collector: &'a Collector,
-    hasher: &'a mut digest::Hasher,
+    hasher: &'a mut StoneDigestWriterHasher,
     pub buckets: BTreeMap<String, Bucket>,
 }
 
 impl<'a> Chain<'a> {
-    pub fn new(paths: &'a Paths, recipe: &'a Recipe, collector: &'a Collector, hasher: &'a mut digest::Hasher) -> Self {
+    pub fn new(
+        paths: &'a Paths,
+        recipe: &'a Recipe,
+        collector: &'a Collector,
+        hasher: &'a mut StoneDigestWriterHasher,
+    ) -> Self {
         Self {
             handlers: vec![
                 Box::new(handler::ignore_blocked),
@@ -157,7 +162,7 @@ impl Bucket {
 pub struct BucketMut<'a> {
     pub providers: &'a mut BTreeSet<Provider>,
     pub dependencies: &'a mut BTreeSet<Dependency>,
-    pub hasher: &'a mut digest::Hasher,
+    pub hasher: &'a mut StoneDigestWriterHasher,
     pub recipe: &'a Recipe,
     pub paths: &'a Paths,
 }

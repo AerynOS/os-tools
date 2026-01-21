@@ -13,8 +13,7 @@ use astr::AStr;
 use fs_err as fs;
 use glob::Pattern;
 use nix::libc::{S_IFDIR, S_IRGRP, S_IROTH, S_IRWXU, S_IXGRP, S_IXOTH};
-use stone::payload::{Layout, layout};
-use stone::write::digest;
+use stone::{StoneDigestWriter, StoneDigestWriterHasher, StonePayloadLayoutFile, StonePayloadLayoutRecord};
 use thiserror::Error;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -72,7 +71,7 @@ impl Collector {
     }
 
     /// Produce a [`PathInfo`] from the provided [`Path`]
-    pub fn path(&self, path: &Path, hasher: &mut digest::Hasher) -> Result<PathInfo, Error> {
+    pub fn path(&self, path: &Path, hasher: &mut StoneDigestWriterHasher) -> Result<PathInfo, Error> {
         let metadata = fs::metadata(path)?;
         self.path_with_metadata(path.to_path_buf(), &metadata, hasher)
     }
@@ -81,7 +80,7 @@ impl Collector {
         &self,
         path: PathBuf,
         metadata: &Metadata,
-        hasher: &mut digest::Hasher,
+        hasher: &mut StoneDigestWriterHasher,
     ) -> Result<PathInfo, Error> {
         let target_path = Path::new("/").join(path.strip_prefix(&self.root).expect("path is ancestor of root"));
 
@@ -96,7 +95,7 @@ impl Collector {
     pub fn enumerate_paths(
         &self,
         subdir: Option<(PathBuf, Metadata)>,
-        hasher: &mut digest::Hasher,
+        hasher: &mut StoneDigestWriterHasher,
     ) -> Result<Vec<PathInfo>, Error> {
         let mut paths = vec![];
 
@@ -139,7 +138,7 @@ impl Collector {
 pub struct PathInfo {
     pub path: PathBuf,
     pub target_path: PathBuf,
-    pub layout: Layout,
+    pub layout: StonePayloadLayoutRecord,
     pub size: u64,
     pub package: String,
 }
@@ -149,7 +148,7 @@ impl PathInfo {
         path: PathBuf,
         target_path: PathBuf,
         metadata: &Metadata,
-        hasher: &mut digest::Hasher,
+        hasher: &mut StoneDigestWriterHasher,
         package: String,
     ) -> Result<Self, Error> {
         let layout = layout_from_metadata(&path, &target_path, metadata, hasher)?;
@@ -163,7 +162,7 @@ impl PathInfo {
         })
     }
 
-    pub fn restat(&mut self, hasher: &mut digest::Hasher) -> Result<(), Error> {
+    pub fn restat(&mut self, hasher: &mut StoneDigestWriterHasher) -> Result<(), Error> {
         let metadata = fs::metadata(&self.path)?;
         self.layout = layout_from_metadata(&self.path, &self.target_path, &metadata, hasher)?;
         self.size = metadata.size();
@@ -171,11 +170,11 @@ impl PathInfo {
     }
 
     pub fn is_file(&self) -> bool {
-        matches!(self.layout.entry, layout::Entry::Regular(_, _))
+        matches!(self.layout.file, StonePayloadLayoutFile::Regular(_, _))
     }
 
     pub fn file_hash(&self) -> Option<u128> {
-        if let layout::Entry::Regular(hash, _) = &self.layout.entry {
+        if let StonePayloadLayoutFile::Regular(hash, _) = &self.layout.file {
             Some(*hash)
         } else {
             None
@@ -200,8 +199,8 @@ fn layout_from_metadata(
     path: &Path,
     target_path: &Path,
     metadata: &Metadata,
-    hasher: &mut digest::Hasher,
-) -> Result<Layout, Error> {
+    hasher: &mut StoneDigestWriterHasher,
+) -> Result<StonePayloadLayoutRecord, Error> {
     // Strip /usr
     let target: AStr = target_path
         .strip_prefix("/usr")
@@ -211,29 +210,29 @@ fn layout_from_metadata(
 
     let file_type = metadata.file_type();
 
-    Ok(Layout {
+    Ok(StonePayloadLayoutRecord {
         uid: metadata.uid(),
         gid: metadata.gid(),
         mode: metadata.mode(),
         tag: 0,
-        entry: if file_type.is_symlink() {
+        file: if file_type.is_symlink() {
             let source = fs::read_link(path)?;
 
-            layout::Entry::Symlink(source.to_string_lossy().into(), target)
+            StonePayloadLayoutFile::Symlink(source.to_string_lossy().into(), target)
         } else if file_type.is_dir() {
-            layout::Entry::Directory(target)
+            StonePayloadLayoutFile::Directory(target)
         } else if file_type.is_char_device() {
-            layout::Entry::CharacterDevice(target)
+            StonePayloadLayoutFile::CharacterDevice(target)
         } else if file_type.is_block_device() {
-            layout::Entry::BlockDevice(target)
+            StonePayloadLayoutFile::BlockDevice(target)
         } else if file_type.is_fifo() {
-            layout::Entry::Fifo(target)
+            StonePayloadLayoutFile::Fifo(target)
         } else if file_type.is_socket() {
-            layout::Entry::Socket(target)
+            StonePayloadLayoutFile::Socket(target)
         } else {
             hasher.reset();
 
-            let mut digest_writer = digest::Writer::new(io::sink(), hasher);
+            let mut digest_writer = StoneDigestWriter::new(io::sink(), hasher);
             let mut file = fs::File::open(path)?;
 
             // Copy bytes to null sink so we don't
@@ -242,7 +241,7 @@ fn layout_from_metadata(
 
             let hash = hasher.digest128();
 
-            layout::Entry::Regular(hash, target)
+            StonePayloadLayoutFile::Regular(hash, target)
         },
     })
 }

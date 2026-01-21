@@ -17,6 +17,7 @@ use moss::{
 };
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use sha2::{Digest, Sha256};
+use stone::{StoneHeaderV1FileType, StoneReadError, StoneWriteError, StoneWriter};
 use thiserror::Error;
 use tui::{MultiProgress, ProgressBar, ProgressStyle, Styled};
 
@@ -111,7 +112,7 @@ fn write_index(dir: &Path, map: BTreeMap<package::Name, Meta>, total_progress: &
     let mut file = fs::File::create(&path)?;
 
     let write_stone_index = || {
-        let mut writer = stone::Writer::new(&mut file, stone::header::v1::FileType::Repository)?;
+        let mut writer = StoneWriter::new(&mut file, StoneHeaderV1FileType::Repository)?;
 
         for (_, meta) in map {
             let payload = meta.to_stone_payload();
@@ -223,10 +224,10 @@ pub enum Error {
     Io(#[from] io::Error),
 
     #[error("reading {path}")]
-    StoneRead { source: stone::read::Error, path: PathBuf },
+    StoneRead { source: StoneReadError, path: PathBuf },
 
     #[error("writing {path}")]
-    StoneWrite { source: stone::write::Error, path: PathBuf },
+    StoneWrite { source: StoneWriteError, path: PathBuf },
 
     #[error("package {0} has two files with the same release {1}")]
     DuplicateRelease(package::Name, u64),

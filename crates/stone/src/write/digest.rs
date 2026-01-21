@@ -6,19 +6,19 @@ use std::io::Write;
 
 use xxhash_rust::xxh3::Xxh3;
 
-pub type Hasher = Xxh3;
+pub type StoneDigestWriterHasher = Xxh3;
 
-pub struct Writer<'a, W: Write> {
+pub struct StoneDigestWriter<'a, W: Write> {
     inner: W,
-    hasher: &'a mut Hasher,
+    hasher: &'a mut StoneDigestWriterHasher,
     pub bytes: usize,
 }
 
-impl<'a, W> Writer<'a, W>
+impl<'a, W> StoneDigestWriter<'a, W>
 where
     W: Write,
 {
-    pub fn new(writer: W, hasher: &'a mut Hasher) -> Self {
+    pub fn new(writer: W, hasher: &'a mut StoneDigestWriterHasher) -> Self {
         Self {
             inner: writer,
             hasher,
@@ -27,7 +27,7 @@ where
     }
 }
 
-impl<W> Write for Writer<'_, W>
+impl<W> Write for StoneDigestWriter<'_, W>
 where
     W: Write,
 {

@@ -11,7 +11,7 @@ use std::{
 use astr::AStr;
 use fs_err as fs;
 use rayon::iter::{IntoParallelIterator as _, IntoParallelRefIterator as _, ParallelIterator as _};
-use stone::{payload::layout, write::digest};
+use stone::{StoneDigestWriter, StoneDigestWriterHasher, StonePayloadLayoutFile};
 use tui::{
     ProgressBar, ProgressStyle, Styled,
     dialoguer::{Confirm, theme::ColorfulTheme},
@@ -33,7 +33,7 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
     // Group by unique assets (hash)
     let mut unique_assets = BTreeMap::new();
     for (package, layout) in layouts {
-        let layout::Entry::Regular(hash, file) = layout.entry else {
+        let StonePayloadLayoutFile::Regular(hash, file) = layout.file else {
             continue;
         };
         unique_assets
@@ -76,8 +76,8 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
                 return Ok(acc);
             }
 
-            let mut hasher = digest::Hasher::new();
-            let mut digest_writer = digest::Writer::new(io::sink(), &mut hasher);
+            let mut hasher = StoneDigestWriterHasher::new();
+            let mut digest_writer = StoneDigestWriter::new(io::sink(), &mut hasher);
             let mut file = fs::File::open(&path)?;
 
             // Copy bytes to null sink so we don't
