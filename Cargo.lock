@@ -1741,7 +1741,7 @@ dependencies = [
 
 [[package]]
 name = "libstone"
-version = "0.25.6"
+version = "0.26.1"
 dependencies = [
  "cbindgen",
  "libc",
