@@ -1920,6 +1920,7 @@ dependencies = [
  "reqwest",
  "serde",
  "sha2",
+ "snafu",
  "stone",
  "strum",
  "thiserror",
