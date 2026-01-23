@@ -1356,9 +1356,9 @@ pub enum Error {
     #[error("installation")]
     Installation(#[from] installation::Error),
     #[error("fetch package {1}")]
-    CacheFetch(#[source] cache::Error, package::Name),
+    CacheFetch(#[source] cache::FetchError, package::Name),
     #[error("unpack package {1}, file {2}")]
-    CacheUnpack(#[source] cache::Error, package::Name, PathBuf),
+    CacheUnpack(#[source] cache::UnpackError, package::Name, PathBuf),
     #[error("repository manager")]
     Repository(#[from] repository::manager::Error),
     #[error("db")]

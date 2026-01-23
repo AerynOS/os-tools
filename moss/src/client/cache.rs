@@ -13,8 +13,8 @@ use std::{
 };
 
 use futures_util::StreamExt;
+use snafu::{OptionExt, ResultExt as _, Snafu, ensure};
 use stone::{StoneDecodedPayload, StonePayloadIndexRecord, StoneReadError};
-use thiserror::Error;
 use tokio::io::AsyncWriteExt;
 use url::Url;
 
@@ -84,13 +84,12 @@ pub async fn fetch(
     meta: &package::Meta,
     installation: &Installation,
     on_progress: impl Fn(Progress),
-) -> Result<Download, Error> {
+) -> Result<Download, FetchError> {
     use fs_err::tokio::{self as fs, File};
 
-    let parse_url = |s: &str| s.parse::<Url>().map_err(|err| Error::ParseUrl(err, s.to_owned()));
-
-    let url = parse_url(meta.uri.as_deref().ok_or(Error::MissingUri)?)?;
-    let hash = meta.hash.as_ref().ok_or(Error::MissingHash)?;
+    let url = meta.uri.as_deref().context(MissingUrlSnafu)?;
+    let url = url.parse::<Url>().context(InvalidUrlSnafu { url })?;
+    let hash = meta.hash.as_ref().context(MissingHashSnafu)?;
 
     let destination_path = download_path(installation, hash)?;
     let partial_path = destination_path.with_extension("part");
@@ -108,15 +107,13 @@ pub async fn fetch(
         });
     }
 
-    let fetch_stone_error = |err| Error::FetchStone(err, Box::new(url.clone()));
-
-    let mut bytes = request::get(url.clone()).await.map_err(fetch_stone_error)?;
+    let mut bytes = request::get(url.clone()).await?;
     let mut out = File::create(&partial_path).await?;
 
     let mut total = 0;
 
     while let Some(chunk) = bytes.next().await {
-        let bytes = chunk.map_err(fetch_stone_error)?;
+        let bytes = chunk?;
         let delta = bytes.len() as u64;
         total += delta;
         out.write_all(&bytes).await?;
@@ -165,7 +162,7 @@ impl Download {
         self,
         unpacking_in_progress: UnpackingInProgress,
         on_progress: impl Fn(Progress) + Send + 'static,
-    ) -> Result<UnpackedAsset, Error> {
+    ) -> Result<UnpackedAsset, UnpackError> {
         use fs_err::{self as fs, File};
         use std::io::{self, Read, Seek, SeekFrom, Write};
 
@@ -230,7 +227,7 @@ impl Download {
         let content = payloads
             .iter()
             .find_map(StoneDecodedPayload::content)
-            .ok_or(Error::MissingContent)?;
+            .ok_or(UnpackError::MissingContent)?;
 
         let content_file = File::options()
             .read(true)
@@ -276,7 +273,7 @@ impl Download {
 
                 Ok(())
             })
-            .collect::<Result<Vec<_>, Error>>()?;
+            .collect::<Result<Vec<_>, UnpackError>>()?;
 
         fs::remove_file(&content_path)?;
 
@@ -293,10 +290,8 @@ fn check_assets_exist(indices: &[&StonePayloadIndexRecord], installation: &Insta
 }
 
 /// Returns a fully qualified filesystem path to download the given hash ID into
-pub fn download_path(installation: &Installation, hash: &str) -> Result<PathBuf, Error> {
-    if hash.len() < 5 {
-        return Err(Error::MalformedHash(hash.to_owned()));
-    }
+pub fn download_path(installation: &Installation, hash: &str) -> Result<PathBuf, FetchError> {
+    ensure!(hash.len() >= 5, MalformedHashSnafu { hash });
 
     let directory = installation
         .cache_path("downloads")
@@ -322,22 +317,28 @@ pub fn asset_path(installation: &Installation, hash: &str) -> PathBuf {
     directory.join(hash)
 }
 
-#[derive(Debug, Error)]
-pub enum Error {
-    #[error("Missing download hash")]
-    MissingHash,
-    #[error("Missing download URI")]
-    MissingUri,
-    #[error("Missing content payload")]
+#[derive(Debug, Snafu)]
+pub enum UnpackError {
+    #[snafu(display("Missing content payload"))]
     MissingContent,
-    #[error("Malformed download hash: {0}")]
-    MalformedHash(String),
-    #[error("read stone")]
-    ReadStone(#[from] StoneReadError),
-    #[error("parse url {1}")]
-    ParseUrl(#[source] url::ParseError, String),
-    #[error("fetch stone {1}")]
-    FetchStone(#[source] request::Error, Box<Url>),
-    #[error("io")]
-    Io(#[from] io::Error),
+    #[snafu(context(false), display("read stone"))]
+    ReadStone { source: StoneReadError },
+    #[snafu(context(false), display("io"))]
+    Io { source: io::Error },
+}
+
+#[derive(Debug, Snafu)]
+pub enum FetchError {
+    #[snafu(display("missing hash"))]
+    MissingHash,
+    #[snafu(display("malformed hash `{hash}`"))]
+    MalformedHash { hash: String },
+    #[snafu(display("missing URL"))]
+    MissingUrl,
+    #[snafu(display("invalid URL `{url}`"))]
+    InvalidUrl { source: url::ParseError, url: Box<str> },
+    #[snafu(transparent, context(false))]
+    Request { source: request::Error },
+    #[snafu(context(false), display("io"))]
+    Io { source: io::Error },
 }
