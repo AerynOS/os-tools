@@ -185,7 +185,7 @@ impl Record for StonePayloadMetaRecord {
         };
 
         let kind = reader.read_u8()?;
-        let _padding = reader.read_array::<1>()?;
+        let _padding = reader.read_array_::<1>()?;
 
         // Remove null terminated byte from string
         let sanitize = |s: String| s.trim_end_matches('\0').to_owned();

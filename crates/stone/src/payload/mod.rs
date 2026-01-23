@@ -68,7 +68,7 @@ impl StonePayloadHeader {
     pub fn decode<R: Read>(mut reader: R) -> Result<Self, StonePayloadDecodeError> {
         let stored_size = reader.read_u64()?;
         let plain_size = reader.read_u64()?;
-        let checksum = reader.read_array()?;
+        let checksum = reader.read_array_()?;
         let num_records = reader.read_u32()? as usize;
         let version = reader.read_u16()?;
 

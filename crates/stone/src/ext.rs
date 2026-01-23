@@ -5,31 +5,32 @@ use std::io::{Read, Result, Write};
 
 pub trait ReadExt: Read {
     fn read_u8(&mut self) -> Result<u8> {
-        let bytes = self.read_array::<1>()?;
+        let bytes = self.read_array_::<1>()?;
         Ok(bytes[0])
     }
 
     fn read_u16(&mut self) -> Result<u16> {
-        let bytes = self.read_array()?;
+        let bytes = self.read_array_()?;
         Ok(u16::from_be_bytes(bytes))
     }
 
     fn read_u32(&mut self) -> Result<u32> {
-        let bytes = self.read_array()?;
+        let bytes = self.read_array_()?;
         Ok(u32::from_be_bytes(bytes))
     }
 
     fn read_u64(&mut self) -> Result<u64> {
-        let bytes = self.read_array()?;
+        let bytes = self.read_array_()?;
         Ok(u64::from_be_bytes(bytes))
     }
 
     fn read_u128(&mut self) -> Result<u128> {
-        let bytes = self.read_array()?;
+        let bytes = self.read_array_()?;
         Ok(u128::from_be_bytes(bytes))
     }
 
-    fn read_array<const N: usize>(&mut self) -> Result<[u8; N]> {
+    // Name has trailing underscore to avoid conflict with unstable method from std
+    fn read_array_<const N: usize>(&mut self) -> Result<[u8; N]> {
         let mut bytes = [0u8; N];
         self.read_exact(&mut bytes)?;
         Ok(bytes)
