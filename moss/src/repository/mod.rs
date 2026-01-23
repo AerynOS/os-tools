@@ -19,6 +19,7 @@ use crate::{db::meta, request};
 
 pub use self::manager::Manager;
 
+pub mod index;
 pub mod manager;
 
 /// A unique [`Repository`] identifier
