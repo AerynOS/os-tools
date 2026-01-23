@@ -128,7 +128,7 @@ impl Record for StonePayloadLayoutRecord {
             _ => StonePayloadLayoutFileType::Unknown,
         };
 
-        let _padding = reader.read_array::<11>()?;
+        let _padding = reader.read_array_::<11>()?;
 
         // Make the layout entry *usable*
         let entry = match file_type {

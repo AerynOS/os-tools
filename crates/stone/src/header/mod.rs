@@ -43,9 +43,9 @@ pub struct StoneAgnosticHeader {
 
 impl StoneAgnosticHeader {
     fn decode<R: Read>(mut reader: R) -> io::Result<Self> {
-        let magic = reader.read_array()?;
-        let data = reader.read_array()?;
-        let version = reader.read_array()?;
+        let magic = reader.read_array_()?;
+        let data = reader.read_array_()?;
+        let version = reader.read_array_()?;
 
         Ok(Self { magic, data, version })
     }
