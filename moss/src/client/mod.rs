@@ -602,7 +602,9 @@ impl Client {
                         package.meta.name
                     );
                 })
-                .await?;
+                .await
+                .map_err(|err| Error::CacheFetch(err, package.meta.name.clone()))?;
+
                 let is_cached = download.was_cached;
 
                 // Move rest of blocking code to threadpool
@@ -615,30 +617,32 @@ impl Client {
 
                 runtime::unblock(move || {
                     let _guard = current_span.enter();
-                    let package_name = package.meta.name.to_string();
+                    let package_name = &package.meta.name;
+                    let download_path = download.path().to_owned();
 
                     // Set progress to unpacking
-                    progress_bar.set_message(format!("{} {}", "Unpacking".yellow(), package_name.clone().bold()));
+                    progress_bar.set_message(format!("{} {}", "Unpacking".yellow(), package_name.to_string().bold()));
                     progress_bar.set_length(1000);
                     progress_bar.set_position(0);
 
                     // Unpack and update progress
-                    let unpacked = download.unpack(unpacking_in_progress.clone(), {
-                        let progress_bar = progress_bar.clone();
-                        let package_name = package_name.clone();
+                    let unpacked = download
+                        .unpack(unpacking_in_progress.clone(), {
+                            let progress_bar = progress_bar.clone();
+                            let package_name = package_name.clone();
 
-                        move |progress| {
-                            progress_bar.set_position((progress.pct() * 1000.0) as u64);
-                            info!(
-                                progress = progress.completed as f32 / progress.total as f32,
-                                current = progress.completed as usize,
-                                total = progress.total as usize,
-                                event_type = "progress_update",
-                                "Unpacking {}",
-                                package_name
-                            );
-                        }
-                    })?;
+                            move |progress| {
+                                progress_bar.set_position((progress.pct() * 1000.0) as u64);
+                                info!(
+                                    progress = progress.completed as f32 / progress.total as f32,
+                                    current = progress.completed as usize,
+                                    total = progress.total as usize,
+                                    event_type = "progress_update",
+                                    "Unpacking {package_name}",
+                                );
+                            }
+                        })
+                        .map_err(|err| Error::CacheUnpack(err, package_name.clone(), download_path))?;
 
                     // Remove this progress bar
                     progress_bar.finish();
@@ -649,8 +653,13 @@ impl Client {
                         .unwrap_or_default();
 
                     // Write installed line
-                    multi_progress
-                        .suspend(|| println!("{} {}{cached_tag}", "Installed".green(), package_name.clone().bold()));
+                    multi_progress.suspend(|| {
+                        println!(
+                            "{} {}{cached_tag}",
+                            "Installed".green(),
+                            package_name.to_string().bold()
+                        );
+                    });
 
                     // Inc total progress by 1
                     total_progress.inc(1);
@@ -1268,8 +1277,10 @@ pub enum Error {
     EphemeralProhibitedOperation,
     #[error("installation")]
     Installation(#[from] installation::Error),
-    #[error("cache")]
-    Cache(#[from] cache::Error),
+    #[error("fetch package {1}")]
+    CacheFetch(#[source] cache::Error, package::Name),
+    #[error("unpack package {1}, file {2}")]
+    CacheUnpack(#[source] cache::Error, package::Name, PathBuf),
     #[error("repository manager")]
     Repository(#[from] repository::manager::Error),
     #[error("db")]

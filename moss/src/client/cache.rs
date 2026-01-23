@@ -5,6 +5,7 @@
 //! Cache management for unpacking remote assets (`.stone`, etc.)
 
 use std::collections::HashSet;
+use std::path::Path;
 use std::{
     io,
     path::PathBuf,
@@ -86,7 +87,9 @@ pub async fn fetch(
 ) -> Result<Download, Error> {
     use fs_err::tokio::{self as fs, File};
 
-    let url = meta.uri.as_ref().ok_or(Error::MissingUri)?.parse::<Url>()?;
+    let parse_url = |s: &str| s.parse::<Url>().map_err(|err| Error::ParseUrl(err, s.to_owned()));
+
+    let url = parse_url(meta.uri.as_deref().ok_or(Error::MissingUri)?)?;
     let hash = meta.hash.as_ref().ok_or(Error::MissingHash)?;
 
     let destination_path = download_path(installation, hash)?;
@@ -105,13 +108,15 @@ pub async fn fetch(
         });
     }
 
-    let mut bytes = request::get(url).await?;
+    let fetch_stone_error = |err| Error::FetchStone(err, Box::new(url.clone()));
+
+    let mut bytes = request::get(url.clone()).await.map_err(fetch_stone_error)?;
     let mut out = File::create(&partial_path).await?;
 
     let mut total = 0;
 
     while let Some(chunk) = bytes.next().await {
-        let bytes = chunk?;
+        let bytes = chunk.map_err(fetch_stone_error)?;
         let delta = bytes.len() as u64;
         total += delta;
         out.write_all(&bytes).await?;
@@ -150,6 +155,10 @@ pub struct UnpackedAsset {
 }
 
 impl Download {
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
     /// Unpack the downloaded package
     // TODO: Return an "Unpacked" struct which has a "blit" method on it?
     pub fn unpack(
@@ -323,12 +332,12 @@ pub enum Error {
     MissingContent,
     #[error("Malformed download hash: {0}")]
     MalformedHash(String),
-    #[error("stone format")]
-    Format(#[from] StoneReadError),
-    #[error("invalid url")]
-    InvalidUrl(#[from] url::ParseError),
-    #[error("request")]
-    Request(#[from] request::Error),
+    #[error("read stone")]
+    ReadStone(#[from] StoneReadError),
+    #[error("parse url {1}")]
+    ParseUrl(#[source] url::ParseError, String),
+    #[error("fetch stone {1}")]
+    FetchStone(#[source] request::Error, Box<Url>),
     #[error("io")]
     Io(#[from] io::Error),
 }
