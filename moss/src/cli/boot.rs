@@ -2,13 +2,12 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-use std::path::Path;
+use std::path::PathBuf;
 
-use blsforme::bootloader::systemd_boot::{self};
 use clap::{ArgMatches, Command};
 use thiserror::Error;
 
-use moss::Installation;
+use moss::{Client, Installation, client, db, environment, state};
 
 pub fn command() -> Command {
     Command::new("boot")
@@ -16,59 +15,57 @@ pub fn command() -> Command {
         .long_about("Manage boot configuration")
         .subcommand_required(true)
         .subcommand(Command::new("status").about("Status of boot configuration"))
+        .subcommand(Command::new("sync").about("Synchronize boot configuration"))
 }
 
 /// Handle status for now
-pub fn handle(_args: &ArgMatches, installation: Installation) -> Result<(), Error> {
-    fn display_optional_path(path: Option<&Path>) -> std::path::Display<'_> {
-        path.unwrap_or_else(|| "none".as_ref()).display()
+pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
+    match args.subcommand() {
+        Some(("status", args)) => status(args, installation),
+        Some(("sync", args)) => sync(args, installation),
+        _ => unreachable!(),
     }
+}
 
-    let root = installation.root.clone();
-    let is_native = root.to_string_lossy() == "/";
-    let config = blsforme::Configuration {
-        root: if is_native {
-            blsforme::Root::Native(root.clone())
-        } else {
-            blsforme::Root::Image(root.clone())
-        },
-        vfs: "/".into(),
+fn status(_args: &ArgMatches, installation: Installation) -> Result<(), Error> {
+    client::boot::status(&installation).map_err(Error::BootStatus)
+}
+
+fn sync(_args: &ArgMatches, installation: Installation) -> Result<(), Error> {
+    let client = Client::new(environment::NAME, installation).map_err(Error::InitClient)?;
+
+    let Some(state_id) = client.installation.active_state else {
+        return Err(Error::NoActiveState(client.installation.root));
     };
 
-    let manager = blsforme::Manager::new(&config)?;
-    match manager.boot_environment().firmware {
-        blsforme::Firmware::Uefi => {
-            let esp = display_optional_path(manager.boot_environment().esp());
-            let xbootldr = display_optional_path(manager.boot_environment().xbootldr());
-            println!("ESP            : {esp}");
-            println!("XBOOTLDR       : {xbootldr}");
-            if is_native && let Ok(bootloader) = systemd_boot::interface::BootLoaderInterface::new(&config.vfs) {
-                let v = bootloader.get_ucs2_string(systemd_boot::interface::VariableName::Info)?;
-                println!("Bootloader     : {v}");
-            }
-        }
-        blsforme::Firmware::Bios => {
-            let boot = display_optional_path(manager.boot_environment().boot_partition());
-            println!("BOOT           : {boot}");
-        }
-    }
+    let state = client
+        .state_db
+        .get(state_id)
+        .map_err(|err| Error::LoadStateDb(err, state_id))?;
 
-    println!("Global cmdline : {:?}", manager.cmdline());
+    client::boot::synchronize(&client, &state).map_err(Error::SyncBoot)?;
+
+    println!("Boot updated\n");
+
+    client::boot::status(&client.installation).map_err(Error::BootStatus)?;
 
     Ok(())
 }
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("blsforme")]
-    Blsforme(#[from] blsforme::Error),
+    #[error("initialize client")]
+    InitClient(#[source] client::Error),
 
-    #[error("sd_boot")]
-    SdBoot(#[from] systemd_boot::interface::Error),
+    #[error("No active moss state found under {0:?}")]
+    NoActiveState(PathBuf),
 
-    #[error("io")]
-    IO(#[from] std::io::Error),
+    #[error("load state {0} from db")]
+    LoadStateDb(#[source] db::Error, state::Id),
 
-    #[error("os-release")]
-    OsRelease(#[from] blsforme::os_release::Error),
+    #[error("synchronize boot")]
+    SyncBoot(#[source] client::boot::Error),
+
+    #[error("boot status")]
+    BootStatus(#[source] client::boot::Error),
 }

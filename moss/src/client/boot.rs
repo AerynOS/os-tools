@@ -14,6 +14,7 @@ use std::{
 
 use blsforme::{
     CmdlineEntry, Entry, Schema,
+    bootloader::systemd_boot,
     os_release::{self, OsRelease},
 };
 use fnmatch::Pattern;
@@ -30,6 +31,9 @@ use super::Client;
 pub enum Error {
     #[error("blsforme: {0}")]
     Blsforme(#[from] blsforme::Error),
+
+    #[error("sd_boot")]
+    SdBoot(#[from] systemd_boot::interface::Error),
 
     #[error("layoutdb: {0}")]
     Client(#[from] db::layout::Error),
@@ -258,6 +262,45 @@ pub fn synchronize(client: &Client, state: &State) -> Result<(), Error> {
     } else {
         manager.sync(&global_schema)?;
     }
+
+    Ok(())
+}
+
+pub fn status(installation: &Installation) -> Result<(), Error> {
+    fn display_optional_path(path: Option<&Path>) -> std::path::Display<'_> {
+        path.unwrap_or_else(|| "none".as_ref()).display()
+    }
+
+    let root = &installation.root;
+    let is_native = root == Path::new("/");
+    let config = blsforme::Configuration {
+        root: if is_native {
+            blsforme::Root::Native(root.clone())
+        } else {
+            blsforme::Root::Image(root.clone())
+        },
+        vfs: "/".into(),
+    };
+
+    let manager = blsforme::Manager::new(&config)?;
+    match manager.boot_environment().firmware {
+        blsforme::Firmware::Uefi => {
+            let esp = display_optional_path(manager.boot_environment().esp());
+            let xbootldr = display_optional_path(manager.boot_environment().xbootldr());
+            println!("ESP            : {esp}");
+            println!("XBOOTLDR       : {xbootldr}");
+            if is_native && let Ok(bootloader) = systemd_boot::interface::BootLoaderInterface::new(&config.vfs) {
+                let v = bootloader.get_ucs2_string(systemd_boot::interface::VariableName::Info)?;
+                println!("Bootloader     : {v}");
+            }
+        }
+        blsforme::Firmware::Bios => {
+            let boot = display_optional_path(manager.boot_environment().boot_partition());
+            println!("BOOT           : {boot}");
+        }
+    }
+
+    println!("Global cmdline : {:?}", manager.cmdline());
 
     Ok(())
 }
