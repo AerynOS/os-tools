@@ -23,8 +23,8 @@ use tui::{
     pretty::autoprint_columns,
 };
 
-use crate::repository;
-use crate::{Installation, State, client::cache, db, package, state};
+use crate::client::boot;
+use crate::{Client, Installation, State, client::cache, db, package, repository, state};
 
 /// The prune strategy for removing old states
 #[derive(Debug, Clone, Copy)]
@@ -37,27 +37,18 @@ pub enum Strategy {
 
 /// Prune old states using [`Strategy`] and garbage collect
 /// all cached data related to those states being removed
-///
-/// # Arguments
-///
-/// * - `strategy`     - pruning strategy to employ
-/// * - `state_db`     - Installation's state database
-/// * - `install_db`   - Installation's "installed" database
-/// * - `layout_db`    - Installation's layout database
-/// * - `installation` - Client specific target filesystem encapsulation
-pub fn prune_states(
-    strategy: Strategy,
-    state_db: &db::state::Database,
-    install_db: &db::meta::Database,
-    layout_db: &db::layout::Database,
-    installation: &Installation,
-    yes: bool,
-) -> Result<(), Error> {
+pub fn prune_states(client: &Client, strategy: Strategy, yes: bool) -> Result<(), Error> {
+    let installation = &client.installation;
+    let layout_db = &client.layout_db;
+    let state_db = &client.state_db;
+    let install_db = &client.install_db;
+
     // Only prune if the moss root has an active state (otherwise
     // it's probably borked or not setup yet)
-    let Some(current_state) = installation.active_state else {
+    let Some(current_state_id) = installation.active_state else {
         return Err(Error::NoActiveState);
     };
+    let current_state = state_db.get(current_state_id)?;
 
     let state_ids = state_db.list_ids()?;
 
@@ -69,9 +60,9 @@ pub fn prune_states(
                 .iter()
                 .filter(|(id, _)| {
                     if include_newer {
-                        *id != current_state
+                        *id != current_state.id
                     } else {
-                        *id < current_state
+                        *id < current_state.id
                     }
                 })
                 .collect::<Vec<_>>();
@@ -120,7 +111,7 @@ pub fn prune_states(
         // Decrement if removal
         if removal_ids.contains(&id) {
             // Ensure we're not pruning the active state!!
-            if id == current_state {
+            if id == current_state.id {
                 return Err(Error::PruneCurrent);
             }
 
@@ -188,6 +179,9 @@ pub fn prune_states(
             fs::remove_dir_all(&archive_path)?;
         }
     }
+
+    // Sync boot to ensure pruned states are removed from boot entries
+    boot::synchronize(client, &current_state).map_err(Error::SyncBoot)?;
 
     Ok(())
 }
@@ -433,4 +427,6 @@ pub enum Error {
     Io(#[from] io::Error),
     #[error("string processing")]
     Dialog(#[from] tui::dialoguer::Error),
+    #[error("synchronize boot")]
+    SyncBoot(#[source] boot::Error),
 }

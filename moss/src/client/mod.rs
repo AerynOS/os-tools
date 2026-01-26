@@ -203,14 +203,7 @@ impl Client {
             return Err(Error::EphemeralProhibitedOperation);
         }
 
-        prune_states(
-            strategy,
-            &self.state_db,
-            &self.install_db,
-            &self.layout_db,
-            &self.installation,
-            yes,
-        )?;
+        prune_states(self, strategy, yes)?;
 
         Ok(())
     }
