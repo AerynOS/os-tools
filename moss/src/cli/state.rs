@@ -34,7 +34,8 @@ pub fn command() -> Command {
                         .action(ArgAction::Set)
                         .value_parser(clap::value_parser!(u64)),
                 )
-                .arg(arg!(--"skip-triggers" "Do not run triggers on activation").action(ArgAction::SetTrue)),
+                .arg(arg!(--"skip-triggers" "Do not run triggers on activation").action(ArgAction::SetTrue))
+                .arg(arg!(--"skip-boot" "Do not sync boot on activation").action(ArgAction::SetTrue)),
         )
         .subcommand(
             Command::new("query").about("Query information for a state").arg(
@@ -137,9 +138,10 @@ pub fn list(installation: Installation) -> Result<(), Error> {
 pub fn activate(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
     let new_id = *args.get_one::<u64>("ID").unwrap() as i32;
     let skip_triggers = args.get_flag("skip-triggers");
+    let skip_boot = args.get_flag("skip-boot");
 
     let client = Client::new(environment::NAME, installation)?;
-    let old_id = client.activate_state(new_id.into(), skip_triggers)?;
+    let old_id = client.activate_state(new_id.into(), skip_triggers, skip_boot)?;
 
     println!(
         "State {} activated {}",
