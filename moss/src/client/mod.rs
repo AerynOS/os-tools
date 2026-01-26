@@ -49,14 +49,18 @@ use crate::{
     system_model,
 };
 
+pub use self::index::index;
+
 mod boot;
 mod cache;
 mod install;
 mod postblit;
-pub mod prune;
 mod remove;
 mod sync;
 mod verify;
+
+pub mod index;
+pub mod prune;
 
 /// A Client is a connection to the underlying package management systems
 pub struct Client {
@@ -258,7 +262,7 @@ impl Client {
         Ok(metadata)
     }
 
-    /// Returns all unique packages which provide the suppied [`Provider`]
+    /// Returns all unique packages which provide the supplied [`Provider`]
     pub fn lookup_packages_by_provider(&self, provider: &Provider) -> Vec<Package> {
         self.registry
             .by_provider(provider, package::Flags::default())
