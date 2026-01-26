@@ -292,7 +292,7 @@ pub enum Error {
     Info(#[from] info::Error),
 
     #[error("install")]
-    Install(#[from] install::Error),
+    Install(#[source] install::Error),
 
     #[error("list")]
     List(#[from] list::Error),
@@ -304,7 +304,7 @@ pub enum Error {
     Extract(#[from] extract::Error),
 
     #[error("remove")]
-    Remove(#[from] remove::Error),
+    Remove(#[source] remove::Error),
 
     #[error("repo")]
     Repo(#[from] repo::Error),
@@ -319,7 +319,7 @@ pub enum Error {
     State(#[from] state::Error),
 
     #[error("sync")]
-    Sync(#[from] sync::Error),
+    Sync(#[source] sync::Error),
 
     #[error("installation")]
     Installation(#[from] installation::Error),

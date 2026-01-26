@@ -20,6 +20,7 @@ use std::{
 use astr::AStr;
 use fs_err as fs;
 use futures_util::{StreamExt, TryStreamExt, stream};
+use itertools::Itertools;
 use nix::{
     errno::Errno,
     fcntl::{self, OFlag},
@@ -37,6 +38,8 @@ use vfs::tree::{BlitFile, Element, builder::TreeBuilder};
 
 use self::install::install;
 use self::prune::{prune_cache, prune_states};
+use self::remove::remove;
+use self::sync::sync;
 use self::verify::verify;
 use crate::{
     Installation, Package, Provider, Registry, Signal, State, SystemModel, db, environment, installation, package,
@@ -51,32 +54,26 @@ mod cache;
 mod install;
 mod postblit;
 pub mod prune;
+mod remove;
+mod sync;
 mod verify;
 
 /// A Client is a connection to the underlying package management systems
 pub struct Client {
-    pub name: String,
     /// Root that we operate on
-    pub installation: Installation,
-
+    installation: Installation,
     /// Combined set of data sources for current state and potential packages
-    pub registry: Registry,
-
+    registry: Registry,
     /// All installed packages across all states
-    pub install_db: db::meta::Database,
-
+    install_db: db::meta::Database,
     /// All States
-    pub state_db: db::state::Database,
-
+    state_db: db::state::Database,
     /// All layouts for all packages
-    pub layout_db: db::layout::Database,
-
+    layout_db: db::layout::Database,
     /// Runtime configuration for the moss package manager
     config: config::Manager,
-
     /// All of our configured repositories, to seed the [`crate::registry::Registry`]
     repositories: repository::Manager,
-
     /// Operational scope (real systems, ephemeral, etc)
     scope: Scope,
 }
@@ -119,7 +116,6 @@ impl Client {
         let registry = build_registry(&installation, &repositories, &install_db, &state_db)?;
 
         Ok(Client {
-            name,
             config,
             installation,
             repositories,
@@ -136,9 +132,19 @@ impl Client {
         matches!(self.scope, Scope::Ephemeral { .. })
     }
 
-    /// Perform an installation via [`install`]
+    /// Perform package installation
     pub fn install(&mut self, packages: &[&str], yes: bool) -> Result<install::Timing, Error> {
         install(self, packages, yes).map_err(|error| Error::Install(Box::new(error)))
+    }
+
+    /// Perform package removals
+    pub fn remove(&mut self, packages: &[&str], yes: bool) -> Result<remove::Timing, Error> {
+        remove(self, packages, yes).map_err(|error| Error::Remove(Box::new(error)))
+    }
+
+    /// Perform a sync
+    pub fn sync(&mut self, import: Option<&Path>, yes: bool) -> Result<sync::Timing, Error> {
+        sync(self, import, yes).map_err(|error| Error::Sync(Box::new(error)))
     }
 
     /// Transition to an ephemeral client that doesn't record state changes
@@ -227,6 +233,14 @@ impl Client {
         .map_err(Error::Prune)
     }
 
+    /// Resolves the provided id with the underlying registry, returning the first matching [`Package`]
+    pub fn resolve_package(&self, package: &package::Id) -> Result<Package, Error> {
+        self.registry
+            .by_id(package)
+            .next()
+            .ok_or(Error::MissingMetadata(package.clone()))
+    }
+
     /// Resolves the provided id's with the underlying registry, returning
     /// the first [`Package`] for each id.
     ///
@@ -242,6 +256,29 @@ impl Client {
         metadata.sort_by_key(|p| p.meta.name.to_string());
         metadata.dedup_by_key(|p| p.meta.name.to_string());
         Ok(metadata)
+    }
+
+    /// Returns all unique packages which provide the suppied [`Provider`]
+    pub fn lookup_packages_by_provider(&self, provider: &Provider) -> Vec<Package> {
+        self.registry
+            .by_provider(provider, package::Flags::default())
+            .unique_by(|p| p.id.clone())
+            .collect()
+    }
+
+    /// Return a sorted iterator of packages matching the given flags
+    pub fn list_packages(&self, flags: package::Flags) -> impl Iterator<Item = Package> + '_ {
+        self.registry.list(flags)
+    }
+
+    /// Returns all packages with names containing the provided keyword
+    /// and match the given flags
+    pub fn search_packages<'a>(
+        &'a self,
+        keyword: &'a str,
+        flags: package::Flags,
+    ) -> impl Iterator<Item = Package> + 'a {
+        self.registry.by_keyword(keyword, flags)
     }
 
     /// Activates the provided state and runs system triggers once applied.
@@ -980,6 +1017,7 @@ impl Client {
         }
     }
 
+    /// Export the provided state as a [`SystemModel`]
     pub fn export_state(&self, state: state::Id) -> Result<SystemModel, Error> {
         let state = self.state_db.get(state)?;
         let is_active = self.installation.active_state == Some(state.id);
@@ -995,10 +1033,12 @@ impl Client {
         self.load_or_create_system_model(path, &state)
     }
 
+    /// Print boot status to stdout
     pub fn print_boot_status(&self) -> Result<(), Error> {
         boot::print_status(&self.installation).map_err(Error::Boot)
     }
 
+    /// Synchronize boot for the active state
     pub fn synchrnoize_boot(&self) -> Result<(), Error> {
         let Some(state_id) = self.installation.active_state else {
             return Err(Error::NoActiveState);
@@ -1007,6 +1047,34 @@ impl Client {
         let state = self.state_db.get(state_id)?;
 
         boot::synchronize(self, &state).map_err(Error::Boot)
+    }
+
+    /// List all states for this moss [`Installation`]
+    pub fn list_states(&self) -> Result<Vec<State>, Error> {
+        self.state_db
+            .list_ids()?
+            .into_iter()
+            .map(|(id, _)| self.state_db.get(id).map_err(Error::Db))
+            .collect()
+    }
+
+    /// Return a [`State`] for the provided state id
+    pub fn get_state(&self, id: state::Id) -> Result<State, Error> {
+        self.state_db.get(id).map_err(Error::Db)
+    }
+
+    /// Return the active [`State`] for this moss [`Installation`]
+    pub fn get_active_state(&self) -> Result<Option<State>, Error> {
+        match self.installation.active_state {
+            Some(id) => self.get_state(id).map(Some),
+            None => Ok(None),
+        }
+    }
+
+    /// List all layout entries cached by this moss [`Installation`], which
+    /// includes packages installed across all states
+    pub fn list_layouts(&self) -> Result<Vec<(package::Id, StonePayloadLayoutRecord)>, Error> {
+        self.layout_db.all().map_err(Error::Db)
     }
 }
 
@@ -1290,7 +1358,7 @@ pub enum Error {
     #[error("repository manager")]
     Repository(#[from] repository::manager::Error),
     #[error("db")]
-    Meta(#[from] db::Error),
+    Db(#[from] db::Error),
     #[error("prune")]
     Prune(#[from] prune::Error),
     #[error("io")]
@@ -1317,4 +1385,8 @@ pub enum Error {
     UpdateSystemModel(#[from] system_model::UpdateError),
     #[error("install")]
     Install(#[source] Box<install::Error>),
+    #[error("remove")]
+    Remove(#[source] Box<remove::Error>),
+    #[error("sync")]
+    Sync(#[source] Box<sync::Error>),
 }

@@ -8,7 +8,6 @@ use moss::{
     Installation, Package, Provider,
     client::{self, Client},
     environment,
-    package::Flags,
 };
 use stone::StonePayloadLayoutFile;
 use thiserror::Error;
@@ -39,14 +38,12 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
 
     for pkg in pkgs {
         let lookup = Provider::from_name(&pkg).unwrap();
-        let resolved = client
-            .registry
-            .by_provider(&lookup, Flags::default())
-            .unique_by(|p| p.id.clone())
-            .collect::<Vec<_>>();
+        let resolved = client.lookup_packages_by_provider(&lookup);
+
         if resolved.is_empty() {
             return Err(Error::NotFound(pkg));
         }
+
         for candidate in resolved {
             print_package(&candidate);
 
