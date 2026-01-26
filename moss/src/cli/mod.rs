@@ -280,43 +280,43 @@ Hence:
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("boot")]
-    Boot(#[from] boot::Error),
+    Boot(#[source] boot::Error),
 
     #[error("cache")]
-    Cache(#[from] cache::Error),
+    Cache(#[source] cache::Error),
 
     #[error("index")]
-    Index(#[from] index::Error),
+    Index(#[source] index::Error),
 
     #[error("info")]
-    Info(#[from] info::Error),
+    Info(#[source] info::Error),
 
     #[error("install")]
     Install(#[source] install::Error),
 
     #[error("list")]
-    List(#[from] list::Error),
+    List(#[source] list::Error),
 
     #[error("inspect")]
-    Inspect(#[from] inspect::Error),
+    Inspect(#[source] inspect::Error),
 
     #[error("extract")]
-    Extract(#[from] extract::Error),
+    Extract(#[source] extract::Error),
 
     #[error("remove")]
     Remove(#[source] remove::Error),
 
     #[error("repo")]
-    Repo(#[from] repo::Error),
+    Repo(#[source] repo::Error),
 
     #[error("search")]
-    Search(#[from] search::Error),
+    Search(#[source] search::Error),
 
     #[error("search-file")]
-    SearchFile(#[from] search_file::Error),
+    SearchFile(#[source] search_file::Error),
 
     #[error("state")]
-    State(#[from] state::Error),
+    State(#[source] state::Error),
 
     #[error("sync")]
     Sync(#[source] sync::Error),
