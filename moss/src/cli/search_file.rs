@@ -42,18 +42,17 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
 
     let client = Client::new(environment::NAME, installation)?;
 
-    let layouts = client.layout_db.all()?;
+    let layouts = client.list_layouts()?;
 
     layouts.into_iter().for_each(|(id, layout)| match layout.file {
         StonePayloadLayoutFile::Regular(_, file)
         | StonePayloadLayoutFile::Symlink(_, file)
         | StonePayloadLayoutFile::Directory(file) => {
-            if file.contains(&keyword) {
-                let resolved = client.registry.by_id(&id).next();
-                if let Some(pkg) = resolved {
-                    let name = pkg.meta.name;
-                    println!("{prefix}{file} from {}", name.as_str().bold());
-                }
+            if file.contains(&keyword)
+                && let Ok(pkg) = client.resolve_package(&id)
+            {
+                let name = pkg.meta.name;
+                println!("{prefix}{file} from {}", name.as_str().bold());
             }
         }
         _ => {}

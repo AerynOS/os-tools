@@ -108,11 +108,9 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
 
 /// List the active state
 pub fn active(installation: Installation) -> Result<(), Error> {
-    if let Some(id) = installation.active_state {
-        let client = Client::new(environment::NAME, installation)?;
+    let client = Client::new(environment::NAME, installation)?;
 
-        let state = client.state_db.get(id)?;
-
+    if let Some(state) = client.get_active_state()? {
         print_state(state);
     }
 
@@ -123,15 +121,10 @@ pub fn active(installation: Installation) -> Result<(), Error> {
 pub fn list(installation: Installation) -> Result<(), Error> {
     let client = Client::new(environment::NAME, installation)?;
 
-    let state_ids = client.state_db.list_ids()?;
+    for state in client.list_states()?.into_iter().rev() {
+        print_state(state);
+    }
 
-    let mut states = state_ids
-        .into_iter()
-        .map(|(id, _)| client.state_db.get(id).map_err(Error::DB))
-        .collect::<Result<Vec<_>, _>>()?;
-
-    states.reverse();
-    states.into_iter().for_each(print_state);
     Ok(())
 }
 
@@ -153,15 +146,13 @@ pub fn activate(args: &ArgMatches, installation: Installation) -> Result<(), Err
 }
 
 pub fn build_vfs(installation: Installation) -> Result<(), Error> {
-    let id = installation.active_state.unwrap();
     let client = Client::new(environment::NAME, installation)?;
-    let new = client
-        .state_db
-        .get(id)
-        .map_err(|_| client::Error::StateDoesntExist(id))?;
-    let fstree = client.vfs(new.selections.iter().map(|selection| &selection.package))?;
 
-    std::hint::black_box(fstree);
+    if let Some(state) = client.get_active_state()? {
+        let fstree = client.vfs(state.selections.iter().map(|selection| &selection.package))?;
+
+        std::hint::black_box(fstree);
+    }
 
     Ok(())
 }
@@ -171,10 +162,10 @@ pub fn query(args: &ArgMatches, installation: Installation) -> Result<(), Error>
 
     let client = Client::new(environment::NAME, installation)?;
 
-    let state = client.state_db.get(id.into())?;
+    let state = client.get_state(id.into())?;
 
     print_state(state.clone());
-    print_state_selections(state, &client);
+    print_state_selections(state, &client)?;
 
     Ok(())
 }
@@ -272,12 +263,14 @@ fn print_state(state: State) {
     println!();
 }
 
-fn print_state_selections(state: State, client: &Client) {
-    let set: Vec<_> = state
+fn print_state_selections(state: State, client: &Client) -> Result<(), Error> {
+    let set = state
         .selections
         .into_iter()
-        .filter_map(|s| {
-            client.registry.by_id(&s.package).next().map(|pkg| Format {
+        .map(|s| {
+            let pkg = client.resolve_package(&s.package)?;
+
+            Ok(Format {
                 name: pkg.meta.name.to_string(),
                 revision: Revision {
                     version: pkg.meta.version_identifier,
@@ -286,7 +279,7 @@ fn print_state_selections(state: State, client: &Client) {
                 explicit: s.explicit,
             })
         })
-        .collect();
+        .collect::<Result<Vec<_>, client::Error>>()?;
 
     let max_length = set.iter().map(Format::size).max().unwrap_or_default() + 2;
 
@@ -305,6 +298,8 @@ fn print_state_selections(state: State, client: &Client) {
         );
     }
     println!();
+
+    Ok(())
 }
 
 #[derive(Clone, Debug)]

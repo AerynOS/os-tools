@@ -47,8 +47,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     };
 
     let output: Vec<Output> = client
-        .registry
-        .by_keyword(keyword, flags)
+        .search_packages(keyword, flags)
         .map(|pkg| Output {
             name: pkg.meta.name,
             summary: pkg.meta.summary,
