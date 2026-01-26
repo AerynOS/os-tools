@@ -8,7 +8,7 @@ use clap::{ArgMatches, Command, arg, value_parser};
 use moss::{Installation, client::Client, environment};
 use tracing::instrument;
 
-pub use moss::client::install::Error;
+pub use moss::client::Error;
 
 pub fn command() -> Command {
     Command::new("install")

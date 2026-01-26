@@ -2,12 +2,10 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-use std::path::PathBuf;
-
 use clap::{ArgMatches, Command};
 use thiserror::Error;
 
-use moss::{Client, Installation, client, db, environment, state};
+use moss::{Client, Installation, client, environment};
 
 pub fn command() -> Command {
     Command::new("boot")
@@ -28,44 +26,27 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
 }
 
 fn status(_args: &ArgMatches, installation: Installation) -> Result<(), Error> {
-    client::boot::status(&installation).map_err(Error::BootStatus)
+    let client = Client::new(environment::NAME, installation).map_err(Error::Client)?;
+
+    client.print_boot_status()?;
+
+    Ok(())
 }
 
 fn sync(_args: &ArgMatches, installation: Installation) -> Result<(), Error> {
-    let client = Client::new(environment::NAME, installation).map_err(Error::InitClient)?;
+    let client = Client::new(environment::NAME, installation)?;
 
-    let Some(state_id) = client.installation.active_state else {
-        return Err(Error::NoActiveState(client.installation.root));
-    };
-
-    let state = client
-        .state_db
-        .get(state_id)
-        .map_err(|err| Error::LoadStateDb(err, state_id))?;
-
-    client::boot::synchronize(&client, &state).map_err(Error::SyncBoot)?;
+    client.synchrnoize_boot()?;
 
     println!("Boot updated\n");
 
-    client::boot::status(&client.installation).map_err(Error::BootStatus)?;
+    client.print_boot_status()?;
 
     Ok(())
 }
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("initialize client")]
-    InitClient(#[source] client::Error),
-
-    #[error("No active moss state found under {0:?}")]
-    NoActiveState(PathBuf),
-
-    #[error("load state {0} from db")]
-    LoadStateDb(#[source] db::Error, state::Id),
-
-    #[error("synchronize boot")]
-    SyncBoot(#[source] client::boot::Error),
-
-    #[error("boot status")]
-    BootStatus(#[source] client::boot::Error),
+    #[error("client")]
+    Client(#[from] client::Error),
 }

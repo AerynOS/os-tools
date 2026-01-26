@@ -37,7 +37,7 @@ pub enum Strategy {
 
 /// Prune old states using [`Strategy`] and garbage collect
 /// all cached data related to those states being removed
-pub fn prune_states(client: &Client, strategy: Strategy, yes: bool) -> Result<(), Error> {
+pub(super) fn prune_states(client: &Client, strategy: Strategy, yes: bool) -> Result<(), Error> {
     let installation = &client.installation;
     let layout_db = &client.layout_db;
     let state_db = &client.state_db;
@@ -197,7 +197,7 @@ pub fn prune_states(client: &Client, strategy: Strategy, yes: bool) -> Result<()
 /// * - `layout_db`    - Installation's layout database
 /// * - `installation` - Client specific target filesystem encapsulation
 /// * - `repositories` - All configured repositories
-pub fn prune_cache(
+pub(super) fn prune_cache(
     state_db: &db::state::Database,
     install_db: &db::meta::Database,
     layout_db: &db::layout::Database,

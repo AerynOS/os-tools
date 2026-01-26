@@ -266,7 +266,7 @@ pub fn synchronize(client: &Client, state: &State) -> Result<(), Error> {
     Ok(())
 }
 
-pub fn status(installation: &Installation) -> Result<(), Error> {
+pub fn print_status(installation: &Installation) -> Result<(), Error> {
     fn display_optional_path(path: Option<&Path>) -> std::path::Display<'_> {
         path.unwrap_or_else(|| "none".as_ref()).display()
     }
