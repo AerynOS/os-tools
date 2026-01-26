@@ -247,8 +247,6 @@ pub enum Error {
     Io(#[from] io::Error),
     #[error("moss client")]
     MossClient(#[from] moss::client::Error),
-    #[error("moss install")]
-    MossInstall(#[from] moss::client::install::Error),
     #[error("moss installation")]
     MossInstallation(#[from] moss::installation::Error),
     #[error("container")]

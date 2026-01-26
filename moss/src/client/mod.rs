@@ -31,6 +31,7 @@ use postblit::TriggerScope;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use stone::{StoneDecodedPayload, StonePayloadLayoutFile, StonePayloadLayoutRecord};
 use thiserror::Error;
+use tracing::{info, info_span};
 use tui::{MultiProgress, ProgressBar, ProgressStyle, Styled};
 use vfs::tree::{BlitFile, Element, builder::TreeBuilder};
 
@@ -44,11 +45,10 @@ use crate::{
     state::{self, Selection},
     system_model,
 };
-use tracing::{info, info_span};
 
-pub mod boot;
-pub mod cache;
-pub mod install;
+mod boot;
+mod cache;
+mod install;
 mod postblit;
 pub mod prune;
 mod verify;
@@ -136,9 +136,9 @@ impl Client {
         matches!(self.scope, Scope::Ephemeral { .. })
     }
 
-    /// Perform an installation via [`install::install`]
-    pub fn install(&mut self, packages: &[&str], yes: bool) -> Result<install::Timing, install::Error> {
-        install(self, packages, yes)
+    /// Perform an installation via [`install`]
+    pub fn install(&mut self, packages: &[&str], yes: bool) -> Result<install::Timing, Error> {
+        install(self, packages, yes).map_err(|error| Error::Install(Box::new(error)))
     }
 
     /// Transition to an ephemeral client that doesn't record state changes
@@ -994,6 +994,20 @@ impl Client {
 
         self.load_or_create_system_model(path, &state)
     }
+
+    pub fn print_boot_status(&self) -> Result<(), Error> {
+        boot::print_status(&self.installation).map_err(Error::Boot)
+    }
+
+    pub fn synchrnoize_boot(&self) -> Result<(), Error> {
+        let Some(state_id) = self.installation.active_state else {
+            return Err(Error::NoActiveState);
+        };
+
+        let state = self.state_db.get(state_id)?;
+
+        boot::synchronize(self, &state).map_err(Error::Boot)
+    }
 }
 
 /// Add root symlinks & os-release file
@@ -1301,4 +1315,6 @@ pub enum Error {
     LoadSystemModel(#[from] system_model::LoadError),
     #[error("update system model")]
     UpdateSystemModel(#[from] system_model::UpdateError),
+    #[error("install")]
+    Install(#[source] Box<install::Error>),
 }
