@@ -20,4 +20,3 @@ pub mod paths;
 pub mod profile;
 pub mod recipe;
 pub mod timing;
-pub mod util;

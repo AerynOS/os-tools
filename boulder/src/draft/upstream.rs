@@ -7,14 +7,12 @@ use std::{
 
 use fs_err::tokio::{self as fs, File};
 use futures_util::{StreamExt, TryStreamExt, stream};
-use moss::{environment, request, runtime};
+use moss::{environment, request, runtime, util};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use tokio::{io::AsyncWriteExt, process::Command};
 use tui::{MultiProgress, ProgressBar, ProgressStyle, Styled};
 use url::Url;
-
-use crate::util;
 
 pub struct Upstream {
     pub uri: Url,

@@ -5,6 +5,7 @@
 use itertools::Itertools;
 use std::collections::BTreeSet;
 
+use moss::util;
 use stone_recipe::{
     Script, script,
     tuning::{self, Toolchain},
@@ -12,7 +13,7 @@ use stone_recipe::{
 use tui::Styled;
 
 use crate::build::pgo;
-use crate::{Macros, Paths, Recipe, architecture::BuildTarget, util};
+use crate::{Macros, Paths, Recipe, architecture::BuildTarget};
 
 use super::{Error, work_dir};
 

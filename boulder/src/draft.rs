@@ -8,12 +8,10 @@ use std::{io, path::PathBuf};
 use fs_err as fs;
 use itertools::Itertools;
 use licenses::match_licences;
-use moss::Dependency;
+use moss::{Dependency, util};
 use thiserror::Error;
 use tui::Styled;
 use url::Url;
-
-use crate::util;
 
 use self::metadata::Metadata;
 use self::monitoring::Monitoring;

@@ -5,8 +5,9 @@
 use std::{io, path::PathBuf};
 
 use derive_more::Debug;
+use moss::util;
 
-use crate::{Recipe, util};
+use crate::Recipe;
 
 #[derive(Debug, Clone)]
 #[debug("{_0:?}")]

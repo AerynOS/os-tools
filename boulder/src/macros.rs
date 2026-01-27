@@ -6,9 +6,10 @@ use std::collections::BTreeMap;
 use std::{io, path::Path};
 
 use fs_err as fs;
+use moss::util;
 use thiserror::Error;
 
-use crate::{Env, util};
+use crate::Env;
 
 #[derive(Debug)]
 pub struct Macros {
