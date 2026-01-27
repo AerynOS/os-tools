@@ -9,7 +9,7 @@ use std::{
 
 use fs_err::{self as fs, File};
 use itertools::Itertools;
-use moss::{Dependency, Provider, package::Meta};
+use moss::{Dependency, Provider, package::Meta, util};
 use regex::Regex;
 use stone::{StoneHeaderV1FileType, StoneWriteError, StoneWriter};
 use thiserror::Error;
@@ -17,7 +17,7 @@ use tui::{ProgressBar, ProgressStyle, Styled};
 
 use self::manifest::Manifest;
 use super::analysis;
-use crate::{Architecture, Paths, Recipe, architecture, util};
+use crate::{Architecture, Paths, Recipe, architecture};
 
 mod manifest;
 

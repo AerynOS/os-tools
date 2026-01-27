@@ -11,7 +11,7 @@ use std::{
 
 use fs_err as fs;
 use futures_util::{StreamExt, TryStreamExt, stream};
-use moss::runtime;
+use moss::{runtime, util};
 use nix::unistd::{LinkatFlags, linkat};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
@@ -19,7 +19,7 @@ use tokio::io::AsyncWriteExt;
 use tui::{MultiProgress, ProgressBar, ProgressStyle, Styled};
 use url::Url;
 
-use crate::{Paths, Recipe, build::git, util};
+use crate::{Paths, Recipe, build::git};
 
 pub fn parse(recipe: &Recipe) -> Result<Vec<Upstream>, Error> {
     recipe

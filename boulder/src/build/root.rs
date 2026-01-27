@@ -6,12 +6,12 @@ use std::collections::BTreeSet;
 use std::io;
 
 use fs_err as fs;
-use moss::{Installation, repository, runtime};
+use moss::{Installation, repository, runtime, util};
 use stone_recipe::{Upstream, tuning::Toolchain};
 use thiserror::Error;
 
 use crate::build::Builder;
-use crate::{Timing, container, timing, util};
+use crate::{Timing, container, timing};
 
 pub fn populate(
     builder: &Builder,

@@ -2,10 +2,9 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
+use moss::util;
 use regex::Regex;
 use url::Url;
-
-use crate::util;
 
 use super::Source;
 

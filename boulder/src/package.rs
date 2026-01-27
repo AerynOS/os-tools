@@ -9,9 +9,10 @@ use itertools::Itertools;
 use stone::StoneDigestWriterHasher;
 use thiserror::Error;
 
+use moss::util;
 use stone_recipe::{Package, script};
 
-use crate::{Macros, Paths, Recipe, Timing, build, container, timing, util};
+use crate::{Macros, Paths, Recipe, Timing, build, container, timing};
 
 use self::collect::Collector;
 use self::emit::emit;

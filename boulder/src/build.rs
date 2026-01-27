@@ -11,7 +11,7 @@ use std::{
 
 use fs_err as fs;
 use itertools::Itertools;
-use moss::repository;
+use moss::{repository, util};
 use nix::{
     sys::signal::Signal,
     unistd::{Pid, getpgrp, setpgid},
@@ -26,7 +26,7 @@ use tui::Styled;
 use self::job::Job;
 use self::upstream::Upstream;
 use crate::{
-    Env, Macros, Paths, Recipe, Timing, architecture::BuildTarget, container, macros, profile, recipe, timing, util,
+    Env, Macros, Paths, Recipe, Timing, architecture::BuildTarget, container, macros, profile, recipe, timing,
 };
 
 pub mod git;

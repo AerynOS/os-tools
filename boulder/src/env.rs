@@ -7,10 +7,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use moss::util;
 use nix::NixPath;
 use thiserror::Error;
-
-use crate::util;
 
 pub struct Env {
     pub cache_dir: PathBuf,

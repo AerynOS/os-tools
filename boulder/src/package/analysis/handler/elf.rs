@@ -14,15 +14,12 @@ use elf::{
 use fs_err::File;
 use path_clean::clean;
 
-use moss::{Dependency, Provider, dependency};
+use moss::{Dependency, Provider, dependency, util};
 use stone_recipe::tuning::Toolchain;
 
-use crate::{
-    package::{
-        analysis::{BoxError, BucketMut, Decision, Response},
-        collect::PathInfo,
-    },
-    util,
+use crate::package::{
+    analysis::{BoxError, BucketMut, Decision, Response},
+    collect::PathInfo,
 };
 
 pub fn elf(bucket: &mut BucketMut<'_>, info: &mut PathInfo) -> Result<Response, BoxError> {
