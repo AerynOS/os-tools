@@ -1043,7 +1043,7 @@ impl Client {
     }
 
     /// Synchronize boot for the active state
-    pub fn synchrnoize_boot(&self) -> Result<(), Error> {
+    pub fn synchronize_boot(&self) -> Result<(), Error> {
         let Some(state_id) = self.installation.active_state else {
             return Err(Error::NoActiveState);
         };
