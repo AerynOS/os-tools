@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use std::collections::BTreeSet;
-use std::io;
+use std::{io, iter};
 
 use fs_err as fs;
 use moss::{Installation, repository, runtime, util};
@@ -150,42 +150,44 @@ fn packages(builder: &Builder) -> Vec<&str> {
     );
 
     for upstream in &builder.recipe.parsed.upstreams {
-        if let Upstream::Plain { uri, .. } = upstream {
+        if let Upstream::Plain { uri, rename, .. } = upstream {
             let path = uri.path();
 
-            if let Some((_, ext)) = path.rsplit_once('.') {
-                match ext {
-                    "xz" => {
-                        packages.push("binary(bsdtar-static)");
+            for path in iter::once(path).chain(rename.as_deref()) {
+                if let Some((_, ext)) = path.rsplit_once('.') {
+                    match ext {
+                        "xz" => {
+                            packages.push("binary(bsdtar-static)");
+                        }
+                        "zst" => {
+                            packages.push("binary(bsdtar-static)");
+                        }
+                        "bz2" => {
+                            packages.push("binary(bsdtar-static)");
+                        }
+                        "gz" => {
+                            packages.push("binary(bsdtar-static)");
+                        }
+                        "lz" => {
+                            packages.push("binary(bsdtar-static)");
+                        }
+                        "tgz" => {
+                            packages.push("binary(bsdtar-static)");
+                        }
+                        "7z" => {
+                            packages.push("binary(bsdtar-static)");
+                        }
+                        "zip" => {
+                            packages.push("binary(bsdtar-static)");
+                        }
+                        "rpm" => {
+                            packages.extend(["binary(rpm2cpio)", "cpio"]);
+                        }
+                        "deb" => {
+                            packages.push("binary(ar)");
+                        }
+                        _ => {}
                     }
-                    "zst" => {
-                        packages.push("binary(bsdtar-static)");
-                    }
-                    "bz2" => {
-                        packages.push("binary(bsdtar-static)");
-                    }
-                    "gz" => {
-                        packages.push("binary(bsdtar-static)");
-                    }
-                    "lz" => {
-                        packages.push("binary(bsdtar-static)");
-                    }
-                    "tgz" => {
-                        packages.push("binary(bsdtar-static)");
-                    }
-                    "7z" => {
-                        packages.push("binary(bsdtar-static)");
-                    }
-                    "zip" => {
-                        packages.push("binary(bsdtar-static)");
-                    }
-                    "rpm" => {
-                        packages.extend(["binary(rpm2cpio)", "cpio"]);
-                    }
-                    "deb" => {
-                        packages.push("binary(ar)");
-                    }
-                    _ => {}
                 }
             }
         }
