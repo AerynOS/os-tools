@@ -36,7 +36,7 @@ fn status(_args: &ArgMatches, installation: Installation) -> Result<(), Error> {
 fn sync(_args: &ArgMatches, installation: Installation) -> Result<(), Error> {
     let client = Client::new(environment::NAME, installation)?;
 
-    client.synchrnoize_boot()?;
+    client.synchronize_boot()?;
 
     println!("Boot updated\n");
 
