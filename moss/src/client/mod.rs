@@ -42,7 +42,9 @@ use self::remove::remove;
 use self::sync::sync;
 use self::verify::verify;
 use crate::{
-    Installation, Package, Provider, Registry, Signal, State, SystemModel, db, environment, installation, package,
+    Installation, Package, Provider, Registry, Signal, State, SystemModel,
+    client::fetch::fetch,
+    db, environment, installation, package,
     registry::plugin::{self, Plugin},
     repository, runtime, signal,
     state::{self, Selection},
@@ -54,6 +56,7 @@ pub use self::index::index;
 
 mod boot;
 mod cache;
+mod fetch;
 mod install;
 mod postblit;
 mod remove;
@@ -146,6 +149,11 @@ impl Client {
     /// Perform package removals
     pub fn remove(&mut self, packages: &[&str], yes: bool) -> Result<remove::Timing, Error> {
         remove(self, packages, yes).map_err(|error| Error::Remove(Box::new(error)))
+    }
+
+    /// Perform package fetches
+    pub fn fetch(&mut self, packages: &[&str], output_dir: &PathBuf) -> Result<fetch::Timing, Error> {
+        fetch(self, packages, output_dir).map_err(|error| Error::Fetch(Box::new(error)))
     }
 
     /// Perform a sync
@@ -1418,6 +1426,8 @@ pub enum Error {
     Install(#[source] Box<install::Error>),
     #[error("remove")]
     Remove(#[source] Box<remove::Error>),
+    #[error("fetch")]
+    Fetch(#[source] Box<fetch::Error>),
     #[error("sync")]
     Sync(#[source] Box<sync::Error>),
 }
