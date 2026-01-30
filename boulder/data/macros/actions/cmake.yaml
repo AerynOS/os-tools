@@ -72,5 +72,5 @@ definitions:
 
     # Use cmake with make as the build server
     - options_cmake_make: |
-        -G Unix Makefiles \
+        -G "Unix Makefiles" \
         %(options_cmake)
