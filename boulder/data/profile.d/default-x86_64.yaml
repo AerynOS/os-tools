@@ -1,6 +1,6 @@
 default-x86_64:
   repositories:
     volatile:
-      uri: "https://build.aerynos.dev/volatile/x86_64/stone.index"
-      description: "Volatile AerynOS repo"
+      uri: "https://build.aerynos.dev/stream/volatile/x86_64/stone.index"
+      description: "AerynOS volatile stream"
       priority: 0
