@@ -12,7 +12,7 @@ use clap::{ArgAction, ArgMatches, Command, CommandFactory, FromArgMatches, Parse
 use fs_err as fs;
 use moss::{
     Installation, State,
-    client::{self, Client, prune},
+    client::{self, Client, prune, vfs},
     environment, state,
 };
 use nix::unistd::gethostname;
@@ -149,7 +149,10 @@ pub fn build_vfs(installation: Installation) -> Result<(), Error> {
     let client = Client::new(environment::NAME, installation)?;
 
     if let Some(state) = client.get_active_state()? {
-        let fstree = client.vfs(state.selections.iter().map(|selection| &selection.package))?;
+        let fstree = vfs(
+            state.selections.iter().map(|selection| &selection.package),
+            &client.installation,
+        )?;
 
         std::hint::black_box(fstree);
     }

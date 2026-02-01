@@ -6,7 +6,7 @@ use clap::{ArgMatches, Command, arg};
 use itertools::Itertools;
 use moss::{
     Installation, Package, Provider,
-    client::{self, Client},
+    client::{self, Client, vfs},
     environment,
 };
 use stone::StonePayloadLayoutFile;
@@ -48,7 +48,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
             print_package(&candidate);
 
             if candidate.flags.installed && show_files {
-                let vfs = client.vfs([&candidate.id])?;
+                let vfs = vfs([&candidate.id], &client.installation)?;
                 print_files(vfs);
             }
             println!();

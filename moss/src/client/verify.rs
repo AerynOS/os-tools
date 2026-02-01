@@ -20,7 +20,7 @@ use vfs::tree::BlitFile;
 
 use crate::{
     Client, Package, Signal,
-    client::{self, cache},
+    client::{self, blit_root_from_packages, cache, vfs},
     package, runtime, signal, state,
 };
 
@@ -125,7 +125,7 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
 
             let is_active = client.installation.active_state == Some(state.id);
 
-            let vfs = client.vfs(state.selections.iter().map(|s| &s.package))?;
+            let vfs = vfs(state.selections.iter().map(|s| &s.package), &client.installation)?;
 
             let base = if is_active {
                 client.installation.root.join("usr")
@@ -260,7 +260,11 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
         let is_active = client.installation.active_state == Some(state.id);
 
         // Blits to staging dir
-        let fstree = client.blit_root(state.selections.iter().map(|s| &s.package))?;
+        let fstree = blit_root_from_packages(
+            state.selections.iter().map(|s| &s.package),
+            &client.installation,
+            &client.scope,
+        )?;
 
         if is_active {
             let system_model =
