@@ -52,6 +52,7 @@ use crate::{
     system_model,
 };
 
+pub use self::extract::extract;
 pub use self::index::index;
 
 mod boot;
@@ -62,6 +63,7 @@ mod remove;
 mod sync;
 mod verify;
 
+pub mod extract;
 pub mod index;
 pub mod prune;
 
