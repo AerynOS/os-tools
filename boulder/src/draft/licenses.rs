@@ -100,7 +100,7 @@ pub fn match_licences(dir: &Path, spdx_dir: &Path) -> Result<Vec<String>, Error>
         .par_iter()
         .filter_map(|license| {
             let license_content = std::fs::read_to_string(license).ok();
-            if license_content.is_some() {
+            if license_content.as_ref().is_some_and(|s| !s.is_empty()) {
                 Some(license_content)
             } else {
                 println!("{} | Failed to parse {}", "Warning".yellow(), license.display());
