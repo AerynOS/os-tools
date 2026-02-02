@@ -37,6 +37,12 @@ impl From<meta::Id> for Id {
     }
 }
 
+impl From<String> for Id {
+    fn from(value: String) -> Self {
+        Self(AStr::from(value))
+    }
+}
+
 #[cfg(test)]
 impl From<&'static str> for Id {
     fn from(value: &'static str) -> Self {
