@@ -14,12 +14,9 @@ use stone::{StoneDecodedPayload, StonePayloadMetaTag, StoneReadError};
 use thiserror::Error;
 use xxhash_rust::xxh3::xxh3_64;
 
-use tui::{MultiProgress, ProgressBar, ProgressStyle, Styled};
-
 use crate::db::meta;
 use crate::repository::{self, Repository};
-use crate::{Installation, package};
-use crate::{environment, runtime};
+use crate::{Installation, emit, environment, output, package, runtime};
 
 enum Source {
     System(config::Manager),
@@ -42,11 +39,21 @@ pub struct Manager {
     repositories: BTreeMap<repository::Id, repository::Cached>,
 }
 
-impl Manager {
-    pub fn is_explicit(&self) -> bool {
-        matches!(self.source, Source::Explicit { .. })
-    }
+#[derive(Debug, Clone)]
+pub enum OutputEvent {
+    RefreshStarted { num_to_refresh: usize },
+    RefreshRepoStarted(repository::Id),
+    RefreshRepoFinished(repository::Id),
+    RefreshFinished { elapsed: Duration },
+}
 
+impl output::Event for OutputEvent {
+    fn emit(self, emitter: &dyn output::Emitter) {
+        emitter.emit(&output::InternalEvent::RepositoryManager(self));
+    }
+}
+
+impl Manager {
     /// Create a [`Manager`] for the supplied [`Installation`] using system configurations
     pub fn system(config: config::Manager, installation: Installation) -> Result<Self, Error> {
         Self::new(Source::System(config), installation)
@@ -100,6 +107,10 @@ impl Manager {
         })
     }
 
+    pub fn is_explicit(&self) -> bool {
+        matches!(self.source, Source::Explicit { .. })
+    }
+
     /// Add a [`Repository`]
     pub fn add_repository(&mut self, id: repository::Id, repository: Repository) -> Result<(), Error> {
         let Source::System(config) = &self.source else {
@@ -139,32 +150,37 @@ impl Manager {
     /// Refresh all [`Repository`]'s by fetching it's latest index
     /// file and updating it's associated meta database
     pub async fn refresh_all(&mut self) -> Result<(), Error> {
-        let mpb = MultiProgress::new();
+        let active_repos = self
+            .repositories
+            .iter()
+            .filter(|(_, r)| r.repository.active)
+            .collect::<Vec<_>>();
+
+        let now = tokio::time::Instant::now();
+
+        emit!(OutputEvent::RefreshStarted {
+            num_to_refresh: active_repos.len(),
+        });
 
         // Fetch index files asynchronously and then
         // update to DB
-        stream::iter(self.repositories.iter().filter(|(_, r)| r.repository.active))
+        let res = stream::iter(&active_repos)
             .map(|(id, _)| async {
-                let pb = mpb.add(
-                    ProgressBar::new_spinner()
-                        .with_style(
-                            ProgressStyle::with_template(" {spinner} {wide_msg}")
-                                .unwrap()
-                                .tick_chars("--=≡■≡=--"),
-                        )
-                        .with_message(format!("{} {}", "Refreshing".blue(), *id)),
-                );
-                pb.enable_steady_tick(Duration::from_millis(150));
+                emit!(OutputEvent::RefreshRepoStarted((*id).clone()));
 
                 self.refresh(id).await?;
 
-                pb.suspend(|| println!("{} {}", "Refreshed".green(), *id));
+                emit!(OutputEvent::RefreshRepoFinished((*id).clone()));
 
                 Ok(())
             })
             .buffer_unordered(environment::MAX_NETWORK_CONCURRENCY)
             .try_collect()
-            .await
+            .await;
+
+        emit!(OutputEvent::RefreshFinished { elapsed: now.elapsed() });
+
+        res
     }
 
     /// Ensures all repositories are initialized - index file downloaded and meta db
@@ -189,32 +205,29 @@ impl Manager {
             return Ok(0);
         }
 
-        let mpb = MultiProgress::new();
+        let now = tokio::time::Instant::now();
+
+        emit!(OutputEvent::RefreshStarted {
+            num_to_refresh: uninitialized.len(),
+        });
 
         // Fetch index files asynchronously and then
         // update to DB
         stream::iter(&uninitialized)
             .map(|id| async {
-                let pb = mpb.add(
-                    ProgressBar::new_spinner()
-                        .with_style(
-                            ProgressStyle::with_template(" {spinner} {wide_msg}")
-                                .unwrap()
-                                .tick_chars("--=≡■≡=--"),
-                        )
-                        .with_message(format!("{} {}", "Refreshing".blue(), *id)),
-                );
-                pb.enable_steady_tick(Duration::from_millis(150));
+                emit!(OutputEvent::RefreshRepoStarted((*id).clone()));
 
                 self.refresh(id).await?;
 
-                pb.suspend(|| println!("{} {}", "Refreshed".green(), *id));
+                emit!(OutputEvent::RefreshRepoFinished((*id).clone()));
 
                 Ok(()) as Result<_, Error>
             })
             .buffer_unordered(environment::MAX_NETWORK_CONCURRENCY)
             .try_collect::<()>()
             .await?;
+
+        emit!(OutputEvent::RefreshFinished { elapsed: now.elapsed() });
 
         Ok(uninitialized.len())
     }

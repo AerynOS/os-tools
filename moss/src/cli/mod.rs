@@ -10,7 +10,10 @@ use clap_complete::{
     shells::{Bash, Fish, Zsh},
 };
 use clap_mangen::Man;
-use moss::{Installation, installation};
+use moss::{
+    Installation, installation,
+    output::{self, DefaultOutput, TracingOutput},
+};
 use thiserror::Error;
 use tracing_common::{self, logging::LogConfig, logging::init_log_with_config};
 use tui::Styled;
@@ -101,6 +104,14 @@ fn command() -> Command {
                 .value_name("DIR")
                 .hide(true),
         )
+        .arg(
+            Arg::new("silent")
+                .short('s')
+                .long("silent")
+                .global(true)
+                .help("Suppress all output")
+                .action(ArgAction::SetTrue),
+        )
         .arg_required_else_help(true)
         .subcommand(boot::command())
         .subcommand(cache::command())
@@ -159,9 +170,17 @@ pub fn process() -> Result<(), Error> {
     let matches = command().get_matches_from(args);
 
     let show_version = matches.get_one::<bool>("version").is_some_and(|v| *v);
+    let silent = matches.get_one::<bool>("silent").is_some_and(|v| *v);
 
     if show_version {
         println!("moss {}", tools_buildinfo::get_full_version());
+    }
+
+    if silent {
+        // We still output logging, that's controlled w/ a separate flag
+        output::install_emitter(TracingOutput::default());
+    } else {
+        output::install_emitter(DefaultOutput::default());
     }
 
     if let Some(log_config) = matches.get_one::<LogConfig>("log") {
