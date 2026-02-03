@@ -34,10 +34,7 @@ use stone::{StoneDecodedPayload, StonePayloadLayoutFile, StonePayloadLayoutRecor
 use thiserror::Error;
 use tracing::{info, info_span};
 use tui::{MultiProgress, ProgressBar, ProgressStyle, Styled};
-use vfs::{
-    Tree,
-    tree::{BlitFile, Element, builder::TreeBuilder},
-};
+use vfs::tree::{BlitFile, Element, builder::TreeBuilder};
 
 use self::install::install;
 use self::prune::{prune_cache, prune_states};
@@ -70,7 +67,7 @@ pub mod prune;
 /// A Client is a connection to the underlying package management systems
 pub struct Client {
     /// Root that we operate on
-    pub installation: Installation,
+    installation: Installation,
     /// Combined set of data sources for current state and potential packages
     registry: Registry,
     /// All installed packages across all states
@@ -325,10 +322,7 @@ impl Client {
 
         // Build VFS from new state selections
         // to build triggers from
-        let fstree = vfs(
-            new.selections.iter().map(|selection| &selection.package),
-            &self.installation,
-        )?;
+        let fstree = self.vfs(new.selections.iter().map(|selection| &selection.package))?;
 
         if !skip_triggers {
             // Run system triggers
@@ -380,7 +374,7 @@ impl Client {
 
         let old_state = self.installation.active_state;
 
-        let fstree = blit_root_from_packages(selections.iter().map(|s| &s.package), &self.installation, &self.scope)?;
+        let fstree = self.blit_root(selections.iter().map(|s| &s.package))?;
 
         let result = match &self.scope {
             Scope::Stateful => {
@@ -409,7 +403,7 @@ impl Client {
     }
 
     /// Apply all triggers with the given scope, wrapping with a progressbar.
-    fn apply_triggers(scope: TriggerScope<'_>, fstree: &Tree<PendingFile>) -> Result<(), postblit::Error> {
+    fn apply_triggers(scope: TriggerScope<'_>, fstree: &vfs::Tree<PendingFile>) -> Result<(), postblit::Error> {
         let triggers = postblit::triggers(scope, fstree)?;
 
         let progress = ProgressBar::new(triggers.len() as u64).with_style(
@@ -470,7 +464,7 @@ impl Client {
 
     pub fn apply_stateful_blit(
         &self,
-        fstree: Tree<PendingFile>,
+        fstree: vfs::Tree<PendingFile>,
         state: &State,
         old_state: Option<state::Id>,
         system_model: SystemModel,
@@ -502,7 +496,7 @@ impl Client {
 
     pub fn apply_ephemeral_blit(
         &self,
-        fstree: Tree<PendingFile>,
+        fstree: vfs::Tree<PendingFile>,
         blit_root: &Path,
         system_model: SystemModel,
     ) -> Result<(), Error> {
@@ -761,6 +755,45 @@ impl Client {
         Ok(())
     }
 
+    /// Build a [`vfs::Tree`] for the specified package IDs
+    ///
+    /// Returns a newly built vfs Tree to plan the filesystem operations for blitting
+    /// and conflict detection.
+    pub fn vfs<'a>(
+        &self,
+        packages: impl IntoIterator<Item = &'a package::Id>,
+    ) -> Result<vfs::Tree<PendingFile>, Error> {
+        vfs(self.layout_db.query(packages)?)
+    }
+
+    /// Blit the packages to a filesystem root
+    ///
+    /// This functionality is core to all moss filesystem transactions, forming the entire
+    /// staging logic. For all the [`crate::package::Id`] present in the staging state,
+    /// query their stored [`StonePayloadLayoutBody`] and cache into a [`vfs::Tree`].
+    ///
+    /// The new `/usr` filesystem is written in optimal order to a staging tree by making
+    /// use of the "at" family of functions (`mkdirat`, `linkat`, etc) with relative directory
+    /// file descriptors, linking files from the assets store to provide deduplication.
+    ///
+    /// This provides a very quick means to generate a hardlinked "snapshot" on-demand,
+    /// which can then be activated via [`Self::promote_staging`]
+    pub fn blit_root<'a>(
+        &self,
+        packages: impl IntoIterator<Item = &'a package::Id>,
+    ) -> Result<vfs::Tree<PendingFile>, Error> {
+        let blit_target = match &self.scope {
+            Scope::Stateful => self.installation.staging_dir(),
+            Scope::Ephemeral { blit_root } => blit_root.to_owned(),
+        };
+
+        let fstree = self.vfs(packages)?;
+
+        blit_root(&self.installation, &fstree, &blit_target)?;
+
+        Ok(fstree)
+    }
+
     fn load_or_create_system_model(&self, path: PathBuf, state: &State) -> Result<SystemModel, Error> {
         match system_model::load(&path).map_err(Error::LoadSystemModel)? {
             Some(system_model) => Ok(system_model),
@@ -844,7 +877,7 @@ impl Client {
 }
 
 /// Add root symlinks & os-release file
-pub fn create_root_links(root: &Path) -> io::Result<()> {
+fn create_root_links(root: &Path) -> io::Result<()> {
     let links = vec![
         ("usr/sbin", "sbin"),
         ("usr/bin", "bin"),
@@ -871,70 +904,20 @@ pub fn create_root_links(root: &Path) -> io::Result<()> {
     Ok(())
 }
 
-/// Build a [`vfs::Tree`] for the specified package IDs
+/// Build a [`vfs::Tree`] for the specified layouts
 ///
 /// Returns a newly built vfs Tree to plan the filesystem operations for blitting
 /// and conflict detection.
-pub fn vfs<'a>(
-    packages: impl IntoIterator<Item = &'a package::Id>,
-    installation: &Installation,
-) -> Result<Tree<PendingFile>, Error> {
+pub fn vfs(layouts: Vec<(package::Id, StonePayloadLayoutRecord)>) -> Result<vfs::Tree<PendingFile>, Error> {
     let mut tbuild = TreeBuilder::new();
 
-    let layout_db = db::layout::Database::new(installation.db_path("layout").to_str().unwrap_or_default())?;
-    let layouts = layout_db.query(packages)?;
     for (id, layout) in layouts {
         tbuild.push(PendingFile { id: id.clone(), layout });
     }
-    tbuild.bake();
-    let tree = tbuild.tree()?;
-    Ok(tree)
-}
-
-pub fn blit_from_package<'a>(
-    package: &package::Id,
-    layouts: Vec<StonePayloadLayoutRecord>,
-    installation: &Installation,
-    blit_target: &PathBuf,
-) -> Result<Tree<PendingFile>, Error> {
-    // undirt.
-    fs::remove_dir_all(&blit_target)?;
-
-    let mut tbuild = TreeBuilder::new();
-
-    for layout in layouts.clone() {
-        tbuild.push(PendingFile {
-            id: package.clone(),
-            layout,
-        });
-    }
 
     tbuild.bake();
-    let tree = tbuild.tree()?;
 
-    let res = blit_root(installation, tree, blit_target.into())?;
-
-    Ok(res)
-}
-
-pub fn blit_root_from_packages<'a>(
-    packages: impl IntoIterator<Item = &'a package::Id>,
-    installation: &Installation,
-    scope: &Scope,
-) -> Result<Tree<PendingFile>, Error> {
-    let tree = vfs(packages, installation)?;
-
-    let blit_target = match &scope {
-        Scope::Stateful => installation.staging_dir(),
-        Scope::Ephemeral { blit_root } => blit_root.to_owned(),
-    };
-
-    // undirt.
-    fs::remove_dir_all(&blit_target)?;
-
-    let res = blit_root(installation, tree, blit_target)?;
-
-    Ok(res)
+    Ok(tbuild.tree()?)
 }
 
 /// Blit the packages to a filesystem root
@@ -949,11 +932,10 @@ pub fn blit_root_from_packages<'a>(
 ///
 /// This provides a very quick means to generate a hardlinked "snapshot" on-demand,
 /// which can then be activated via [`Self::promote_staging`]
-fn blit_root<'a>(
-    installation: &Installation,
-    tree: Tree<PendingFile>,
-    blit_target: PathBuf,
-) -> Result<Tree<PendingFile>, Error> {
+pub fn blit_root(installation: &Installation, tree: &vfs::Tree<PendingFile>, blit_target: &Path) -> Result<(), Error> {
+    // undirt.
+    fs::remove_dir_all(blit_target)?;
+
     let progress = ProgressBar::new(1).with_style(
         ProgressStyle::with_template("\n|{bar:20.red/blue}| {pos}/{len} {msg}")
             .unwrap()
@@ -979,8 +961,8 @@ fn blit_root<'a>(
 
     rayon_runtime.install(|| -> Result<(), Error> {
         if let Some(root) = tree.structured() {
-            mkdir(&blit_target, Mode::from_bits_truncate(0o755))?;
-            let root_dir = fcntl::open(&blit_target, OFlag::O_DIRECTORY | OFlag::O_RDONLY, Mode::empty())?;
+            mkdir(blit_target, Mode::from_bits_truncate(0o755))?;
+            let root_dir = fcntl::open(blit_target, OFlag::O_DIRECTORY | OFlag::O_RDONLY, Mode::empty())?;
 
             if let Element::Directory(_, _, children) = root {
                 let current_span = tracing::Span::current();
@@ -1013,7 +995,7 @@ fn blit_root<'a>(
         format!("({:.1}k / s)", num_entries as f32 / elapsed.as_secs_f32() / 1_000.0).dim()
     );
 
-    Ok(tree)
+    Ok(())
 }
 
 /// Recursively write a directory, or a single flat inode, to the staging tree.
@@ -1241,7 +1223,7 @@ fn record_system_model(root: &Path, system_model: SystemModel) -> Result<(), Err
 }
 
 #[derive(Clone, Debug)]
-pub enum Scope {
+enum Scope {
     Stateful,
     Ephemeral { blit_root: PathBuf },
 }

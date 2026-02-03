@@ -11,19 +11,14 @@ use tui::{ProgressBar, ProgressStyle};
 
 use crate::{
     Installation,
-    client::{self, blit_from_package, cache::asset_path, create_root_links},
+    client::{self, cache::asset_path},
     installation,
     package::{self, MissingMetaFieldError},
-    state::Selection,
+    util,
 };
 
 pub fn extract(stones: Vec<PathBuf>) -> Result<(), Error> {
-    // Begin unpack
-    fs::create_dir_all(".stoneStore")?;
-
-    let content_store = PathBuf::from(".stoneStore");
-    let install_path = Path::new(".");
-    let installation = Installation::open(install_path, None)?;
+    let installation = Installation::open(Path::new("."), None)?;
 
     for path in stones {
         let rdr = File::open(&path).map_err(Error::IO)?;
@@ -38,30 +33,18 @@ pub fn extract(stones: Vec<PathBuf>) -> Result<(), Error> {
             .ok_or(Error::MissingMeta)?;
 
         let pkg = package::Meta::from_stone_payload(&meta.body).map_err(Error::MalformedMeta)?;
-        let extraction_root = PathBuf::from(pkg.id().to_string());
+        let pkg_id = package::Id::from(pkg.id());
+        let extraction_root = PathBuf::from(pkg_id.to_string());
 
         println!("Extract: {path:?} -> {extraction_root:?}");
 
-        let selection = Selection {
-            package: pkg.id().into(),
-            explicit: true,
-            reason: None,
-        };
-
         // Cleanup old extraction root
-        if extraction_root.exists() {
-            fs::remove_dir_all(&extraction_root)?;
-        }
-
-        fs::create_dir_all(&extraction_root)?;
-
-        create_root_links(&extraction_root)?;
-        create_root_links(&installation.isolation_dir())?;
+        util::recreate_dir(&extraction_root)?;
 
         fs::create_dir_all(installation.assets_path("v2"))?;
 
         let content_dir = installation.cache_path("content");
-        let content_path = content_dir.join(pkg.id().to_string());
+        let content_path = content_dir.join(pkg_id.to_string());
 
         fs::create_dir_all(&content_dir)?;
 
@@ -114,19 +97,20 @@ pub fn extract(stones: Vec<PathBuf>) -> Result<(), Error> {
         }
 
         if let Some(layouts) = layouts {
-            let layout_record = layouts.body.clone().into_iter().collect::<Vec<_>>();
-            blit_from_package(
-                &selection.package,
-                layout_record,
-                &installation,
-                &extraction_root.canonicalize()?,
-            )?;
+            let records = layouts
+                .body
+                .clone()
+                .into_iter()
+                .map(|layout| (pkg_id.clone(), layout))
+                .collect::<Vec<_>>();
+            let vfs = client::vfs(records)?;
+
+            client::blit_root(&installation, &vfs, &extraction_root.canonicalize()?)?;
         }
     }
 
-    // Clean up.
-    fs::remove_dir_all(content_store)?;
-    fs::remove_dir_all(Path::new(".").join(".moss"))?;
+    // Clean up transient .moss install
+    fs::remove_dir_all(installation.root.join(".moss"))?;
 
     Ok(())
 }
