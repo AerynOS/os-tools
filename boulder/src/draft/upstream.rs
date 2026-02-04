@@ -64,7 +64,7 @@ pub fn fetch_and_extract(upstreams: &[Url], extract_root: &Path) -> Result<Vec<U
 }
 
 async fn fetch(url: &Url, output: &Path) -> Result<String, Error> {
-    let mut stream = request::get(url.clone()).await?;
+    let mut stream = request::stream(url.clone()).await?;
 
     let mut file = File::create(&output).await?;
 

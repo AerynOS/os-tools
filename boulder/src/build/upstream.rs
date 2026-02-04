@@ -299,7 +299,7 @@ impl Plain {
             });
         }
 
-        let mut stream = request::get(self.uri.clone()).await?;
+        let mut stream = request::stream(self.uri.clone()).await?;
 
         let mut hasher = Sha256::new();
         let mut out = fs::File::create(&partial_path).await?;

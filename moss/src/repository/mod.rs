@@ -140,7 +140,7 @@ impl Config for Map {
 }
 
 async fn fetch_index(url: Url, out_path: impl Into<PathBuf>) -> Result<(), FetchError> {
-    let mut stream = request::get(url).await?;
+    let mut stream = request::stream(url).await?;
 
     let mut out = File::create(out_path).await?;
 

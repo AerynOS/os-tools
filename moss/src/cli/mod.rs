@@ -18,6 +18,7 @@ use tui::Styled;
 mod boot;
 mod cache;
 mod extract;
+mod fetch;
 mod index;
 mod info;
 mod inspect;
@@ -105,6 +106,7 @@ fn command() -> Command {
         .subcommand(boot::command())
         .subcommand(cache::command())
         .subcommand(extract::command())
+        .subcommand(fetch::command())
         .subcommand(index::command())
         .subcommand(info::command())
         .subcommand(inspect::command())
@@ -203,6 +205,7 @@ pub fn process() -> Result<(), Error> {
         Some(("boot", args)) => boot::handle(args, installation).map_err(Error::Boot),
         Some(("cache", args)) => cache::handle(args, installation).map_err(Error::Cache),
         Some(("extract", args)) => extract::handle(args).map_err(Error::Extract),
+        Some(("fetch", args)) => fetch::handle(args, installation).map_err(Error::Fetch),
         Some(("index", args)) => index::handle(args).map_err(Error::Index),
         Some(("info", args)) => info::handle(args, installation).map_err(Error::Info),
         Some(("inspect", args)) => inspect::handle(args).map_err(Error::Inspect),
@@ -240,6 +243,7 @@ fn replace_aliases(args: env::Args) -> Vec<String> {
         ("ur", &["repo", "update"]),
         ("er", &["repo", "enable"]),
         ("dr", &["repo", "disable"]),
+        ("fe", &["fetch"]),
         ("ix", &["index"]),
         ("it", &["install"]),
         ("rm", &["remove"]),
@@ -302,6 +306,9 @@ pub enum Error {
 
     #[error("extract")]
     Extract(#[source] extract::Error),
+
+    #[error("fetch")]
+    Fetch(#[source] fetch::Error),
 
     #[error("remove")]
     Remove(#[source] remove::Error),
