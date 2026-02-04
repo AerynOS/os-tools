@@ -16,6 +16,7 @@ mod update;
 
 #[derive(Debug, Clone)]
 pub struct SystemModel {
+    pub disable_warning: bool,
     pub repositories: repository::Map,
     pub packages: BTreeSet<dependency::Provider>,
     encoded: String,
@@ -43,6 +44,7 @@ pub fn create(repositories: repository::Map, packages: BTreeSet<dependency::Prov
     let encoded = encode(&repositories, &packages);
 
     SystemModel {
+        disable_warning: false,
         repositories,
         packages,
         encoded,
