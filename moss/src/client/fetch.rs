@@ -1,6 +1,6 @@
 use std::{
     io,
-    path::PathBuf,
+    path::Path,
     time::{Duration, Instant},
 };
 
@@ -14,47 +14,53 @@ use tui::{
 use url::{ParseError, Url};
 
 use crate::{
-    Client, Package, Provider,
-    client::{
-        self,
-        cache::{self},
-    },
-    environment,
+    Client, Package, Provider, client, environment,
     package::{self, Flags, Meta},
-    runtime, util,
+    request, runtime, util,
 };
 
 /// Fetch a set of packages.
 #[instrument(skip(client), fields(ephemeral = client.is_ephemeral()))]
-pub fn fetch(client: &mut Client, pkgs: &[&str], output_dir: &PathBuf) -> Result<Timing, Error> {
+pub fn fetch(client: &mut Client, pkgs: &[&str], output_dir: &Path, verbose: bool) -> Result<Timing, Error> {
     let mut timing = Timing::default();
     let mut instant = Instant::now();
 
+    util::ensure_dir_exists(output_dir)?;
+
+    let output_dir = output_dir.canonicalize()?;
+
     let input = resolve_input(pkgs, client)?;
+    let total_packages = input.len();
 
     timing.resolve = instant.elapsed();
     info!(
-        total_packages = input.len(),
-        packages_to_fetch = input.len(),
+        total_packages,
+        packages_to_fetch = total_packages,
         resolve_time_ms = timing.resolve.as_millis(),
         "Package resolution for fetch completed"
     );
 
-    println!("The following package(s) will be fetched:");
-    println!();
-    autoprint_columns(&input);
+    if verbose {
+        println!("The following package(s) will be fetched:");
+        println!();
+        autoprint_columns(&input);
+    }
 
     instant = Instant::now();
 
     let cache_packages_span = info_span!("progress", phase = "cache_packages", event_type = "progress");
     let _cache_packages_guard = cache_packages_span.enter();
-    info!(total_items = input.len(), progress = 0.0, event_type = "progress_start");
+    info!(
+        total_items = total_packages,
+        progress = 0.0,
+        event_type = "progress_start"
+    );
 
     let multi_progress = MultiProgress::new();
 
     // Add bar to track total package counts
     let total_progress = multi_progress.add(
-        ProgressBar::new(input.len() as u64).with_style(
+        ProgressBar::new(total_packages as u64).with_style(
             ProgressStyle::with_template("\n|{bar:20.cyan/blue}| {pos}/{len}")
                 .unwrap()
                 .progress_chars("■≡=- "),
@@ -63,11 +69,13 @@ pub fn fetch(client: &mut Client, pkgs: &[&str], output_dir: &PathBuf) -> Result
     total_progress.tick();
 
     runtime::block_on(async {
-        let stream = stream::iter(input.clone()).map(|meta| async {
+        let stream = stream::iter(&input).map(|pkg| async {
+            let download_size = pkg.meta.download_size.unwrap_or_default();
+
             let progress_bar = multi_progress.insert_before(
                 &total_progress,
-                ProgressBar::new(meta.download_size.unwrap_or_default())
-                    .with_message(format!("{} {}", "Downloading".blue(), meta.name.as_str().bold(),))
+                ProgressBar::new(download_size)
+                    .with_message(format!("{} {}", "Downloading".blue(), pkg.meta.name.as_str().bold(),))
                     .with_style(
                         ProgressStyle::with_template(
                             " {spinner} |{percent:>3}%| {wide_msg} {binary_bytes_per_sec:>.dim} ",
@@ -78,80 +86,69 @@ pub fn fetch(client: &mut Client, pkgs: &[&str], output_dir: &PathBuf) -> Result
             );
             progress_bar.enable_steady_tick(Duration::from_millis(150));
 
-            let download = cache::fetch(&meta, &client.installation, |progress| {
-                progress_bar.inc(progress.delta);
-                info!(
-                    progress = progress.completed as f32 / progress.total as f32,
-                    current = progress.completed as usize,
-                    total = progress.total as usize,
-                    event_type = "progress_update",
-                    "Downloading {}",
-                    meta.name
-                );
-            })
-            .await
-            .map_err(|err| Error::CacheFetch(err, meta.name.clone()))?;
-
-            let parsed = Url::parse(&meta.uri.unwrap())?;
-            let file_name = parsed
+            let uri = Url::parse(
+                pkg.meta
+                    .uri
+                    .as_deref()
+                    .expect("registry packages must have uri defined"),
+            )?;
+            let file_name = uri
                 .path_segments()
                 .and_then(|mut segments| segments.next_back())
-                .unwrap();
+                .expect("uri path has at least one segment");
 
             let dest_path = output_dir.join(file_name);
 
-            let multi_progress = multi_progress.clone();
-            let total_progress = total_progress.clone();
-
-            util::hardlink_or_copy(download.path(), &dest_path)?;
-
-            runtime::unblock(move || {
-                progress_bar.finish();
-                multi_progress.remove(&progress_bar);
-
-                let is_cached = download.was_cached;
-
-                let cached_tag = is_cached
-                    .then_some(format!("{}", " (cached)".dim()))
-                    .unwrap_or_default();
-
-                multi_progress.suspend(|| {
-                    // Print the relative instead of absolute path to user
-                    let path_to_print = if let Ok(cwd) = std::env::current_dir() {
-                        dest_path.strip_prefix(cwd).ok().unwrap_or(&dest_path)
-                    } else {
-                        &dest_path
-                    };
-
-                    println!(
-                        "{} {}{cached_tag} {}",
-                        "Fetched".green(),
-                        meta.name.to_string().bold(),
-                        path_to_print.display()
-                    );
-                });
-
-                total_progress.inc(1);
+            request::download_with_progress(uri, &dest_path, |progress| {
+                progress_bar.inc(progress.delta);
+                info!(
+                    progress = progress.completed as f32 / download_size as f32,
+                    current = progress.completed as usize,
+                    total = download_size as usize,
+                    event_type = "progress_update",
+                    "Downloading {}",
+                    pkg.meta.name
+                );
             })
-            .await;
+            .await
+            .map_err(|err| Error::FetchPackage(err, pkg.meta.name.clone()))?;
+
+            progress_bar.finish();
+            multi_progress.remove(&progress_bar);
+
+            multi_progress.suspend(|| {
+                // Print the relative instead of absolute path to user
+                let path_to_print = if let Ok(cwd) = std::env::current_dir() {
+                    dest_path.strip_prefix(cwd).ok().unwrap_or(&dest_path)
+                } else {
+                    &dest_path
+                };
+
+                println!(
+                    "{} {} {}",
+                    "Fetched".green(),
+                    pkg.meta.name.to_string().bold(),
+                    path_to_print.display()
+                );
+            });
+
+            total_progress.inc(1);
 
             Ok(()) as Result<(), Error>
         });
 
         let buffered = stream.buffer_unordered(environment::MAX_NETWORK_CONCURRENCY);
 
-        let res: Result<(), Error> = buffered.try_collect().await;
-        res
+        buffered.try_collect::<()>().await
     })?;
 
     timing.fetch = instant.elapsed();
     info!(
         duration_ms = timing.fetch.as_millis(),
-        items_processed = input.len(),
+        items_processed = total_packages,
         progress = 1.0,
         event_type = "progress_completed",
     );
-    drop(_cache_packages_guard);
 
     Ok(timing)
 }
@@ -159,7 +156,7 @@ pub fn fetch(client: &mut Client, pkgs: &[&str], output_dir: &PathBuf) -> Result
 /// Resolves the package arguments as valid input packages. Returns an error
 /// if any args are invalid.
 #[instrument(skip(client))]
-fn resolve_input(pkgs: &[&str], client: &Client) -> Result<Vec<Meta>, Error> {
+fn resolve_input(pkgs: &[&str], client: &Client) -> Result<Vec<ResolvedPackage>, Error> {
     // Parse pkg args into valid / invalid sets
     let queried = pkgs.iter().map(|p| find_packages(p, client));
 
@@ -170,7 +167,9 @@ fn resolve_input(pkgs: &[&str], client: &Client) -> Result<Vec<Meta>, Error> {
             // We'll need to resolve explicitly by id to populate the full meta.uri
             let resolved_pkg_meta = client.registry.by_id(&pkg.id).next().ok_or(Error::NoPackage(id))?;
 
-            results.push(resolved_pkg_meta.meta);
+            results.push(ResolvedPackage {
+                meta: resolved_pkg_meta.meta,
+            });
         } else {
             return Err(Error::NoPackage(id));
         }
@@ -216,7 +215,7 @@ pub enum Error {
     NoFileNameInUri(String),
 
     #[error("fetch package {1}")]
-    CacheFetch(#[source] cache::FetchError, package::Name),
+    FetchPackage(#[source] request::Error, package::Name),
 }
 
 /// Simple timing information for Fetch
@@ -226,18 +225,27 @@ pub struct Timing {
     pub fetch: Duration,
 }
 
-impl ColumnDisplay for Meta {
+#[derive(Clone)]
+struct ResolvedPackage {
+    meta: Meta,
+}
+
+impl ColumnDisplay for ResolvedPackage {
     fn get_display_width(&self) -> usize {
-        self.name.as_str().chars().count()
+        self.meta.name.as_str().chars().count()
     }
 
     fn display_column(&self, writer: &mut impl io::prelude::Write, _col: tui::pretty::Column, width: usize) {
         let _ = writeln!(
             writer,
             "{}{:width$}  {}",
-            self.name.as_str().bold(),
+            self.meta.name.as_str().bold(),
             " ".repeat(width),
-            self.uri.clone().unwrap().as_str()
+            self.meta
+                .uri
+                .as_ref()
+                .expect("registry packages must have uri defined")
+                .as_str()
         );
     }
 }

@@ -293,7 +293,7 @@ async fn fetch_hash(uri: Url, mpb: &MultiProgress) -> Result<String, Error> {
     );
     pb.enable_steady_tick(Duration::from_millis(150));
 
-    let mut stream = request::get(uri).await?;
+    let mut stream = request::stream(uri).await?;
 
     let mut hasher = Sha256::new();
     // Discard bytes

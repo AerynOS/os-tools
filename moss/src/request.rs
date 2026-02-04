@@ -2,16 +2,20 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-use std::{io, path::PathBuf, sync::OnceLock};
+use std::{
+    io,
+    path::{Path, PathBuf},
+    sync::OnceLock,
+};
 
 use bytes::Bytes;
-use fs_err::tokio::File;
+use fs_err::tokio::{self as fs, File};
 use futures_util::{
     Stream, StreamExt,
     stream::{self, BoxStream},
 };
 use thiserror::Error;
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_util::io::ReaderStream;
 use url::Url;
 
@@ -31,11 +35,45 @@ fn get_client() -> &'static reqwest::Client {
 }
 
 /// Fetch a resource at the provided [`Url`] and stream response body as bytes
-pub async fn get(url: Url) -> Result<BoxStream<'static, Result<Bytes, Error>>, Error> {
+pub async fn stream(url: Url) -> Result<BoxStream<'static, Result<Bytes, Error>>, Error> {
     match url_file(&url) {
         Some(path) => read(path).await,
         _ => Ok(fetch(url).await?.boxed()),
     }
+}
+
+/// Downloads a file to the provided path
+pub async fn download(url: Url, to: &Path) -> Result<(), Error> {
+    download_with_progress(url, to, |_| {}).await
+}
+
+/// Downloads a file to the provided path and invokes `on_progress` after each
+/// chunk is downloaded
+pub async fn download_with_progress(url: Url, to: &Path, on_progress: impl Fn(Progress)) -> Result<(), Error> {
+    let partial_path = PathBuf::from(format!("{}.part", to.display()));
+
+    let mut bytes = stream(url).await?;
+    let mut out = File::create(&partial_path).await?;
+
+    let mut total = 0;
+
+    while let Some(chunk) = bytes.next().await {
+        let bytes = chunk?;
+        let delta = bytes.len() as u64;
+        total += delta;
+        out.write_all(&bytes).await?;
+
+        (on_progress)(Progress {
+            delta,
+            completed: total,
+        });
+    }
+
+    out.flush().await?;
+
+    fs::rename(partial_path, to).await?;
+
+    Ok(())
 }
 
 /// Internal fetch helper (sanity control) for `get`
@@ -81,4 +119,10 @@ pub enum Error {
     Fetch(#[from] reqwest::Error),
     #[error("io")]
     Read(#[from] io::Error),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct Progress {
+    pub delta: u64,
+    pub completed: u64,
 }

@@ -12,10 +12,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use futures_util::StreamExt;
 use snafu::{OptionExt, ResultExt as _, Snafu, ensure};
 use stone::{StoneDecodedPayload, StonePayloadIndexRecord, StoneReadError};
-use tokio::io::AsyncWriteExt;
 use url::Url;
 
 use crate::{Installation, package, request};
@@ -85,14 +83,13 @@ pub async fn fetch(
     installation: &Installation,
     on_progress: impl Fn(Progress),
 ) -> Result<Download, FetchError> {
-    use fs_err::tokio::{self as fs, File};
+    use fs_err::tokio as fs;
 
     let url = meta.uri.as_deref().context(MissingUrlSnafu)?;
     let url = url.parse::<Url>().context(InvalidUrlSnafu { url })?;
     let hash = meta.hash.as_ref().context(MissingHashSnafu)?;
 
     let destination_path = download_path(installation, hash)?;
-    let partial_path = destination_path.with_extension("part");
 
     if let Some(parent) = destination_path.parent() {
         fs::create_dir_all(parent).await?;
@@ -107,27 +104,14 @@ pub async fn fetch(
         });
     }
 
-    let mut bytes = request::get(url.clone()).await?;
-    let mut out = File::create(&partial_path).await?;
-
-    let mut total = 0;
-
-    while let Some(chunk) = bytes.next().await {
-        let bytes = chunk?;
-        let delta = bytes.len() as u64;
-        total += delta;
-        out.write_all(&bytes).await?;
-
+    request::download_with_progress(url, &destination_path, |progress| {
         (on_progress)(Progress {
-            delta,
-            completed: total,
-            total: meta.download_size.unwrap_or(total),
+            delta: progress.delta,
+            completed: progress.completed,
+            total: meta.download_size.unwrap_or(progress.completed),
         });
-    }
-
-    out.flush().await?;
-
-    fs::rename(partial_path, &destination_path).await?;
+    })
+    .await?;
 
     Ok(Download {
         id: meta.id().into(),
