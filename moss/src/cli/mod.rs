@@ -161,6 +161,7 @@ pub fn process() -> Result<(), Error> {
     let matches = command().get_matches_from(args);
 
     let show_version = matches.get_one::<bool>("version").is_some_and(|v| *v);
+    let verbose = matches.get_flag("verbose");
 
     if show_version {
         println!("moss {}", tools_buildinfo::get_full_version());
@@ -185,7 +186,7 @@ pub fn process() -> Result<(), Error> {
     }
 
     // Print the version, but not if the user is using the version subcommand
-    if matches.get_flag("verbose")
+    if verbose
         && let Some(command) = matches.subcommand_name()
         && command != "version"
     {
@@ -197,8 +198,12 @@ pub fn process() -> Result<(), Error> {
 
     let installation = Installation::open(root, cache.cloned())?;
 
-    if installation.system_model.is_some() {
-        print_system_model_warning(&installation);
+    if let Some(system_model) = installation.system_model.as_ref() {
+        if !system_model.disable_warning {
+            print_system_model_warning(&installation, false);
+        } else if verbose {
+            print_system_model_warning(&installation, true);
+        }
     }
 
     match matches.subcommand() {
@@ -265,10 +270,14 @@ fn replace_aliases(args: env::Args) -> Vec<String> {
     args
 }
 
-fn print_system_model_warning(installation: &Installation) {
-    eprintln!(
-        "{}: {path:?} is present & therefore active.
-Hence:
+fn print_system_model_warning(installation: &Installation, first_line_only: bool) {
+    let path = installation.system_model_path();
+
+    eprintln!("{}: {path:?} is present & therefore active.", "INFO".green());
+
+    if !first_line_only {
+        eprintln!(
+            "Hence:
 - The system-model is the source of truth and defines all
   repositories & installed packages.
 - Any changes made via `moss` commands will be temporary
@@ -276,9 +285,8 @@ Hence:
 - The system state can be reverted to match the system-model state
   by doing a `moss sync`.
 - To disable the system-model, remove or rename {path:?}.",
-        "INFO".green(),
-        path = installation.system_model_path(),
-    );
+        );
+    }
 }
 
 #[derive(Debug, Error)]
