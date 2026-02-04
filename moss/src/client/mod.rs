@@ -49,6 +49,7 @@ use crate::{
     system_model,
 };
 
+pub use self::extract::extract;
 pub use self::index::index;
 
 mod boot;
@@ -59,6 +60,7 @@ mod remove;
 mod sync;
 mod verify;
 
+pub mod extract;
 pub mod index;
 pub mod prune;
 
@@ -761,14 +763,7 @@ impl Client {
         &self,
         packages: impl IntoIterator<Item = &'a package::Id>,
     ) -> Result<vfs::Tree<PendingFile>, Error> {
-        let mut tbuild = TreeBuilder::new();
-        let layouts = self.layout_db.query(packages)?;
-        for (id, layout) in layouts {
-            tbuild.push(PendingFile { id: id.clone(), layout });
-        }
-        tbuild.bake();
-        let tree = tbuild.tree()?;
-        Ok(tree)
+        vfs(self.layout_db.query(packages)?)
     }
 
     /// Blit the packages to a filesystem root
@@ -783,221 +778,20 @@ impl Client {
     ///
     /// This provides a very quick means to generate a hardlinked "snapshot" on-demand,
     /// which can then be activated via [`Self::promote_staging`]
-    fn blit_root<'a>(
+    pub fn blit_root<'a>(
         &self,
         packages: impl IntoIterator<Item = &'a package::Id>,
-    ) -> Result<vfs::tree::Tree<PendingFile>, Error> {
-        let progress = ProgressBar::new(1).with_style(
-            ProgressStyle::with_template("\n|{bar:20.red/blue}| {pos}/{len} {msg}")
-                .unwrap()
-                .progress_chars("■≡=- "),
-        );
-        progress.set_message("Blitting filesystem");
-        progress.enable_steady_tick(Duration::from_millis(150));
-        progress.tick();
-
-        let now = Instant::now();
-        let mut stats = BlitStats::default();
-
-        let tree = self.vfs(packages)?;
-
-        progress.set_length(tree.len());
-        progress.set_position(0_u64);
-
-        let cache_dir = self.installation.assets_path("v2");
-        let cache_fd = fcntl::open(&cache_dir, OFlag::O_DIRECTORY | OFlag::O_RDONLY, Mode::empty())?;
-
+    ) -> Result<vfs::Tree<PendingFile>, Error> {
         let blit_target = match &self.scope {
             Scope::Stateful => self.installation.staging_dir(),
             Scope::Ephemeral { blit_root } => blit_root.to_owned(),
         };
 
-        // undirt.
-        fs::remove_dir_all(&blit_target)?;
+        let fstree = self.vfs(packages)?;
 
-        // We need to ensure this runtime is dropped so it doesn't linger
-        // since this is in the boulder call path & boulder can't have
-        // multithreading when CLONE into a user namespace / "container"
-        let rayon_runtime = rayon::ThreadPoolBuilder::new().build().expect("rayon runtime");
+        blit_root(&self.installation, &fstree, &blit_target)?;
 
-        rayon_runtime.install(|| -> Result<(), Error> {
-            if let Some(root) = tree.structured() {
-                let _ = mkdir(&blit_target, Mode::from_bits_truncate(0o755));
-                let root_dir = fcntl::open(&blit_target, OFlag::O_DIRECTORY | OFlag::O_RDONLY, Mode::empty())?;
-
-                if let Element::Directory(_, _, children) = root {
-                    let current_span = tracing::Span::current();
-                    stats = stats.merge(
-                        children
-                            .into_par_iter()
-                            .map(|child| {
-                                let _guard = current_span.enter();
-                                self.blit_element(root_dir, cache_fd, child, &progress)
-                            })
-                            .try_reduce(BlitStats::default, |a, b| Ok(a.merge(b)))?,
-                    );
-                }
-
-                close(root_dir)?;
-            }
-
-            Ok(())
-        })?;
-
-        progress.finish_and_clear();
-
-        let elapsed = now.elapsed();
-        let num_entries = stats.num_entries();
-
-        println!(
-            "\n{} entries blitted in {} {}",
-            num_entries.to_string().bold(),
-            format!("{:.2}s", elapsed.as_secs_f32()).bold(),
-            format!("({:.1}k / s)", num_entries as f32 / elapsed.as_secs_f32() / 1_000.0).dim()
-        );
-
-        Ok(tree)
-    }
-
-    /// Recursively write a directory, or a single flat inode, to the staging tree.
-    /// Care is taken to retain the directory file descriptor to avoid costly path
-    /// resolution at runtime.
-    fn blit_element(
-        &self,
-        parent: RawFd,
-        cache: RawFd,
-        element: Element<'_, PendingFile>,
-        progress: &ProgressBar,
-    ) -> Result<BlitStats, Error> {
-        let mut stats = BlitStats::default();
-
-        progress.inc(1);
-
-        let (_, item) = match &element {
-            Element::Directory(_, item, _) => ("directory", item),
-            Element::Child(_, item) => ("file", item),
-        };
-
-        info!(
-            progress = progress.position() as f32 / progress.length().unwrap_or(1) as f32,
-            current = progress.position() as usize,
-            total = progress.length().unwrap_or(0) as usize,
-            event_type = "progress_update",
-            "Blitting {}",
-            item.path()
-        );
-
-        match element {
-            Element::Directory(name, item, children) => {
-                // Construct within the parent
-                self.blit_element_item(parent, cache, name, item, &mut stats)?;
-
-                // open the new dir
-                let newdir = fcntl::openat(parent, name, OFlag::O_RDONLY | OFlag::O_DIRECTORY, Mode::empty())?;
-
-                let current_span = tracing::Span::current();
-                stats = stats.merge(
-                    children
-                        .into_par_iter()
-                        .map(|child| {
-                            let _guard = current_span.enter();
-                            self.blit_element(newdir, cache, child, progress)
-                        })
-                        .try_reduce(BlitStats::default, |a, b| Ok(a.merge(b)))?,
-                );
-
-                close(newdir)?;
-
-                Ok(stats)
-            }
-            Element::Child(name, item) => {
-                self.blit_element_item(parent, cache, name, item, &mut stats)?;
-
-                Ok(stats)
-            }
-        }
-    }
-
-    /// Write a single inode into the staging tree.
-    ///
-    /// # Arguments
-    ///
-    /// * `parent`  - raw file descriptor for parent directory in which the inode is being record to
-    /// * `cache`   - raw file descriptor for the system asset pool tree
-    /// * `subpath` - the base name of the new inode
-    /// * `item`    - New inode being recorded
-    fn blit_element_item(
-        &self,
-        parent: RawFd,
-        cache: RawFd,
-        subpath: &str,
-        item: &PendingFile,
-        stats: &mut BlitStats,
-    ) -> Result<(), Error> {
-        match &item.layout.file {
-            StonePayloadLayoutFile::Regular(id, _) => {
-                let hash = format!("{id:02x}");
-                let directory = if hash.len() >= 10 {
-                    PathBuf::from(&hash[..2]).join(&hash[2..4]).join(&hash[4..6])
-                } else {
-                    "".into()
-                };
-
-                // Link relative from cache to target
-                let fp = directory.join(hash);
-
-                match *id {
-                    // Mystery empty-file hash. Do not allow dupes!
-                    // https://github.com/serpent-os/tools/issues/372
-                    0x99aa_06d3_0147_98d8_6001_c324_468d_497f => {
-                        let fd = fcntl::openat(
-                            parent,
-                            subpath,
-                            OFlag::O_CREAT | OFlag::O_WRONLY | OFlag::O_TRUNC,
-                            Mode::from_bits_truncate(item.layout.mode),
-                        )?;
-                        close(fd)?;
-                    }
-                    // Regular file
-                    _ => {
-                        linkat(
-                            Some(cache),
-                            fp.to_str().unwrap(),
-                            Some(parent),
-                            subpath,
-                            nix::unistd::LinkatFlags::NoSymlinkFollow,
-                        )?;
-
-                        // Fix permissions
-                        fchmodat(
-                            Some(parent),
-                            subpath,
-                            Mode::from_bits_truncate(item.layout.mode),
-                            nix::sys::stat::FchmodatFlags::NoFollowSymlink,
-                        )?;
-                    }
-                }
-
-                stats.num_files += 1;
-            }
-            StonePayloadLayoutFile::Symlink(source, _) => {
-                symlinkat(source.as_str(), Some(parent), subpath)?;
-                stats.num_symlinks += 1;
-            }
-            StonePayloadLayoutFile::Directory(_) => {
-                mkdirat(parent, subpath, Mode::from_bits_truncate(item.layout.mode))?;
-                stats.num_dirs += 1;
-            }
-
-            // Unimplemented
-            StonePayloadLayoutFile::CharacterDevice(_)
-            | StonePayloadLayoutFile::BlockDevice(_)
-            | StonePayloadLayoutFile::Fifo(_)
-            | StonePayloadLayoutFile::Socket(_)
-            | StonePayloadLayoutFile::Unknown(..) => {}
-        };
-
-        Ok(())
+        Ok(fstree)
     }
 
     fn load_or_create_system_model(&self, path: PathBuf, state: &State) -> Result<SystemModel, Error> {
@@ -1106,6 +900,239 @@ fn create_root_links(root: &Path) -> io::Result<()> {
         symlink(source, &staging_target)?;
         fs::rename(staging_target, final_target)?;
     }
+
+    Ok(())
+}
+
+/// Build a [`vfs::Tree`] for the specified layouts
+///
+/// Returns a newly built vfs Tree to plan the filesystem operations for blitting
+/// and conflict detection.
+pub fn vfs(layouts: Vec<(package::Id, StonePayloadLayoutRecord)>) -> Result<vfs::Tree<PendingFile>, Error> {
+    let mut tbuild = TreeBuilder::new();
+
+    for (id, layout) in layouts {
+        tbuild.push(PendingFile { id: id.clone(), layout });
+    }
+
+    tbuild.bake();
+
+    Ok(tbuild.tree()?)
+}
+
+/// Blit the packages to a filesystem root
+///
+/// This functionality is core to all moss filesystem transactions, forming the entire
+/// staging logic. For all the [`crate::package::Id`] present in the staging state,
+/// query their stored [`StonePayloadLayoutBody`] and cache into a [`vfs::Tree`].
+///
+/// The new `/usr` filesystem is written in optimal order to a staging tree by making
+/// use of the "at" family of functions (`mkdirat`, `linkat`, etc) with relative directory
+/// file descriptors, linking files from the assets store to provide deduplication.
+///
+/// This provides a very quick means to generate a hardlinked "snapshot" on-demand,
+/// which can then be activated via [`Self::promote_staging`]
+pub fn blit_root(installation: &Installation, tree: &vfs::Tree<PendingFile>, blit_target: &Path) -> Result<(), Error> {
+    // undirt.
+    fs::remove_dir_all(blit_target)?;
+
+    let progress = ProgressBar::new(1).with_style(
+        ProgressStyle::with_template("\n|{bar:20.red/blue}| {pos}/{len} {msg}")
+            .unwrap()
+            .progress_chars("■≡=- "),
+    );
+    progress.set_message("Blitting filesystem");
+    progress.enable_steady_tick(Duration::from_millis(150));
+    progress.tick();
+
+    let now = Instant::now();
+    let mut stats = BlitStats::default();
+
+    progress.set_length(tree.len());
+    progress.set_position(0_u64);
+
+    let cache_dir = installation.assets_path("v2");
+    let cache_fd = fcntl::open(&cache_dir, OFlag::O_DIRECTORY | OFlag::O_RDONLY, Mode::empty())?;
+
+    // We need to ensure this runtime is dropped so it doesn't linger
+    // since this is in the boulder call path & boulder can't have
+    // multithreading when CLONE into a user namespace / "container"
+    let rayon_runtime = rayon::ThreadPoolBuilder::new().build().expect("rayon runtime");
+
+    rayon_runtime.install(|| -> Result<(), Error> {
+        if let Some(root) = tree.structured() {
+            mkdir(blit_target, Mode::from_bits_truncate(0o755))?;
+            let root_dir = fcntl::open(blit_target, OFlag::O_DIRECTORY | OFlag::O_RDONLY, Mode::empty())?;
+
+            if let Element::Directory(_, _, children) = root {
+                let current_span = tracing::Span::current();
+                stats = stats.merge(
+                    children
+                        .into_par_iter()
+                        .map(|child| {
+                            let _guard = current_span.enter();
+                            blit_element(root_dir, cache_fd, child, &progress)
+                        })
+                        .try_reduce(BlitStats::default, |a, b| Ok(a.merge(b)))?,
+                );
+            }
+
+            close(root_dir)?;
+        }
+
+        Ok(())
+    })?;
+
+    progress.finish_and_clear();
+
+    let elapsed = now.elapsed();
+    let num_entries = stats.num_entries();
+
+    println!(
+        "\n{} entries blitted in {} {}",
+        num_entries.to_string().bold(),
+        format!("{:.2}s", elapsed.as_secs_f32()).bold(),
+        format!("({:.1}k / s)", num_entries as f32 / elapsed.as_secs_f32() / 1_000.0).dim()
+    );
+
+    Ok(())
+}
+
+/// Recursively write a directory, or a single flat inode, to the staging tree.
+/// Care is taken to retain the directory file descriptor to avoid costly path
+/// resolution at runtime.
+fn blit_element(
+    parent: RawFd,
+    cache: RawFd,
+    element: Element<'_, PendingFile>,
+    progress: &ProgressBar,
+) -> Result<BlitStats, Error> {
+    let mut stats = BlitStats::default();
+
+    progress.inc(1);
+
+    let (_, item) = match &element {
+        Element::Directory(_, item, _) => ("directory", item),
+        Element::Child(_, item) => ("file", item),
+    };
+
+    info!(
+        progress = progress.position() as f32 / progress.length().unwrap_or(1) as f32,
+        current = progress.position() as usize,
+        total = progress.length().unwrap_or(0) as usize,
+        event_type = "progress_update",
+        "Blitting {}",
+        item.path()
+    );
+
+    match element {
+        Element::Directory(name, item, children) => {
+            // Construct within the parent
+            blit_element_item(parent, cache, name, item, &mut stats)?;
+
+            // open the new dir
+            let newdir = fcntl::openat(parent, name, OFlag::O_RDONLY | OFlag::O_DIRECTORY, Mode::empty())?;
+
+            let current_span = tracing::Span::current();
+            stats = stats.merge(
+                children
+                    .into_par_iter()
+                    .map(|child| {
+                        let _guard = current_span.enter();
+                        blit_element(newdir, cache, child, progress)
+                    })
+                    .try_reduce(BlitStats::default, |a, b| Ok(a.merge(b)))?,
+            );
+
+            close(newdir)?;
+
+            Ok(stats)
+        }
+        Element::Child(name, item) => {
+            blit_element_item(parent, cache, name, item, &mut stats)?;
+
+            Ok(stats)
+        }
+    }
+}
+
+/// Write a single inode into the staging tree.
+///
+/// # Arguments
+///
+/// * `parent`  - raw file descriptor for parent directory in which the inode is being record to
+/// * `cache`   - raw file descriptor for the system asset pool tree
+/// * `subpath` - the base name of the new inode
+/// * `item`    - New inode being recorded
+fn blit_element_item(
+    parent: RawFd,
+    cache: RawFd,
+    subpath: &str,
+    item: &PendingFile,
+    stats: &mut BlitStats,
+) -> Result<(), Error> {
+    match &item.layout.file {
+        StonePayloadLayoutFile::Regular(id, _) => {
+            let hash = format!("{id:02x}");
+            let directory = if hash.len() >= 10 {
+                PathBuf::from(&hash[..2]).join(&hash[2..4]).join(&hash[4..6])
+            } else {
+                "".into()
+            };
+
+            // Link relative from cache to target
+            let fp = directory.join(hash);
+
+            match *id {
+                // Mystery empty-file hash. Do not allow dupes!
+                // https://github.com/serpent-os/tools/issues/372
+                0x99aa_06d3_0147_98d8_6001_c324_468d_497f => {
+                    let fd = fcntl::openat(
+                        parent,
+                        subpath,
+                        OFlag::O_CREAT | OFlag::O_WRONLY | OFlag::O_TRUNC,
+                        Mode::from_bits_truncate(item.layout.mode),
+                    )?;
+                    close(fd)?;
+                }
+                // Regular file
+                _ => {
+                    linkat(
+                        Some(cache),
+                        fp.to_str().unwrap(),
+                        Some(parent),
+                        subpath,
+                        nix::unistd::LinkatFlags::NoSymlinkFollow,
+                    )?;
+
+                    // Fix permissions
+                    fchmodat(
+                        Some(parent),
+                        subpath,
+                        Mode::from_bits_truncate(item.layout.mode),
+                        nix::sys::stat::FchmodatFlags::NoFollowSymlink,
+                    )?;
+                }
+            }
+
+            stats.num_files += 1;
+        }
+        StonePayloadLayoutFile::Symlink(source, _) => {
+            symlinkat(source.as_str(), Some(parent), subpath)?;
+            stats.num_symlinks += 1;
+        }
+        StonePayloadLayoutFile::Directory(_) => {
+            mkdirat(parent, subpath, Mode::from_bits_truncate(item.layout.mode))?;
+            stats.num_dirs += 1;
+        }
+
+        // Unimplemented
+        StonePayloadLayoutFile::CharacterDevice(_)
+        | StonePayloadLayoutFile::BlockDevice(_)
+        | StonePayloadLayoutFile::Fifo(_)
+        | StonePayloadLayoutFile::Socket(_)
+        | StonePayloadLayoutFile::Unknown(..) => {}
+    };
 
     Ok(())
 }
