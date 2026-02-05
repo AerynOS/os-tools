@@ -12,7 +12,12 @@ pub fn command() -> Command {
     Command::new("extract")
         .about("Extract a `.stone` content to disk")
         .long_about("For all valid content-bearing archives, extract to disk")
-        .arg(arg!(<PATH> ... "files to inspect").value_parser(clap::value_parser!(PathBuf)))
+        .arg(arg!(<PATH> ... "files to extract").value_parser(clap::value_parser!(PathBuf)))
+        .arg(
+            arg!(-o --"output-dir" <OUTPUT_DIR> "directory to extract the stone(s) to (defaults to OUTPUT_DIR)")
+                .default_value(".")
+                .value_parser(clap::value_parser!(PathBuf)),
+        )
 }
 
 /// Handle the `extract` command
@@ -21,10 +26,15 @@ pub fn handle(args: &ArgMatches) -> Result<(), Error> {
         .get_many::<PathBuf>("PATH")
         .into_iter()
         .flatten()
-        .cloned()
         .collect::<Vec<_>>();
 
-    moss::client::extract(paths)?;
+    let output_dir = args.get_one::<PathBuf>("output-dir").unwrap();
+
+    if !output_dir.exists() {
+        std::fs::create_dir_all(output_dir)?;
+    }
+
+    moss::client::extract(paths, output_dir)?;
 
     Ok(())
 }
