@@ -4,13 +4,13 @@
 
 use std::{env, io, path::Path, path::PathBuf};
 
-use clap::{Arg, ArgAction, Command};
+use clap::{Args, CommandFactory, Parser};
 use clap_complete::{
     generate_to,
     shells::{Bash, Fish, Zsh},
 };
 use clap_mangen::Man;
-use fs_err as fs;
+use fs_err::{self as fs, File};
 use moss::{Installation, installation};
 use thiserror::Error;
 use tracing_common::{self, logging::LogConfig, logging::init_log_with_config};
@@ -33,131 +33,180 @@ mod state;
 mod sync;
 mod version;
 
-/// Generate the CLI command structure
-fn command() -> Command {
-    Command::new("moss")
-        .about("Advanced system state & package manager")
-        .arg(
-            Arg::new("verbose")
-                .short('v')
-                .long("verbose")
-                .global(true)
-                .help("Prints additional information about what moss is doing")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("version")
-                .short('V')
-                .long("version")
-                .global(true)
-                .help("Prints version information about the binary")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("root")
-                .short('D')
-                .long("directory")
-                .global(true)
-                .help("Root directory")
-                .action(ArgAction::Set)
-                .default_value("/")
-                .value_parser(clap::value_parser!(PathBuf)),
-        )
-        .arg(
-            Arg::new("cache")
-                .long("cache")
-                .global(true)
-                .help("Cache directory")
-                .action(ArgAction::Set)
-                .value_parser(clap::value_parser!(PathBuf)),
-        )
-        .arg(
-            Arg::new("log")
-                .long("log")
-                .help("Logging configuration: <level>[:<format>][:<destination>]\nLevels: trace, debug, info, warn, error\nFormats: text, json\nDestinations: stderr, <file>")
-                .action(ArgAction::Set)
-                .global(true)
-                .value_parser(clap::value_parser!(LogConfig)),
-        )
-        .arg(
-            Arg::new("yes")
-                .short('y')
-                .long("yes-all")
-                .global(true)
-                .help("Assume yes for all questions")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("generate-manpages")
-                .long("generate-manpages")
-                .help("Generate manpages")
-                .action(ArgAction::Set)
-                .value_name("DIR")
-                .hide(true),
-        )
-        .arg(
-            Arg::new("generate-completions")
-                .long("generate-completions")
-                .help("Generate shell completions")
-                .action(ArgAction::Set)
-                .value_name("DIR")
-                .hide(true),
-        )
-        .arg_required_else_help(true)
-        .subcommand(boot::command())
-        .subcommand(cache::command())
-        .subcommand(extract::command())
-        .subcommand(fetch::command())
-        .subcommand(index::command())
-        .subcommand(info::command())
-        .subcommand(inspect::command())
-        .subcommand(install::command())
-        .subcommand(list::command())
-        .subcommand(remove::command())
-        .subcommand(repo::command())
-        .subcommand(search::command())
-        .subcommand(search_file::command())
-        .subcommand(state::command())
-        .subcommand(sync::command())
-        .subcommand(version::command())
+/// Generate the new CLI command structure
+#[derive(Debug, Parser)]
+pub struct Command {
+    #[command(flatten)]
+    pub global: Global,
+    #[command(subcommand)]
+    pub subcommand: Option<Subcommand>,
 }
 
-/// Generate manpages for all commands recursively
-fn generate_manpages(cmd: &Command, dir: &Path, prefix: Option<&str>) -> io::Result<()> {
-    let name = cmd.get_name();
-    let man = Man::new(cmd.to_owned());
-    let mut buffer: Vec<u8> = Default::default();
-    man.render(&mut buffer)?;
-
-    let filename = if let Some(prefix) = prefix {
-        format!("{prefix}-{name}.1")
-    } else {
-        format!("{name}.1")
-    };
-
-    fs::write(dir.join(filename), buffer)?;
-
-    for subcmd in cmd.get_subcommands() {
-        let new_prefix = if let Some(p) = prefix {
-            format!("{p}-{name}")
-        } else {
-            name.to_owned()
-        };
-        generate_manpages(subcmd, dir, Some(&new_prefix))?;
-    }
-    Ok(())
+/// Globally available arguments
+#[derive(Debug, Args)]
+pub struct Global {
+    #[arg(
+        short,
+        long = "verbose",
+        help = "Prints additional information about what moss is doing",
+        default_value = "false",
+        global = true
+    )]
+    pub verbose: bool,
+    #[arg(
+        short = 'V',
+        long,
+        help = "Prints out version information and exits",
+        default_value = "false",
+        global = true
+    )]
+    pub version: bool,
+    #[arg(
+        short = 'D',
+        long = "directory",
+        help = "Root directory",
+        default_value = "/",
+        global = true
+    )]
+    pub root_dir: Option<PathBuf>,
+    #[arg(long, help = "Cache directory", global = true)]
+    pub cache_dir: Option<PathBuf>,
+    #[arg(
+        long,
+        help = "Logging configuration: <level>[:<format>][:<destination>]\nLevels: trace, debug, info, warn, error\nFormats: text, json\nDestinations: stderr, <file>",
+        global = true
+    )]
+    log: Option<String>,
+    #[arg(short = 'y', long = "yes-all", help = "Assume yes for all questions", global = true)]
+    yes: bool,
+    #[arg(
+        long = "generate-manpages",
+        help = "Generate man pages in specified directory",
+        value_name = "DIR",
+        hide = true
+    )]
+    generate_manpages: Option<PathBuf>,
+    #[arg(
+        long = "generate-completions",
+        help = "Generate shell completions in specified directory",
+        value_name = "DIR",
+        hide = true
+    )]
+    generate_completions: Option<String>,
 }
 
-/// Generate shell completions
-fn generate_completions(cmd: &mut Command, dir: &Path) -> io::Result<()> {
-    generate_to(Bash, cmd, "moss", dir)?;
-    generate_to(Fish, cmd, "moss", dir)?;
-    generate_to(Zsh, cmd, "moss", dir)?;
-    Ok(())
+#[derive(Debug, clap::Subcommand)]
+pub enum Subcommand {
+    // TODO: how to use .arg_required_else_help(true)
+    Boot(boot::Command),
+    Cache(cache::Command),
+    Extract(extract::Command),
+    Fetch(fetch::Command),
+    Index(index::Command),
+    Info(info::Command),
+    Inspect(inspect::Command),
+    Install(install::Command),
+    List(list::Command),
+    Remove(remove::Command),
+    Repo(repo::Command),
+    Search(search::Command),
+    SearchFile(search_file::Command),
+    State(state::Command),
+    Sync(sync::Command),
+    Version(version::Command),
 }
 
 /// Process all CLI arguments
 pub fn process() -> Result<(), Error> {
+    let args = replace_aliases(env::args());
+    let Command { global, subcommand } = Command::parse_from(args.clone());
+
+    // Prints the cli's information about version at startup
+    if global.version {
+        println!("moss {}", tools_buildinfo::get_full_version());
+    }
+
+    if let Some(dir) = global.generate_manpages {
+        fs::create_dir_all(&dir)?;
+        let main_cmd = Command::command();
+        // Generate man page for the main command
+        let main_man = Man::new(main_cmd.clone());
+        let mut buffer = File::create(dir.join("moss.1"))?;
+        main_man.render(&mut buffer)?;
+
+        // Generate man pages for all subcommands
+        for sub in main_cmd.get_subcommands() {
+            let sub_man = Man::new(sub.clone());
+            let name = format!("moss-{}.1", sub.get_name());
+            let mut buffer = File::create(dir.join(&name))?;
+            sub_man.render(&mut buffer)?;
+
+            for nested in sub.get_subcommands() {
+                let nested_man = Man::new(nested.clone());
+                let name = format!("moss-{}-{}.1", sub.get_name(), nested.get_name());
+                let mut buffer = File::create(dir.join(&name))?;
+                nested_man.render(&mut buffer)?;
+            }
+        }
+        return Ok(());
+    }
+
+    if let Some(dir) = global.generate_completions {
+        fs::create_dir_all(&dir)?;
+        let mut cmd = Command::command();
+        generate_to(Bash, &mut cmd, "moss", &dir)?;
+        generate_to(Fish, &mut cmd, "moss", &dir)?;
+        generate_to(Zsh, &mut cmd, "moss", &dir)?;
+        return Ok(());
+    }
+
+    // Print the version, but not if the user is using the version subcommand
+    if global.verbose {
+        match subcommand {
+            Some(Subcommand::Version(_)) => (),
+            _ => version::print(),
+        }
+    }
+
+    // The default is "/" in the absence of an explicit arg.
+    let root = global.root_dir.unwrap_or_default();
+    let cache = global.cache_dir;
+
+    let installation = Installation::open(root, cache.clone())?;
+
+    if let Some(system_model) = installation.system_model.as_ref() {
+        if !system_model.disable_warning {
+            print_system_model_warning(&installation, false);
+        } else if global.verbose {
+            print_system_model_warning(&installation, true);
+        }
+    }
+
+    match subcommand {
+        Some(Subcommand::Boot(command)) => boot::handle(command, installation)?,
+        Some(Subcommand::Cache(command)) => cache::handle(command, installation)?,
+        Some(Subcommand::Extract(command)) => extract::handle(command)?,
+        Some(Subcommand::Fetch(command)) => fetch::handle(command, installation)?,
+        Some(Subcommand::Index(command)) => index::handle(command)?,
+        Some(Subcommand::Info(command)) => info::handle(command, installation)?,
+        Some(Subcommand::Inspect(command)) => inspect::handle(command)?,
+        Some(Subcommand::Install(command)) => install::handle(command, installation)?,
+        Some(Subcommand::List(command)) => list::handle(command)?,
+        Some(Subcommand::Remove(command)) => remove::handle(command, installation)?,
+        Some(Subcommand::Repo(command)) => repo::handle(command, installation)?,
+        Some(Subcommand::Search(command)) => search::handle(command, installation)?,
+        Some(Subcommand::SearchFile(command)) => search_file::handle(command, installation)?,
+        Some(Subcommand::State(command)) => state::handle(command, installation)?,
+        Some(Subcommand::Sync(command)) => sync::handle(command, installation)?,
+        Some(Subcommand::Version(command)) => version::handle(command)?,
+        None => unreachable!(),
+    }
+
+    Ok(())
+}
+
+/// Generate the CLI command structure
+pub fn process_old() -> Result<(), Error> {
     let args = replace_aliases(env::args());
     let matches = command().get_matches_from(args);
 
@@ -237,6 +286,40 @@ pub fn process() -> Result<(), Error> {
     }
 }
 
+/// Generate manpages for all commands recursively
+fn generate_manpages(cmd: &Command, dir: &Path, prefix: Option<&str>) -> io::Result<()> {
+    let name = cmd.get_name();
+    let man = Man::new(cmd.to_owned());
+    let mut buffer: Vec<u8> = Default::default();
+    man.render(&mut buffer)?;
+
+    let filename = if let Some(prefix) = prefix {
+        format!("{prefix}-{name}.1")
+    } else {
+        format!("{name}.1")
+    };
+
+    fs::write(dir.join(filename), buffer)?;
+
+    for subcmd in cmd.get_subcommands() {
+        let new_prefix = if let Some(p) = prefix {
+            format!("{p}-{name}")
+        } else {
+            name.to_owned()
+        };
+        generate_manpages(subcmd, dir, Some(&new_prefix))?;
+    }
+    Ok(())
+}
+
+/// Generate shell completions
+fn generate_completions(cmd: &mut clap::Command, dir: &Path) -> io::Result<()> {
+    generate_to(Bash, cmd, "moss", dir)?;
+    generate_to(Fish, cmd, "moss", dir)?;
+    generate_to(Zsh, cmd, "moss", dir)?;
+    Ok(())
+}
+
 fn replace_aliases(args: env::Args) -> Vec<String> {
     const ALIASES: &[(&str, &[&str])] = &[
         ("li", &["list", "installed"]),
@@ -293,28 +376,28 @@ fn print_system_model_warning(installation: &Installation, first_line_only: bool
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("boot")]
-    Boot(#[source] boot::Error),
+    Boot(#[from] boot::Error),
 
     #[error("cache")]
-    Cache(#[source] cache::Error),
+    Cache(#[from] cache::Error),
 
     #[error("index")]
-    Index(#[source] index::Error),
+    Index(#[from] index::Error),
 
     #[error("info")]
-    Info(#[source] info::Error),
+    Info(#[from] info::Error),
 
     #[error("install")]
-    Install(#[source] install::Error),
+    Install(#[from] install::Error),
 
     #[error("list")]
-    List(#[source] list::Error),
+    List(#[from] list::Error),
 
     #[error("inspect")]
-    Inspect(#[source] inspect::Error),
+    Inspect(#[from] inspect::Error),
 
     #[error("extract")]
-    Extract(#[source] extract::Error),
+    Extract(#[from] extract::Error),
 
     #[error("fetch")]
     Fetch(#[source] fetch::Error),
@@ -323,16 +406,16 @@ pub enum Error {
     Remove(#[source] remove::Error),
 
     #[error("repo")]
-    Repo(#[source] repo::Error),
+    Repo(#[from] repo::Error),
 
     #[error("search")]
-    Search(#[source] search::Error),
+    Search(#[from] search::Error),
 
     #[error("search-file")]
-    SearchFile(#[source] search_file::Error),
+    SearchFile(#[from] search_file::Error),
 
     #[error("state")]
-    State(#[source] state::Error),
+    State(#[from] state::Error),
 
     #[error("sync")]
     Sync(#[source] sync::Error),
