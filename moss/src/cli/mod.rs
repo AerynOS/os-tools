@@ -32,6 +32,71 @@ mod state;
 mod sync;
 mod version;
 
+/// Generate the new CLI command structure
+
+#[derive(Debug, Parser)]
+pub struct Command {
+    #[command(flatten)]
+    pub global: Global,
+    #[command(subcommand)]
+    pub subcommand: Option<SubCommand>,
+}
+
+#[derive(Debug, Args)]
+pub struct Global {
+    #[arg(
+        short,
+        long = "verbose",
+        help = "Prints additional information about what moss is doing",
+        default_value = "false",
+        global = true
+    )]
+    pub verbose: bool,
+    #[arg(short = 'V', long, default_value = "false", global = true)]
+    pub version: bool,
+    #[arg(
+        short = 'D',
+        long = "directory",
+        global = true,
+        help = "Root directory",
+        default_value = "/"
+    )]
+    pub root_dir: Option<PathBuf>,
+    #[arg(long, help = "Cache directory", global = true)]
+    pub cache_dir: Option<PathBuf>,
+    #[arg(
+        long,
+        help = "Logging configuration: <level>[:<format>][:<destination>]\nLevels: trace, debug, info, warn, error\nFormats: text, json\nDestinations: stderr, <file>",
+        global = true
+    )]
+    log: Option<String>,
+    #[arg(short = "y", long = "yes-all", help = "Assume yes for all questions", global = true)]
+    yes: bool,
+    #[arg(
+        long = "generate-manpages",
+        help = "Generate man pages",
+        value_name = "DIR",
+        hide = true
+    )]
+    generate_manpages: Option<String>,
+}
+// .arg(
+//     Arg::new("generate-manpages")
+//         .long("generate-manpages")
+//         .help("Generate manpages")
+//         .action(ArgAction::Set)
+//         .value_name("DIR")
+//         .hide(true),
+// )
+// .arg(
+//     Arg::new("generate-completions")
+//         .long("generate-completions")
+//         .help("Generate shell completions")
+//         .action(ArgAction::Set)
+//         .value_name("DIR")
+//         .hide(true),
+// )
+
 /// Generate the CLI command structure
 fn command() -> Command {
     Command::new("moss")
