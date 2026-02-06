@@ -25,6 +25,12 @@ impl<N> Default for Dag<N> {
     }
 }
 
+impl<N> AsRef<DiGraph<N, (), u32>> for Dag<N> {
+    fn as_ref(&self) -> &DiGraph<N, (), u32> {
+        &self.0
+    }
+}
+
 impl<N> Dag<N>
 where
     N: Clone + PartialEq,
