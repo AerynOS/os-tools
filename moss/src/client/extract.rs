@@ -17,11 +17,13 @@ use crate::{
     util,
 };
 
-pub fn extract(stones: Vec<PathBuf>) -> Result<(), Error> {
+pub fn extract(stones: Vec<&PathBuf>, output_dir: &Path) -> Result<(), Error> {
     let installation = Installation::open(Path::new("."), None)?;
 
+    let output_dir = output_dir.canonicalize()?;
+
     for path in stones {
-        let rdr = File::open(&path).map_err(Error::IO)?;
+        let rdr = File::open(path).map_err(Error::IO)?;
         let mut reader = stone::read(rdr).map_err(Error::Format)?;
 
         let payloads = reader.payloads()?.collect::<Result<Vec<_>, _>>()?;
@@ -39,7 +41,7 @@ pub fn extract(stones: Vec<PathBuf>) -> Result<(), Error> {
 
         let pkg = package::Meta::from_stone_payload(&meta.body).map_err(Error::MalformedMeta)?;
         let pkg_id = package::Id::from(pkg.id());
-        let extraction_root = PathBuf::from(pkg_id.to_string());
+        let extraction_root = output_dir.join(pkg_id.to_string());
 
         println!("Extract: {path:?} -> {extraction_root:?}");
 
