@@ -197,7 +197,11 @@ pub fn process() -> Result<(), Error> {
 
     let installation = Installation::open(root, cache.cloned())?;
 
-    if installation.system_model.is_some() {
+    if installation
+        .system_model
+        .as_ref()
+        .is_some_and(|model| !model.disable_warning)
+    {
         print_system_model_warning(&installation);
     }
 
