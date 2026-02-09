@@ -45,7 +45,6 @@ thread-priority.workspace = true
 tokio.workspace = true
 url.workspace = true
 mailparse.workspace = true
-infer.workspace = true
 walkdir = "2.5.0"
 zstd.workspace = true
 astr.workspace = true
