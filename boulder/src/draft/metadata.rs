@@ -8,6 +8,7 @@ use super::Upstream;
 
 mod basic;
 mod github;
+mod gitlab;
 mod metacpan;
 mod pypi;
 
@@ -35,6 +36,7 @@ impl Metadata {
                 if let Some(matched) = match matcher {
                     Matcher::Basic => basic::source(&upstream.uri),
                     Matcher::Github => github::source(&upstream.uri),
+                    Matcher::Gitlab => gitlab::source(&upstream.uri),
                     Matcher::Pypi => pypi::source(&upstream.uri),
                     Matcher::Metacpan => metacpan::source(&upstream.uri),
                 } {
@@ -65,11 +67,12 @@ impl Metadata {
 
 enum Matcher {
     Basic,
+    Gitlab,
     Github,
     Pypi,
     Metacpan,
 }
 
 impl Matcher {
-    const ALL: &'static [Self] = &[Self::Github, Self::Pypi, Self::Metacpan, Self::Basic];
+    const ALL: &'static [Self] = &[Self::Github, Self::Gitlab, Self::Pypi, Self::Metacpan, Self::Basic];
 }
