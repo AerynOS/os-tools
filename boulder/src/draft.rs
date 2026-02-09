@@ -5,13 +5,14 @@
 use std::path::Path;
 use std::{io, path::PathBuf};
 
-use fs_err as fs;
 use itertools::Itertools;
 use licenses::match_licences;
 use moss::{Dependency, util};
 use thiserror::Error;
 use tui::Styled;
 use url::Url;
+
+use crate::Env;
 
 use self::metadata::Metadata;
 use self::monitoring::Monitoring;
@@ -21,11 +22,11 @@ mod build;
 mod licenses;
 mod metadata;
 mod monitoring;
-mod upstream;
+pub mod upstream;
 
 pub struct Drafter {
+    env: Env,
     upstreams: Vec<Url>,
-    datadir: PathBuf,
 }
 
 pub struct Draft {
@@ -34,16 +35,16 @@ pub struct Draft {
 }
 
 impl Drafter {
-    pub fn new(upstreams: Vec<Url>, datadir: PathBuf) -> Self {
-        Self { upstreams, datadir }
+    pub fn new(env: Env, upstreams: Vec<Url>) -> Self {
+        Self { env, upstreams }
     }
 
     pub fn run(&self) -> Result<Draft, Error> {
-        // TODO: Use tempdir
-        let extract_root = PathBuf::from("/tmp/boulder-new");
+        let temp_dir = tempfile::tempdir()?;
+        let extract_root = temp_dir.as_ref();
 
         // Fetch and extract all upstreams
-        let extracted = upstream::fetch_and_extract(&self.upstreams, &extract_root)?;
+        let extracted = upstream::fetch_and_extract(&self.env, &self.upstreams, extract_root)?;
 
         // Build metadata from extracted upstreams
         let metadata = Metadata::new(extracted);
@@ -52,23 +53,20 @@ impl Drafter {
         let monitoring_result = monitoring.run()?;
 
         // Enumerate all extracted files
-        let files = util::enumerate_files(&extract_root, |_| true)?
+        let files = util::enumerate_files(extract_root, |_| true)?
             .into_iter()
-            .map(|path| File {
-                path,
-                extract_root: &extract_root,
-            })
+            .map(|path| File { path, extract_root })
             .collect::<Vec<_>>();
 
         // Analyze files to determine build system / collect deps
         let build = build::analyze(&files).map_err(Error::AnalyzeBuildSystem)?;
 
-        let licences_dir = &self.datadir.join("licenses");
+        let licences_dir = &self.env.data_dir.join("licenses");
 
-        let licenses = format_licenses(match_licences(&extract_root, licences_dir).unwrap_or_default());
+        let licenses = format_licenses(match_licences(extract_root, licences_dir).unwrap_or_default());
 
         // Remove temp extract dir
-        fs::remove_dir_all(extract_root)?;
+        drop(temp_dir);
 
         let build_system = build.detected_system.unwrap_or_else(|| {
             println!(
