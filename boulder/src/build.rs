@@ -33,7 +33,7 @@ pub mod git;
 pub mod job;
 pub mod pgo;
 mod root;
-mod upstream;
+pub mod upstream;
 
 pub struct Builder {
     pub targets: Vec<Target>,

@@ -9,10 +9,13 @@ use fs_err::tokio::{self as fs, File};
 use futures_util::{StreamExt, TryStreamExt, stream};
 use moss::{environment, request, runtime, util};
 use sha2::{Digest, Sha256};
+use tempfile::NamedTempFile;
 use thiserror::Error;
 use tokio::{io::AsyncWriteExt, process::Command};
 use tui::{MultiProgress, ProgressBar, ProgressStyle, Styled};
 use url::Url;
+
+use crate::Env;
 
 pub struct Upstream {
     pub uri: Url,
@@ -20,16 +23,14 @@ pub struct Upstream {
 }
 
 /// Fetch and extract the provided upstreams under `extract_root`
-pub fn fetch_and_extract(upstreams: &[Url], extract_root: &Path) -> Result<Vec<Upstream>, Error> {
-    util::recreate_dir(extract_root)?;
-
+pub fn fetch_and_extract(env: &Env, upstreams: &[Url], extract_root: &Path) -> Result<Vec<Upstream>, Error> {
     let mpb = MultiProgress::new();
 
     let ret = runtime::block_on(
         stream::iter(upstreams)
             .map(|uri| async {
-                let name = util::uri_file_name(uri);
-                let archive_path = extract_root.join(name);
+                let (temp_file, temp_path) = NamedTempFile::with_prefix("boulder-")?.into_parts();
+                let archive_file = File::from_std(fs_err::File::from_parts(temp_file, &temp_path));
 
                 let pb = mpb.add(
                     ProgressBar::new_spinner()
@@ -42,13 +43,26 @@ pub fn fetch_and_extract(upstreams: &[Url], extract_root: &Path) -> Result<Vec<U
                 );
                 pb.enable_steady_tick(Duration::from_millis(150));
 
-                let hash = fetch(uri, &archive_path).await?;
+                let hash = fetch(uri, archive_file).await?;
+
+                // Hardlink or copy fetched asset to cache dir so we don't need
+                // to refetch it when the user finally builds this new recipe
+                {
+                    let cache_path = fetched_upstream_cache_path(env, uri, &hash);
+
+                    if let Some(parent) = cache_path.parent() {
+                        fs::create_dir_all(parent).await?;
+                    }
+
+                    util::async_hardlink_or_copy(&temp_path, &cache_path).await?;
+                }
 
                 pb.set_message(format!("{} {}", "Extracting".yellow(), *uri));
 
-                extract(&archive_path, extract_root).await?;
+                extract(&temp_path, extract_root).await?;
 
-                fs::remove_file(archive_path).await?;
+                // Cleanup temp path
+                drop(temp_path);
 
                 pb.suspend(|| println!("{} {}", "Fetched".green(), *uri));
 
@@ -63,10 +77,8 @@ pub fn fetch_and_extract(upstreams: &[Url], extract_root: &Path) -> Result<Vec<U
     ret
 }
 
-async fn fetch(url: &Url, output: &Path) -> Result<String, Error> {
+async fn fetch(url: &Url, mut file: File) -> Result<String, Error> {
     let mut stream = request::stream(url.clone()).await?;
-
-    let mut file = File::create(&output).await?;
 
     let mut hasher = Sha256::new();
 
@@ -98,6 +110,22 @@ async fn extract(archive: &Path, destination: &Path) -> Result<(), Error> {
         eprintln!("Command exited with: {}", String::from_utf8_lossy(&result.stderr));
         Err(Error::Extract(result.status))
     }
+}
+
+pub fn fetched_upstream_cache_path(env: &Env, uri: &Url, hash: &str) -> PathBuf {
+    let mut hasher = Sha256::new();
+    hasher.update(uri.as_str());
+    hasher.update(hash);
+
+    let hash = hex::encode(hasher.finalize());
+
+    env.cache_dir
+        .join("upstreams")
+        .join("fetched")
+        // Type safe guaranteed to be >= 5 bytes
+        .join(&hash[..5])
+        .join(&hash[hash.len() - 5..])
+        .join(hash)
 }
 
 #[derive(Debug, Error)]

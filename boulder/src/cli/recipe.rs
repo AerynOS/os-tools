@@ -9,15 +9,16 @@ use std::{
 
 use boulder::{
     Env, Macros, architecture,
-    draft::{self, Drafter},
+    draft::{self, Drafter, upstream::fetched_upstream_cache_path},
     macros, recipe,
 };
 use clap::Parser;
-use fs_err as fs;
+use fs_err::{self as fs};
 use futures_util::StreamExt;
 use itertools::Itertools;
-use moss::{request, runtime};
+use moss::{request, runtime, util};
 use sha2::{Digest, Sha256};
+use tempfile::NamedTempFile;
 use thiserror::Error;
 use tokio::io::AsyncWriteExt;
 use tui::{
@@ -107,14 +108,14 @@ fn parse_upstream(s: &str) -> Result<Upstream, String> {
 pub fn handle(command: Command, env: Env) -> Result<(), Error> {
     match command.subcommand {
         Subcommand::Bump { recipe, release } => bump(recipe, release),
-        Subcommand::New { output, upstreams } => new(output, upstreams, env),
+        Subcommand::New { output, upstreams } => new(env, output, upstreams),
         Subcommand::Update {
             recipe,
             overwrite,
             version,
             upstreams,
             no_bump,
-        } => update(recipe, overwrite, version, upstreams, no_bump),
+        } => update(env, recipe, overwrite, version, upstreams, no_bump),
         Subcommand::Macros { _macro } => macros(_macro, env),
     }
 }
@@ -145,11 +146,11 @@ fn bump(recipe: PathBuf, release: Option<u64>) -> Result<(), Error> {
     Ok(())
 }
 
-fn new(output: PathBuf, upstreams: Vec<Url>, env: Env) -> Result<(), Error> {
+fn new(env: Env, output: PathBuf, upstreams: Vec<Url>) -> Result<(), Error> {
     const RECIPE_FILE: &str = "stone.yaml";
     const MONITORING_FILE: &str = "monitoring.yaml";
 
-    let drafter = Drafter::new(upstreams, env.data_dir);
+    let drafter = Drafter::new(env, upstreams);
     let draft = drafter.run()?;
 
     if !output.is_dir() {
@@ -165,6 +166,7 @@ fn new(output: PathBuf, upstreams: Vec<Url>, env: Env) -> Result<(), Error> {
 }
 
 fn update(
+    env: Env,
     recipe: Option<PathBuf>,
     overwrite: bool,
     version: String,
@@ -245,7 +247,7 @@ fn update(
                 updater.update_value(version, |root| root / "version");
             }
             Update::PlainUpstream(i, key, new_uri) => {
-                let hash = runtime::block_on(fetch_hash(new_uri.clone(), &mpb))?;
+                let hash = runtime::block_on(fetch_and_cache_upstream(&env, new_uri.clone(), &mpb))?;
 
                 let path = |root| root / "upstreams" / i / key.as_str().unwrap_or_default();
 
@@ -281,7 +283,13 @@ fn update(
     Ok(())
 }
 
-async fn fetch_hash(uri: Url, mpb: &MultiProgress) -> Result<String, Error> {
+/// Fetches the upstream at `uri` and caches it so it doesn't need to be refetched
+/// when this recipe is finally built.
+///
+/// Returns the sha256 hash of the fetched upstream
+async fn fetch_and_cache_upstream(env: &Env, uri: Url, mpb: &MultiProgress) -> Result<String, Error> {
+    use fs_err::tokio::{self as fs, File};
+
     let pb = mpb.add(
         ProgressBar::new(u64::MAX)
             .with_message(format!("{} {}", "Fetching".blue(), uri.as_str().bold()))
@@ -293,11 +301,13 @@ async fn fetch_hash(uri: Url, mpb: &MultiProgress) -> Result<String, Error> {
     );
     pb.enable_steady_tick(Duration::from_millis(150));
 
-    let mut stream = request::stream(uri).await?;
+    let mut stream = request::stream(uri.clone()).await?;
 
+    let (temp_file, temp_file_path) = NamedTempFile::with_prefix("boulder-")
+        .map_err(Error::CreateTempFile)?
+        .into_parts();
     let mut hasher = Sha256::new();
-    // Discard bytes
-    let mut out = tokio::io::sink();
+    let mut out = File::from_std(fs_err::File::from_parts(temp_file, &temp_file_path));
 
     while let Some(chunk) = stream.next().await {
         let bytes = &chunk?;
@@ -311,6 +321,22 @@ async fn fetch_hash(uri: Url, mpb: &MultiProgress) -> Result<String, Error> {
     out.flush().await.map_err(Error::FetchIo)?;
 
     let hash = hex::encode(hasher.finalize());
+
+    // Move fetched asset to cache dir so we don't need to refetch it
+    // when the user finally builds this new recipe
+    {
+        let cache_path = fetched_upstream_cache_path(env, &uri, &hash);
+
+        if let Some(parent) = cache_path.parent() {
+            fs::create_dir_all(parent).await.map_err(Error::CreateDir)?;
+        }
+
+        util::async_hardlink_or_copy(&temp_file_path, &cache_path)
+            .await
+            .map_err(Error::MoveTempFile)?;
+
+        drop(temp_file_path);
+    }
 
     pb.finish();
     mpb.remove(&pb);
@@ -419,6 +445,10 @@ pub enum Error {
     CreateDir(#[source] io::Error),
     #[error("deserializing recipe")]
     Deser(#[from] serde_yaml::Error),
+    #[error("create temp file")]
+    CreateTempFile(#[source] io::Error),
+    #[error("move temp file")]
+    MoveTempFile(#[source] io::Error),
     #[error("fetch upstream")]
     Fetch(#[from] request::Error),
     #[error("fetch upstream")]

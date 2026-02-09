@@ -106,6 +106,15 @@ pub fn hardlink_or_copy(from: &Path, to: &Path) -> io::Result<()> {
     Ok(())
 }
 
+pub async fn async_hardlink_or_copy(from: &Path, to: &Path) -> io::Result<()> {
+    let from = from.to_owned();
+    let to = to.to_owned();
+
+    tokio::task::spawn_blocking(move || hardlink_or_copy(&from, &to))
+        .await
+        .expect("join handle")
+}
+
 pub fn uri_file_name(uri: &Url) -> &str {
     let path = uri.path();
 
