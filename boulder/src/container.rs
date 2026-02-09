@@ -27,6 +27,7 @@ where
     let cargocache = paths.cargocache();
     let rustc_wrapper = paths.sccache();
     let recipe = paths.recipe();
+    let ccache_conf = paths.ccache_config();
 
     Container::new(rootfs)
         .hostname("boulder")
@@ -41,6 +42,7 @@ where
         .bind_rw(&cargocache.host, &cargocache.guest)
         .bind_rw(&rustc_wrapper.host, &rustc_wrapper.guest)
         .bind_ro(&recipe.host, &recipe.guest)
+        .bind_ro_if_exists(&ccache_conf.host, &ccache_conf.guest)
         .run::<E>(f)?;
 
     Ok(())
