@@ -84,16 +84,6 @@ async fn fetch(url: &Url, output: &Path) -> Result<String, Error> {
 }
 
 async fn extract(archive: &Path, destination: &Path) -> Result<(), Error> {
-    let infer_result = infer::get_from_path(archive).map_err(|source| Error::InferFileType {
-        path: archive.to_owned(),
-        source,
-    })?;
-    if let Some(kind) = infer_result {
-        println!("Detected type: {} ({})", kind.mime_type(), kind.extension());
-    } else {
-        println!("Unknown file type, attempting tar extraction");
-    }
-
     let result = Command::new("bsdtar")
         .arg("xf")
         .arg(archive)
