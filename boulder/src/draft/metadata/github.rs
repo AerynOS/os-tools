@@ -26,6 +26,14 @@ pub fn source(upstream: &Url) -> Option<Source> {
         let project = captures.get(2)?.as_str();
         let version = captures.get(3)?.as_str().to_owned();
 
+        // Strip 'v' if the second character is a digit e.g. v1.2.3
+        let version =
+            if version.starts_with('v') && version.len() > 1 && version[1..2].chars().all(|c| c.is_ascii_digit()) {
+                version[1..].to_owned()
+            } else {
+                version
+            };
+
         return Some(Source {
             name: project.to_lowercase(),
             version,
