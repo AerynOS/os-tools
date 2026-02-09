@@ -14,7 +14,7 @@ pub fn command() -> Command {
         .long_about("For all valid content-bearing archives, extract to disk")
         .arg(arg!(<PATH> ... "files to extract").value_parser(clap::value_parser!(PathBuf)))
         .arg(
-            arg!(-o --"output-dir" <OUTPUT_DIR> "directory to extract the stone(s) to (defaults to OUTPUT_DIR)")
+            arg!(-o --"output-dir" <OUTPUT_DIR> "directory to extract the stone(s) to")
                 .default_value(".")
                 .value_parser(clap::value_parser!(PathBuf)),
         )
