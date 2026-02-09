@@ -94,7 +94,7 @@ impl Drafter {
 # SPDX-License-Identifier: MPL-2.0
 #
 name        : {}
-version     : {}
+version     : \"{}\"
 release     : 1
 homepage    : {}
 upstreams   :
