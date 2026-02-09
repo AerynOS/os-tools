@@ -30,10 +30,6 @@ pub fn handle(args: &ArgMatches) -> Result<(), Error> {
 
     let output_dir = args.get_one::<PathBuf>("output-dir").unwrap();
 
-    if !output_dir.exists() {
-        std::fs::create_dir_all(output_dir)?;
-    }
-
     moss::client::extract(paths, output_dir)?;
 
     Ok(())

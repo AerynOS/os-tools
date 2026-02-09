@@ -20,6 +20,8 @@ use crate::{
 pub fn extract(stones: Vec<&PathBuf>, output_dir: &Path) -> Result<(), Error> {
     let installation = Installation::open(Path::new("."), None)?;
 
+    util::ensure_dir_exists(output_dir)?;
+
     let output_dir = output_dir.canonicalize()?;
 
     for path in stones {
