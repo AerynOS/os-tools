@@ -44,3 +44,24 @@ pub fn source(upstream: &Url) -> Option<Source> {
         uri: upstream.to_string(),
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use url::Url;
+
+    #[test]
+    fn test_regex_typical_metacpan_url() {
+        let url_str = "https://cpan.metacpan.org/authors/id/T/TO/TODDR/XML-Parser-2.47.tar.gz";
+        let url = Url::parse(url_str).unwrap();
+
+        let source = source(&url);
+        assert!(source.is_some());
+
+        let source = source.unwrap();
+        assert_eq!(source.name, "perl-xml-parser");
+        assert_eq!(source.version, "2.47");
+        assert_eq!(source.homepage, "https://metacpan.org/pod/XML::Parser");
+        assert_eq!(source.uri, url_str);
+    }
+}

@@ -36,3 +36,27 @@ pub fn source(upstream: &Url) -> Option<Source> {
         uri: format!("https://files.pythonhosted.org/packages/source/{first_char}/{name}/{filename}"),
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use url::Url;
+
+    #[test]
+    fn test_regex_typical_pypi_url() {
+        let url_str = "https://files.pythonhosted.org/packages/59/83/a60af4e83c492c7dceceeabd677aa87bbaf2d8910b3d1b973295e560f421/pyzk-0.9.tar.gz";
+        let url = Url::parse(url_str).unwrap();
+
+        let source = source(&url);
+        assert!(source.is_some());
+
+        let source = source.unwrap();
+        assert_eq!(source.name, "python-pyzk");
+        assert_eq!(source.version, "0.9");
+        assert_eq!(source.homepage, "https://pypi.org/project/pyzk");
+        assert_eq!(
+            source.uri,
+            "https://files.pythonhosted.org/packages/source/p/pyzk/pyzk-0.9.tar.gz"
+        );
+    }
+}
