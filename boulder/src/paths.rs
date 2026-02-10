@@ -29,11 +29,13 @@ pub struct Paths {
     guest_root: PathBuf,
     recipe_dir: PathBuf,
     output_dir: PathBuf,
+    verify_against_manifest: Option<PathBuf>,
 }
 
 impl Paths {
     pub fn new(
         recipe: &Recipe,
+        verify_against_manifest: Option<PathBuf>,
         host_root: impl Into<PathBuf>,
         guest_root: impl Into<PathBuf>,
         output_dir: impl Into<PathBuf>,
@@ -48,6 +50,7 @@ impl Paths {
             guest_root: guest_root.into(),
             recipe_dir,
             output_dir: output_dir.into(),
+            verify_against_manifest,
         };
 
         util::ensure_dir_exists(&job.rootfs().host)?;
@@ -164,6 +167,16 @@ impl Paths {
     /// Returns the output directory used for artefact syncing
     pub fn output_dir(&self) -> &PathBuf {
         &self.output_dir
+    }
+
+    pub fn verify_manifest(&self) -> Option<Mapping> {
+        self.verify_against_manifest
+            .as_ref()
+            .and_then(|path| path.file_name().map(|name| (path, name)))
+            .map(|(path, name)| Mapping {
+                host: path.to_owned(),
+                guest: self.guest_root.join("verify").join(name),
+            })
     }
 }
 

@@ -29,7 +29,7 @@ where
     let recipe = paths.recipe();
     let ccache_conf = paths.ccache_config();
 
-    Container::new(rootfs)
+    let mut container = Container::new(rootfs)
         .hostname("boulder")
         .networking(networking)
         .ignore_host_sigint(true)
@@ -42,8 +42,13 @@ where
         .bind_rw(&cargocache.host, &cargocache.guest)
         .bind_rw(&rustc_wrapper.host, &rustc_wrapper.guest)
         .bind_ro(&recipe.host, &recipe.guest)
-        .bind_ro_if_exists(&ccache_conf.host, &ccache_conf.guest)
-        .run::<E>(f)?;
+        .bind_ro_if_exists(&ccache_conf.host, &ccache_conf.guest);
+
+    if let Some(manifest) = paths.verify_manifest() {
+        container = container.bind_ro(&manifest.host, &manifest.guest);
+    }
+
+    container.run::<E>(f)?;
 
     Ok(())
 }

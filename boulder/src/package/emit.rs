@@ -4,6 +4,7 @@
 use std::{
     io::{self, Write},
     num::NonZeroU64,
+    path::PathBuf,
     time::Duration,
 };
 
@@ -129,19 +130,57 @@ impl Ord for Package<'_> {
 
 pub fn emit(paths: &Paths, recipe: &Recipe, packages: &[Package<'_>]) -> Result<(), Error> {
     let mut manifest = Manifest::new(paths, recipe, architecture::host());
-
-    println!("Packaging");
+    let mut emit_manifests = true;
 
     for package in packages {
         if !package.is_dbginfo() {
             manifest.add_package(package);
         }
+    }
 
+    if let Some(mapping) = paths.verify_manifest() {
+        let host_path = &mapping.host;
+        let guest_path = &mapping.guest;
+
+        println!("Verifying");
+
+        // We don't override manifests when verifying. If they match,
+        // no need to output it & cause a potential recipe repo diff
+        // since we can't guarantee bit-for-bit deterministic output
+        // of manifest files
+        emit_manifests = false;
+
+        match manifest.verify(guest_path)? {
+            manifest::Verification::Mismatch => {
+                return Err(Error::VerificationMismatch(host_path.to_owned()));
+            }
+            manifest::Verification::HashMatch { hash } => {
+                println!(
+                    "{} {host_path:?} matches built manifest based on hash match: {hash:?}",
+                    "Verified".green()
+                );
+            }
+            manifest::Verification::ContentMatch => {
+                println!(
+                    "{} {host_path:?} matches built manifest based on content match",
+                    "Verified".green()
+                )
+            }
+        }
+
+        println!();
+    }
+
+    println!("Packaging");
+
+    for package in packages {
         emit_package(paths, package)?;
     }
 
-    manifest.write_binary()?;
-    manifest.write_json()?;
+    if emit_manifests {
+        manifest.write_binary()?;
+        manifest.write_json()?;
+    }
 
     println!();
 
@@ -250,4 +289,6 @@ pub enum Error {
     Manifest(#[from] manifest::Error),
     #[error("io")]
     Io(#[from] io::Error),
+    #[error("Built manifest does not match verification manifest {0:?}")]
+    VerificationMismatch(PathBuf),
 }

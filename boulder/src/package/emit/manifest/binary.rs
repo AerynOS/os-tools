@@ -2,9 +2,8 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-use std::{collections::BTreeSet, path::Path};
+use std::{collections::BTreeSet, io::Write};
 
-use fs_err::File;
 use moss::Dependency;
 use stone::{
     StoneHeaderV1FileType, StonePayloadMetaPrimitive, StonePayloadMetaRecord, StonePayloadMetaTag, StoneWriter,
@@ -13,10 +12,12 @@ use stone::{
 use super::Error;
 use crate::package::emit::Package;
 
-pub fn write(path: &Path, packages: &BTreeSet<&Package<'_>>, build_deps: &BTreeSet<String>) -> Result<(), Error> {
-    let mut output = File::create(path)?;
-
-    let mut writer = StoneWriter::new(&mut output, StoneHeaderV1FileType::BuildManifest)?;
+pub fn write<W: Write>(
+    output: &mut W,
+    packages: &BTreeSet<&Package<'_>>,
+    build_deps: &BTreeSet<String>,
+) -> Result<(), Error> {
+    let mut writer = StoneWriter::new(output, StoneHeaderV1FileType::BuildManifest)?;
 
     // Add each package
     for package in packages {

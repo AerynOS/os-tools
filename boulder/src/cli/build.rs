@@ -57,6 +57,11 @@ pub struct Command {
         default_value_t = false
     )]
     cleanup: bool,
+    /// Verify the built manifest against the provided [MANIFEST] file and fail the build if they don't match
+    ///
+    /// If supplied & the manifests do match, the existing manifests are preserved instead of being overwritten
+    #[arg(long = "verify", value_name = "MANIFEST")]
+    verify_against: Option<PathBuf>,
 }
 
 pub fn handle(command: Command, env: Env) -> Result<(), Error> {
@@ -69,6 +74,7 @@ pub fn handle(command: Command, env: Env) -> Result<(), Error> {
         normal_priority,
         build_release,
         cleanup,
+        verify_against,
         ..
     } = command;
 
@@ -79,7 +85,18 @@ pub fn handle(command: Command, env: Env) -> Result<(), Error> {
         return Err(Error::MissingOutput(output));
     }
 
-    let builder = Builder::new(&recipe_path, env, profile, ccache, output)?;
+    // Ensure verify against path isn't json/jsonc since
+    // we verify against binary manifest
+    if let Some(path) = verify_against.as_ref()
+        && path
+            .extension()
+            .and_then(|ext| ext.to_str())
+            .is_some_and(|ext| ext.starts_with("json"))
+    {
+        return Err(Error::VerifyBinaryManifestRequired(path.to_owned()));
+    }
+
+    let builder = Builder::new(&recipe_path, verify_against.clone(), env, profile, ccache, output)?;
     let pkg_name = format!(
         "{}-{}-{}",
         builder.recipe.parsed.source.name, builder.recipe.parsed.source.version, builder.recipe.parsed.source.release
@@ -157,4 +174,6 @@ pub enum Error {
     Priority(#[from] thread_priority::Error),
     #[error("cleanup")]
     Cleanup(#[source] build::Error),
+    #[error("Binary manifest required for verification, got {0:?}")]
+    VerifyBinaryManifestRequired(PathBuf),
 }
