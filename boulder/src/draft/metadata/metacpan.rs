@@ -10,7 +10,7 @@ use super::Source;
 pub fn source(upstream: &Url) -> Option<Source> {
     let re = Regex::new(
         r#"^https://cpan\.metacpan\.org/authors/id/[A-Z]/[A-Z]{2}/[A-Z0-9]+/([A-Za-z0-9._+-]+-\d+(?:\.\d+)*)(?:\.tar\.(?:gz|bz2|xz)|\.zip)$"#
-    ).ok()?;
+    ).unwrap();
 
     let captures = re.captures(upstream.as_str())?;
 

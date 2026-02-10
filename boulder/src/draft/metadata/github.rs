@@ -11,11 +11,11 @@ pub fn source(upstream: &Url) -> Option<Source> {
     let automatic_regex = Regex::new(
         r"\w+\:\/\/github\.com\/([A-Za-z0-9-_]+)\/([A-Za-z0-9-_]+)\/archive\/refs\/tags\/([A-Za-z0-9.-_]+)\.(tar|zip)",
     )
-    .ok()?;
+    .unwrap();
     let manual_regex = Regex::new(
         r"\w+\:\/\/github\.com\/([A-Za-z0-9-_]+)\/([A-Za-z0-9-_]+)\/releases\/download\/([A-Za-z0-9-_.]+)\/.*",
     )
-    .ok()?;
+    .unwrap();
 
     for matcher in [automatic_regex, manual_regex] {
         let Some(captures) = matcher.captures(upstream.as_str()) else {
