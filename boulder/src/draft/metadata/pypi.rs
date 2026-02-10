@@ -12,7 +12,7 @@ pub fn source(upstream: &Url) -> Option<Source> {
     let regex = Regex::new(
         r"^https://files\.pythonhosted\.org/packages/[a-f0-9]{2}/[a-f0-9]{2}/[a-f0-9]+/([^/]+)-([\d.]+)\.tar\.gz$",
     )
-    .ok()?;
+    .unwrap();
 
     let filename = util::uri_file_name(upstream);
 
