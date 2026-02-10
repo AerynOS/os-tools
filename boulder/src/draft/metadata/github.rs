@@ -44,3 +44,70 @@ pub fn source(upstream: &Url) -> Option<Source> {
 
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use url::Url;
+
+    #[test]
+    fn test_automatic_regex() {
+        let url_str = "https://github.com/GNOME/pango/archive/refs/tags/1.57.0.tar.gz";
+        let url = Url::parse(url_str).unwrap();
+
+        let source = source(&url);
+        assert!(source.is_some());
+
+        let source = source.unwrap();
+        assert_eq!(source.name, "pango");
+        assert_eq!(source.version, "1.57.0");
+        assert_eq!(source.homepage, "https://github.com/GNOME/pango");
+        assert_eq!(source.uri, url_str);
+    }
+
+    #[test]
+    fn test_manual_regex() {
+        let url_str = "https://github.com/streamlink/streamlink/releases/download/8.2.0/streamlink-8.2.0.tar.gz";
+        let url = Url::parse(url_str).unwrap();
+
+        let source = source(&url);
+        assert!(source.is_some());
+
+        let source = source.unwrap();
+        assert_eq!(source.name, "streamlink");
+        assert_eq!(source.version, "8.2.0");
+        assert_eq!(source.homepage, "https://github.com/streamlink/streamlink");
+        assert_eq!(source.uri, url_str);
+    }
+
+    #[test]
+    fn test_automatic_regex_with_v_prefix() {
+        let url_str = "https://github.com/chatty/chatty/archive/refs/tags/v0.28.tar.gz";
+        let url = Url::parse(url_str).unwrap();
+
+        let source = source(&url);
+        assert!(source.is_some());
+
+        let source = source.unwrap();
+        assert_eq!(source.name, "chatty");
+        assert_eq!(source.version, "0.28");
+        assert_eq!(source.homepage, "https://github.com/chatty/chatty");
+        assert_eq!(source.uri, url_str);
+    }
+
+    #[test]
+    fn test_manual_regex_string_version() {
+        let url_str = "https://github.com/unicode-org/icu/releases/download/release-76-1/icu4c-76_1-src.tgz";
+        let url = Url::parse(url_str).unwrap();
+
+        let source = source(&url);
+        assert!(source.is_some());
+
+        let source = source.unwrap();
+        assert_eq!(source.name, "icu");
+        // TODO: we do not handle string version prefixes
+        assert_eq!(source.version, "release-76-1");
+        assert_eq!(source.homepage, "https://github.com/unicode-org/icu");
+        assert_eq!(source.uri, url_str);
+    }
+}
