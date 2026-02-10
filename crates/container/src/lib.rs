@@ -325,8 +325,24 @@ fn ensure_directory(path: impl AsRef<Path>) -> Result<(), ContainerError> {
     Ok(())
 }
 
+fn ensure_empty_file(path: impl AsRef<Path>) -> Result<(), ContainerError> {
+    let path = path.as_ref();
+    if !path.exists() {
+        fs::File::create_new(path).context(FsErrSnafu)?;
+    }
+    Ok(())
+}
+
 fn bind_mount(source: &Path, target: &Path, read_only: bool) -> Result<(), ContainerError> {
-    ensure_directory(target)?;
+    if source.is_dir() {
+        ensure_directory(target)?;
+    } else if source.is_file() {
+        if let Some(parent) = target.parent() {
+            ensure_directory(parent)?
+        }
+
+        ensure_empty_file(target)?;
+    }
 
     unsafe {
         let inner = || {

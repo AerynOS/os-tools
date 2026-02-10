@@ -54,6 +54,7 @@ pub struct Target {
 impl Builder {
     pub fn new(
         recipe_path: &Path,
+        verify_against_manifest: Option<PathBuf>,
         env: Env,
         profile: profile::Id,
         ccache: bool,
@@ -63,7 +64,7 @@ impl Builder {
 
         let macros = Macros::load(&env)?;
 
-        let paths = Paths::new(&recipe, &env.cache_dir, "/mason", output_dir)?;
+        let paths = Paths::new(&recipe, verify_against_manifest, &env.cache_dir, "/mason", output_dir)?;
 
         let build_targets = recipe.build_targets();
 

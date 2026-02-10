@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use std::{
-    io,
+    io::{self, Read, Seek, Write},
     num::NonZeroUsize,
     os::unix::fs::symlink,
     path::{Path, PathBuf},
@@ -12,6 +12,8 @@ use std::{
 
 use fs_err as fs;
 use nix::unistd::{LinkatFlags, linkat};
+use sha2::{Digest, Sha256};
+use stone::{StoneDecodedPayload, StoneReadError};
 use url::Url;
 
 pub fn ensure_dir_exists(path: &Path) -> io::Result<()> {
@@ -166,4 +168,57 @@ pub fn remove_empty_dirs(starting: &Path, root: &Path) -> io::Result<()> {
     }
 
     Ok(())
+}
+
+/// Computes the sha256 hash of the provided reader
+pub fn sha256_hash<R: Read>(reader: &mut R) -> io::Result<String> {
+    let mut writer = Sha256Wrapper::new(io::sink());
+
+    io::copy(reader, &mut writer)?;
+
+    Ok(writer.finalize())
+}
+
+/// Wraps an inner reader or writer and provides
+/// a `finalize` method to produce a sha256 hash
+/// from the read / written bytes
+pub struct Sha256Wrapper<T> {
+    inner: T,
+    hasher: Sha256,
+}
+
+impl<T> Sha256Wrapper<T> {
+    pub fn new(inner: T) -> Self {
+        Self {
+            inner,
+            hasher: Sha256::default(),
+        }
+    }
+
+    pub fn finalize(self) -> String {
+        hex::encode(self.hasher.finalize())
+    }
+}
+
+impl<T: Read> Read for Sha256Wrapper<T> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.hasher.update(&buf);
+        self.inner.read(buf)
+    }
+}
+
+impl<T: Write> Write for Sha256Wrapper<T> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.hasher.update(buf);
+        self.inner.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.inner.flush()
+    }
+}
+
+/// Extract stone payloads from the provided reader
+pub fn stone_payloads<R: Read + Seek>(reader: &mut R) -> Result<Vec<StoneDecodedPayload>, StoneReadError> {
+    Ok(stone::read(reader)?.payloads()?.collect::<Result<Vec<_>, _>>()?)
 }

@@ -25,7 +25,7 @@ pub fn handle(command: Command, env: Env) -> Result<(), Error> {
 
     let recipe = Recipe::load(recipe_path)?;
     let macros = Macros::load(&env)?;
-    let paths = Paths::new(&recipe, env.cache_dir, "/mason", ".")?;
+    let paths = Paths::new(&recipe, None, env.cache_dir, "/mason", ".")?;
 
     let rootfs = paths.rootfs().host;
 
