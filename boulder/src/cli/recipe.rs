@@ -244,7 +244,7 @@ fn update(
                 updater.update_value(release, |root| root / "release");
             }
             Update::Version(version) => {
-                updater.update_value(version, |root| root / "version");
+                updater.update_value(format!("\"{version}\""), |root| root / "version");
             }
             Update::PlainUpstream(i, key, new_uri) => {
                 let hash = runtime::block_on(fetch_and_cache_upstream(&env, new_uri.clone(), &mpb))?;
