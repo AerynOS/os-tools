@@ -338,7 +338,7 @@ fn bind_mount(source: &Path, target: &Path, read_only: bool) -> Result<(), Conta
         ensure_directory(target)?;
     } else if source.is_file() {
         if let Some(parent) = target.parent() {
-            ensure_directory(parent)?
+            ensure_directory(parent)?;
         }
 
         ensure_empty_file(target)?;
