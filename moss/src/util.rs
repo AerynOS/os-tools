@@ -220,5 +220,5 @@ impl<T: Write> Write for Sha256Wrapper<T> {
 
 /// Extract stone payloads from the provided reader
 pub fn stone_payloads<R: Read + Seek>(reader: &mut R) -> Result<Vec<StoneDecodedPayload>, StoneReadError> {
-    Ok(stone::read(reader)?.payloads()?.collect::<Result<Vec<_>, _>>()?)
+    stone::read(reader)?.payloads()?.collect::<Result<Vec<_>, _>>()
 }

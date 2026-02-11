@@ -164,7 +164,7 @@ pub fn emit(paths: &Paths, recipe: &Recipe, packages: &[Package<'_>]) -> Result<
                 println!(
                     "{} {host_path:?} matches built manifest based on content match",
                     "Verified".green()
-                )
+                );
             }
         }
 
