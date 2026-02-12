@@ -14,7 +14,7 @@ actions:
             SHELL=/usr/bin/dash; export SHELL
             /usr/bin/dash ./autogen.sh
             echo "Configured to use '$(head -n1 ./configure)' to execute ./configure"
-            %configure %(options_configure)
+            %configure
         dependencies:
             - binary(autoconf)
             - binary(automake)
@@ -28,7 +28,7 @@ actions:
             SHELL=/usr/bin/bash; export SHELL
             /usr/bin/bash ./autogen.sh
             echo "Configured to use '$(head -n1 ./configure)' to execute ./configure"
-            %configure_with_bash %(options_configure)
+            %configure_with_bash
         dependencies:
             - binary(autoconf)
             - binary(automake)
