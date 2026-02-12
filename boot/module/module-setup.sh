@@ -19,8 +19,8 @@ depends() {
 install() {
     dracut_install /usr/lib/moss/moss-fstx.sh
     dracut_install /usr/bin/moss
+
     inst_simple "${systemdsystemunitdir}/moss-fstx.service"
-    mkdir -p "${initdir}${systemdsystemconfdir}/initrd-root-fs.target.wants"
-    ln_r "${systemdsystemunitdir}/moss-fstx.service" \
-        "${systemdsystemconfdir}/initrd-root-fs.target.wants/moss-fstx.service"
+    # Enable systemd type unit(s)
+    $SYSTEMCTL -q --root "$initdir" enable moss-fstx.service
 }
