@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, btree_map},
-    io,
+    fs::File,
+    io::{self, Read},
     path::{Path, PathBuf, StripPrefixError},
     time::Duration,
 };
@@ -196,12 +197,32 @@ fn enumerate_stone_files(dir: &Path) -> Result<Vec<PathBuf>, Error> {
 
         if meta.is_dir() {
             paths.extend(enumerate_stone_files(&path)?);
-        } else if meta.is_file() && path.extension().and_then(|s| s.to_str()) == Some("stone") {
+        } else if meta.is_file() && is_stone_file(&path)? && path.extension().and_then(|s| s.to_str()) != Some("index")
+        {
             paths.push(path);
         }
     }
 
     Ok(paths)
+}
+
+fn is_stone_file(file: &Path) -> io::Result<bool> {
+    let mut file = File::open(file)?;
+
+    let mut buffer = [0u8; 4];
+    const MAGIC: &[u8; 4] = b"\0mos";
+
+    match file.read_exact(&mut buffer) {
+        Ok(()) => {
+            if &buffer == MAGIC {
+                return Ok(true);
+            }
+        }
+        Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {}
+        Err(e) => return Err(e),
+    }
+
+    Ok(false)
 }
 
 #[derive(Debug, Error)]
