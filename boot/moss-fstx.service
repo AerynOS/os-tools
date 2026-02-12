@@ -16,3 +16,6 @@ StandardInput=null
 StandardOutput=journal
 StandardError=journal+console
 RemainAfterExit=yes
+
+[Install]
+WantedBy=initrd-root-fs.target
