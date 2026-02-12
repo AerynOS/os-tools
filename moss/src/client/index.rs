@@ -49,7 +49,10 @@ pub fn index(index_dir: &Path, output_dir: Option<&Path>) -> Result<(), Error> {
     let list = stone_files
         .par_iter()
         .map(|path| get_meta(path, ctx))
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
 
     let mut map = BTreeMap::new();
 
@@ -119,7 +122,7 @@ struct GetMetaCtx<'a> {
     total_progress: &'a ProgressBar,
 }
 
-fn get_meta(path: &Path, ctx: GetMetaCtx<'_>) -> Result<Meta, Error> {
+fn get_meta(path: &Path, ctx: GetMetaCtx<'_>) -> Result<Vec<Meta>, Error> {
     let relative_path: Utf8PathBuf = rel_path_from_to(ctx.output_dir, path)
         .try_into()
         .map_err(|_| Error::NonUtf8Path { path: path.to_owned() })?;
@@ -148,15 +151,21 @@ fn get_meta(path: &Path, ctx: GetMetaCtx<'_>) -> Result<Meta, Error> {
         path: path.to_owned(),
     })?;
 
-    let payload = payloads
+    let metas: Vec<Meta> = payloads
         .iter()
-        .find_map(|payload| payload.meta())
-        .ok_or(Error::MissingMetaPayload)?;
+        .filter_map(|payload| payload.meta())
+        .map(|payload| {
+            let mut meta = Meta::from_stone_payload(&payload.body)?;
+            meta.hash = Some(hash.clone());
+            meta.download_size = Some(size);
+            meta.uri = Some(relative_path.as_str().to_owned());
+            Ok(meta)
+        })
+        .collect::<Result<Vec<_>, Error>>()?;
 
-    let mut meta = Meta::from_stone_payload(&payload.body)?;
-    meta.hash = Some(hash);
-    meta.download_size = Some(size);
-    meta.uri = Some(relative_path.as_str().to_owned());
+    if metas.is_empty() {
+        return Err(Error::MissingMetaPayload);
+    }
 
     progress.finish();
     ctx.multi_progress.remove(&progress);
@@ -164,7 +173,7 @@ fn get_meta(path: &Path, ctx: GetMetaCtx<'_>) -> Result<Meta, Error> {
         .suspend(|| println!("{} {}", "Indexed".green(), relative_path.as_str().bold()));
     ctx.total_progress.inc(1);
 
-    Ok(meta)
+    Ok(metas)
 }
 
 fn stat_file(path: &Path, relative_path: &Utf8Path, progress: &ProgressBar) -> Result<(u64, String), Error> {
