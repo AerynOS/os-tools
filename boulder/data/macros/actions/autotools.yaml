@@ -12,9 +12,9 @@ actions:
             # Often defaults to /bin/sh
             CONFIG_SHELL=/usr/bin/dash; export CONFIG_SHELL
             SHELL=/usr/bin/dash; export SHELL
-            /usr/bin/dash ./autogen.sh %(options_configure)
+            /usr/bin/dash ./autogen.sh
             echo "Configured to use '$(head -n1 ./configure)' to execute ./configure"
-            %configure
+            %configure %(options_configure)
         dependencies:
             - binary(autoconf)
             - binary(automake)
@@ -26,9 +26,9 @@ actions:
             NOCONFIGURE="noconfigure"; export NOCONFIGURE
             CONFIG_SHELL=/usr/bin/bash; export CONFIG_SHELL
             SHELL=/usr/bin/bash; export SHELL
-            /usr/bin/bash ./autogen.sh %(options_configure)
+            /usr/bin/bash ./autogen.sh
             echo "Configured to use '$(head -n1 ./configure)' to execute ./configure"
-            %configure_with_bash
+            %configure_with_bash %(options_configure)
         dependencies:
             - binary(autoconf)
             - binary(automake)
