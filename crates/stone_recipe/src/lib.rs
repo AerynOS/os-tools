@@ -1,14 +1,16 @@
-// SPDX-FileCopyrightText: Copyright © 2020-2025 Serpent OS Developers
+// SPDX-FileCopyrightText: Copyright © 2020-2026 Serpent OS Developers
 //
 // SPDX-License-Identifier: MPL-2.0
 
 use std::collections::BTreeMap;
-use std::{hash::Hash, path::PathBuf};
+use std::path::PathBuf;
 
 use serde::Deserialize;
 pub use serde_yaml::Error;
 use thiserror::Error;
 use url::Url;
+
+use crate::upstream::{Kind, SourceUri};
 
 pub use self::macros::Macros;
 pub use self::script::Script;
@@ -118,22 +120,45 @@ pub struct Package {
     pub conflicts: Vec<String>,
 }
 
-#[derive(Debug, Clone)]
-pub enum Upstream {
+#[derive(Clone, Deserialize, Debug)]
+#[serde(untagged)]
+pub enum UpstreamProps {
     Plain {
-        uri: Url,
         hash: String,
         rename: Option<String>,
+        #[serde(rename = "stripdirs")]
         strip_dirs: Option<u8>,
+        #[serde(default = "default_true", deserialize_with = "stringy_bool")]
         unpack: bool,
-        unpack_dir: Option<PathBuf>,
     },
     Git {
-        uri: Url,
-        ref_id: String,
-        clone_dir: Option<PathBuf>,
+        #[serde(rename = "ref")]
+        git_ref: String,
+        #[serde(default = "default_true", deserialize_with = "stringy_bool")]
         staging: bool,
     },
+}
+
+impl UpstreamProps {
+    fn default_plain(hash: String) -> Self {
+        Self::Plain {
+            hash,
+            rename: None,
+            strip_dirs: None,
+            unpack: true,
+        }
+    }
+
+    fn default_git(git_ref: String) -> Self {
+        Self::Git { git_ref, staging: true }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Upstream {
+    pub url: Url,
+    pub unpack_dir: Option<PathBuf>,
+    pub props: UpstreamProps,
 }
 
 impl<'de> Deserialize<'de> for Upstream {
@@ -142,113 +167,41 @@ impl<'de> Deserialize<'de> for Upstream {
         D: serde::Deserializer<'de>,
     {
         #[derive(Debug, Deserialize)]
-        #[serde(untagged)]
-        enum Inner {
-            Plain {
-                hash: String,
-                rename: Option<String>,
-                #[serde(rename = "stripdirs")]
-                strip_dirs: Option<u8>,
-                #[serde(default = "default_true", deserialize_with = "stringy_bool")]
-                unpack: bool,
-                #[serde(rename = "unpackdir")]
-                unpack_dir: Option<PathBuf>,
-            },
-            Git {
-                #[serde(rename = "ref")]
-                ref_id: String,
-                #[serde(rename = "clonedir")]
-                clone_dir: Option<PathBuf>,
-                #[serde(default = "default_true", deserialize_with = "stringy_bool")]
-                staging: bool,
-            },
+        struct Props {
+            destdir: Option<PathBuf>,
+            #[serde(flatten)]
+            specific: UpstreamProps,
         }
 
         #[derive(Debug, Deserialize)]
         #[serde(untagged)]
-        enum Outer {
+        enum Fields {
             String(String),
-            Inner(Inner),
+            Props(Props),
         }
 
-        #[derive(Debug, Deserialize, PartialEq, Eq, Ord, PartialOrd, Hash)]
-        #[serde(try_from = "&str")]
-        enum Uri {
-            Plain(Url),
-            Git(Url),
-        }
-
-        impl<'a> TryFrom<&'a str> for Uri {
-            type Error = UriParseError;
-
-            fn try_from(s: &'a str) -> Result<Self, Self::Error> {
-                match s.split_once("git|") {
-                    Some((_, uri)) => Ok(Uri::Git(uri.parse()?)),
-                    None => Ok(Uri::Plain(s.parse()?)),
+        let (uri, fields) = BTreeMap::<SourceUri, Fields>::deserialize(deserializer)?
+            .into_iter()
+            .next()
+            .ok_or(serde::de::Error::custom("no upstream"))?;
+        let (unpack_dir, props) = match fields {
+            Fields::String(hash) => match &uri.kind {
+                Kind::Archive => (None, UpstreamProps::default_plain(hash)),
+                Kind::Git => (None, UpstreamProps::default_git(hash)),
+            },
+            Fields::Props(props) => match (&props.specific, &uri.kind) {
+                (UpstreamProps::Git { .. }, Kind::Archive) | (UpstreamProps::Plain { .. }, Kind::Git) => {
+                    return Err(serde::de::Error::custom("mismatched URL type and upstream properties"));
                 }
-            }
-        }
+                _ => (props.destdir, props.specific),
+            },
+        };
 
-        #[derive(Debug, Error)]
-        #[error("invalid uri: {0}")]
-        struct UriParseError(#[from] url::ParseError);
-
-        let raw_map = BTreeMap::<Uri, Outer>::deserialize(deserializer)?;
-
-        match raw_map.into_iter().next() {
-            Some((Uri::Plain(uri), Outer::String(hash))) => Ok(Upstream::Plain {
-                uri,
-                hash,
-                rename: None,
-                strip_dirs: None,
-                unpack: default_true(),
-                unpack_dir: None,
-            }),
-            Some((Uri::Git(uri), Outer::String(ref_id))) => Ok(Upstream::Git {
-                uri,
-                ref_id,
-                clone_dir: None,
-                staging: default_true(),
-            }),
-            Some((
-                Uri::Plain(uri),
-                Outer::Inner(Inner::Plain {
-                    hash,
-                    rename,
-                    strip_dirs,
-                    unpack,
-                    unpack_dir,
-                }),
-            )) => Ok(Upstream::Plain {
-                uri,
-                hash,
-                rename,
-                strip_dirs,
-                unpack,
-                unpack_dir,
-            }),
-            Some((
-                Uri::Git(uri),
-                Outer::Inner(Inner::Git {
-                    ref_id,
-                    clone_dir,
-                    staging,
-                }),
-            )) => Ok(Upstream::Git {
-                uri,
-                ref_id,
-                clone_dir,
-                staging,
-            }),
-            Some((Uri::Plain(_), Outer::Inner(Inner::Git { .. }))) => Err(serde::de::Error::custom(
-                "found git payload but missing 'git|' prefixed URI",
-            )),
-            Some((Uri::Git(_), Outer::Inner(Inner::Plain { .. }))) => {
-                Err(serde::de::Error::custom("found git URI but plain payload fields"))
-            }
-            // unreachable?
-            None => Err(serde::de::Error::custom("missing upstream entry")),
-        }
+        Ok(Self {
+            url: uri.into(),
+            unpack_dir,
+            props,
+        })
     }
 }
 
