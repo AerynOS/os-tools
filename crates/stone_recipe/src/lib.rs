@@ -17,6 +17,7 @@ pub use self::tuning::Tuning;
 pub mod macros;
 pub mod script;
 pub mod tuning;
+pub mod upstream;
 
 pub fn from_slice(bytes: &[u8]) -> Result<Recipe, Error> {
     serde_yaml::from_slice(bytes)
