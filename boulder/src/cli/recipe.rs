@@ -69,11 +69,17 @@ pub enum Subcommand {
             short = 'u',
             long = "upstream",
             required = true,
-            value_parser = parse_upstream,
-            help = "Update upstream source, can be passed multiple times. Applied in same order as defined in recipe file.",
-            long_help = "Update upstream source, can be passed multiple times. Applied in same order as defined in recipe file.\n\nExample: -u \"https://some.plan/file.tar.gz\" -u \"git|v1.1\"",
+            value_parser = parse_updated_source,
+            help = concat!(
+                "Update upstream source, can be passed multiple times.\n",
+                "Applied in same order as defined in recipe file."),
+            long_help = concat!(
+                "Update upstream source, can be passed multiple times.\n",
+                "Applied in same order as defined in recipe file. To update a Git upstream,\n",
+                "Use the \"git|commit_or_tag\" syntax.\n\n",
+                "Example: -u \"https://some.plan/file.tar.gz\" -u \"git|v1.1\"")
         )]
-        upstreams: Vec<Upstream>,
+        upstreams: Vec<UpdatedSource>,
         #[arg(help = "Path to recipe file, otherwise read from standard input")]
         recipe: Option<PathBuf>,
         #[arg(
@@ -93,16 +99,21 @@ pub enum Subcommand {
     },
 }
 
+/// A new source for an existing recipe.
 #[derive(Clone, Debug)]
-pub enum Upstream {
+pub enum UpdatedSource {
+    /// The new source is a regular URL that points
+    /// to a source archive.
     Plain(Url),
+    /// The new source is a Git reference (i.e. commit hash
+    /// or tag) in the Git repository referenced in the recipe.
     Git(String),
 }
 
-fn parse_upstream(s: &str) -> Result<Upstream, String> {
-    match s.strip_prefix("git|") {
-        Some(rev) => Ok(Upstream::Git(rev.to_owned())),
-        None => Ok(Upstream::Plain(s.parse::<Url>().map_err(|e| e.to_string())?)),
+fn parse_updated_source(s: &str) -> Result<UpdatedSource, String> {
+    match s.strip_prefix(upstream::GIT_PREFIX) {
+        Some(git_ref) => Ok(UpdatedSource::Git(git_ref.to_owned())),
+        None => Ok(UpdatedSource::Plain(s.parse::<Url>().map_err(|e| e.to_string())?)),
     }
 }
 
@@ -171,7 +182,7 @@ fn update(
     recipe: Option<PathBuf>,
     overwrite: bool,
     version: String,
-    upstreams: Vec<Upstream>,
+    sources: Vec<UpdatedSource>,
     no_bump: bool,
 ) -> Result<(), Error> {
     if overwrite && recipe.is_none() {
@@ -206,15 +217,15 @@ fn update(
         updates.push(Update::Release(parsed.source.release + 1));
     }
 
-    for (i, (original, update)) in parsed.upstreams.into_iter().zip(upstreams).enumerate() {
+    for (i, (original, update)) in parsed.upstreams.into_iter().zip(sources).enumerate() {
         match (original.props, update) {
-            (Props::Plain { .. }, Upstream::Git(_)) => {
+            (upstream::Props::Plain { .. }, UpdatedSource::Git(_)) => {
                 return Err(Error::UpstreamMismatch(i, "Plain", "Git"));
             }
-            (Props::Git { .. }, Upstream::Plain(_)) => {
+            (upstream::Props::Git { .. }, UpdatedSource::Plain(_)) => {
                 return Err(Error::UpstreamMismatch(i, "Git", "Plain"));
             }
-            (Props::Plain { .. }, Upstream::Plain(new_uri)) => {
+            (upstream::Props::Plain { .. }, UpdatedSource::Plain(new_uri)) => {
                 let key = value["upstreams"][i]
                     .as_mapping()
                     .and_then(|map| map.keys().next())
@@ -223,7 +234,7 @@ fn update(
                     updates.push(Update::PlainUpstream(i, key, new_uri));
                 }
             }
-            (Props::Git { .. }, Upstream::Git(new_ref)) => {
+            (upstream::Props::Git { .. }, UpdatedSource::Git(new_ref)) => {
                 let key = value["upstreams"][i]
                     .as_mapping()
                     .and_then(|map| map.keys().next())
