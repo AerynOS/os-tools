@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: Copyright © 2020-2025 Serpent OS Developers
+// SPDX-FileCopyrightText: Copyright © 2020-2026 Serpent OS Developers
 //
 // SPDX-License-Identifier: MPL-2.0
 
@@ -7,7 +7,8 @@ use std::{io, iter};
 
 use fs_err as fs;
 use moss::{Installation, repository, runtime, util};
-use stone_recipe::{Upstream, tuning::Toolchain};
+use stone_recipe::tuning::Toolchain;
+use stone_recipe::upstream;
 use thiserror::Error;
 
 use crate::build::Builder;
@@ -150,8 +151,8 @@ fn packages(builder: &Builder) -> Vec<&str> {
     );
 
     for upstream in &builder.recipe.parsed.upstreams {
-        if let Upstream::Plain { uri, rename, .. } = upstream {
-            let path = uri.path();
+        if let upstream::Props::Plain { rename, .. } = &upstream.props {
+            let path = upstream.url.path();
 
             for path in iter::once(path).chain(rename.as_deref()) {
                 if let Some((_, ext)) = path.rsplit_once('.') {

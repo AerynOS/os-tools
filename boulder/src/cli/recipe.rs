@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: Copyright © 2020-2025 Serpent OS Developers
+// SPDX-FileCopyrightText: Copyright © 2020-2026 Serpent OS Developers
 //
 // SPDX-License-Identifier: MPL-2.0
 use std::{
@@ -18,6 +18,7 @@ use futures_util::StreamExt;
 use itertools::Itertools;
 use moss::{request, runtime, util};
 use sha2::{Digest, Sha256};
+use stone_recipe::upstream;
 use tempfile::NamedTempFile;
 use thiserror::Error;
 use tokio::io::AsyncWriteExt;
@@ -205,15 +206,15 @@ fn update(
         updates.push(Update::Release(parsed.source.release + 1));
     }
 
-    for (i, (original, update)) in parsed.upstreams.iter().zip(upstreams).enumerate() {
-        match (original, update) {
-            (stone_recipe::Upstream::Plain { .. }, Upstream::Git(_)) => {
+    for (i, (original, update)) in parsed.upstreams.into_iter().zip(upstreams).enumerate() {
+        match (original.props, update) {
+            (Props::Plain { .. }, Upstream::Git(_)) => {
                 return Err(Error::UpstreamMismatch(i, "Plain", "Git"));
             }
-            (stone_recipe::Upstream::Git { .. }, Upstream::Plain(_)) => {
+            (Props::Git { .. }, Upstream::Plain(_)) => {
                 return Err(Error::UpstreamMismatch(i, "Git", "Plain"));
             }
-            (stone_recipe::Upstream::Plain { .. }, Upstream::Plain(new_uri)) => {
+            (Props::Plain { .. }, Upstream::Plain(new_uri)) => {
                 let key = value["upstreams"][i]
                     .as_mapping()
                     .and_then(|map| map.keys().next())
@@ -222,7 +223,7 @@ fn update(
                     updates.push(Update::PlainUpstream(i, key, new_uri));
                 }
             }
-            (stone_recipe::Upstream::Git { .. }, Upstream::Git(new_ref)) => {
+            (Props::Git { .. }, Upstream::Git(new_ref)) => {
                 let key = value["upstreams"][i]
                     .as_mapping()
                     .and_then(|map| map.keys().next())

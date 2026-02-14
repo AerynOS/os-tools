@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: Copyright © 2020-2025 Serpent OS Developers
+// SPDX-FileCopyrightText: Copyright © 2020-2026 Serpent OS Developers
 //
 // SPDX-License-Identifier: MPL-2.0
 
@@ -9,7 +9,10 @@ use std::{
 };
 
 use moss::util;
-use stone_recipe::{Script, Upstream, script, tuning};
+use stone_recipe::{
+    Script, script, tuning,
+    upstream::{self, Upstream},
+};
 use thiserror::Error;
 
 pub use self::phase::Phase;
@@ -63,29 +66,26 @@ fn work_dir(build_dir: &Path, upstreams: &[Upstream]) -> PathBuf {
     let mut work_dir = build_dir.to_path_buf();
 
     // Work dir is the first upstream that should be unpacked
-    if let Some(upstream) = upstreams.iter().find(|upstream| match upstream {
-        Upstream::Plain { unpack, .. } => *unpack,
-        Upstream::Git { .. } => true,
+    if let Some(upstream) = upstreams.iter().find(|upstream| match upstream.props {
+        upstream::Props::Plain { unpack, .. } => unpack,
+        upstream::Props::Git { .. } => true,
     }) {
-        match upstream {
-            Upstream::Plain {
-                uri,
-                rename,
-                unpack_dir,
-                ..
-            } => {
-                let file_name = util::uri_file_name(uri);
+        match &upstream.props {
+            upstream::Props::Plain { rename, .. } => {
+                let file_name = util::uri_file_name(&upstream.url);
                 let rename = rename.as_deref().unwrap_or(file_name);
-                let unpack_dir = unpack_dir
+                let unpack_dir = upstream
+                    .unpack_dir
                     .as_ref()
                     .map(|dir| dir.display().to_string())
                     .unwrap_or_else(|| rename.to_owned());
 
                 work_dir = build_dir.join(unpack_dir);
             }
-            Upstream::Git { uri, clone_dir, .. } => {
-                let source = util::uri_file_name(uri);
-                let target = clone_dir
+            upstream::Props::Git { .. } => {
+                let source = util::uri_file_name(&upstream.url);
+                let target = upstream
+                    .unpack_dir
                     .as_ref()
                     .map(|dir| dir.display().to_string())
                     .unwrap_or_else(|| source.to_owned());
