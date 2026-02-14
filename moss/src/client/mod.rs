@@ -11,10 +11,12 @@
 
 use std::{
     borrow::Borrow,
-    fmt, io,
+    fmt,
+    fs::{File, FileTimes},
+    io,
     os::{fd::RawFd, unix::fs::symlink},
     path::{Path, PathBuf},
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime},
 };
 
 use astr::AStr;
@@ -29,7 +31,7 @@ use nix::{
     unistd::{close, linkat, mkdir, symlinkat},
 };
 use postblit::TriggerScope;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, ParallelBridge, ParallelIterator};
 use stone::{StoneDecodedPayload, StonePayloadLayoutFile, StonePayloadLayoutRecord};
 use thiserror::Error;
 use tracing::{info, info_span};
@@ -584,8 +586,38 @@ impl Client {
         {
             fs::create_dir_all(parent)?;
         }
+
+        // Update directory's access times such that any open processes watching inodes
+        // on directories will receive IN_ATTRIB events & pick up the changes in the new
+        // /usr tree
+        self.update_directories_access_time(&usr_source)?;
+
         // hot swap the staging/usr into the root/$id/usr
         fs::rename(usr_source, &usr_target)?;
+
+        Ok(())
+    }
+
+    // Recursively update access time for every directory
+    fn update_directories_access_time(&self, dir: &Path) -> io::Result<()> {
+        if !dir.is_dir() {
+            return Ok(());
+        }
+
+        let metadata = fs::metadata(dir)?;
+        let file = File::open(dir)?;
+        let times = FileTimes::new()
+            .set_accessed(SystemTime::now())
+            .set_modified(metadata.modified()?);
+        file.set_times(times)?;
+
+        // Recursive parallelization
+        fs::read_dir(dir)?
+            .par_bridge()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.path().is_dir())
+            .try_for_each(|entry| self.update_directories_access_time(&entry.path()))?;
+
         Ok(())
     }
 
