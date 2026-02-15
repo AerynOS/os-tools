@@ -27,15 +27,11 @@ pub fn command() -> Command {
         .subcommand(Command::new("active").about("List the active state"))
         .subcommand(Command::new("list").about("List all states"))
         .subcommand(
-            Command::new("activate")
-                .about("Activate a state")
-                .arg(
-                    arg!(<ID> "State id to be activated")
-                        .action(ArgAction::Set)
-                        .value_parser(clap::value_parser!(u64)),
-                )
-                .arg(arg!(--"skip-triggers" "Do not run triggers on activation").action(ArgAction::SetTrue))
-                .arg(arg!(--"skip-boot" "Do not sync boot on activation").action(ArgAction::SetTrue)),
+            Command::new("activate").about("Activate a state").arg(
+                arg!(<ID> "State id to be activated")
+                    .action(ArgAction::Set)
+                    .value_parser(clap::value_parser!(u64)),
+            ),
         )
         .subcommand(
             Command::new("query").about("Query information for a state").arg(
@@ -130,17 +126,11 @@ pub fn list(installation: Installation) -> Result<(), Error> {
 
 pub fn activate(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
     let new_id = *args.get_one::<u64>("ID").unwrap() as i32;
-    let skip_triggers = args.get_flag("skip-triggers");
-    let skip_boot = args.get_flag("skip-boot");
 
     let client = Client::new(environment::NAME, installation)?;
-    let old_id = client.activate_state(new_id.into(), skip_triggers, skip_boot)?;
+    client.activate_state(new_id.into())?;
 
-    println!(
-        "State {} activated {}",
-        new_id.to_string().bold(),
-        format!("({old_id} archived)").dim()
-    );
+    println!("State {} activated", new_id.to_string().bold());
 
     Ok(())
 }

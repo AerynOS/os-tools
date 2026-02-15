@@ -299,7 +299,7 @@ impl Client {
     ///
     /// The current state gets archived.\
     /// Returns the old state that was archived.
-    pub fn activate_state(&self, id: state::Id, skip_triggers: bool, skip_boot: bool) -> Result<state::Id, Error> {
+    pub fn activate_state(&self, id: state::Id) -> Result<(), Error> {
         // Fetch the new state
         let new = self.state_db.get(id).map_err(|_| Error::StateDoesntExist(id))?;
 
@@ -319,29 +319,18 @@ impl Client {
             fs::create_dir(&staging_dir)?;
         }
 
-        // Move new (archived) state to staging
-        fs::rename(self.installation.root_path(new.id.to_string()), &staging_dir)?;
+        let fstree = self.blit_root(new.selections.iter().map(|s| &s.package))?;
 
-        // Promote staging
-        self.promote_staging()?;
+        let system_model = self.load_or_create_system_model(
+            self.installation
+                .root_path(new.id.to_string())
+                .join("usr/lib/system-model.kdl"),
+            &new,
+        )?;
 
-        // Archive old state
-        self.archive_state(old)?;
+        self.apply_stateful_blit(fstree, &new, Some(old), system_model)?;
 
-        // Build VFS from new state selections
-        // to build triggers from
-        let fstree = self.vfs(new.selections.iter().map(|selection| &selection.package))?;
-
-        if !skip_triggers {
-            // Run system triggers
-            Self::apply_triggers(TriggerScope::System(&self.installation, &self.scope), &fstree)?;
-        }
-
-        if !skip_boot {
-            boot::synchronize(self, &new)?;
-        }
-
-        Ok(old)
+        Ok(())
     }
 
     /// Create a new recorded state from the provided packages
@@ -490,8 +479,8 @@ impl Client {
         // Now we got it staged, we need working rootfs
         create_root_links(&self.installation.root)?;
 
-        if let Some(id) = old_state {
-            self.archive_state(id)?;
+        if let Some(_) = old_state {
+            self.remove_old_state()?;
         }
 
         // At this point we're allowed to run system triggers
@@ -571,21 +560,16 @@ impl Client {
     }
 
     /// Archive old states (currently not "activated") into their respective tree
-    fn archive_state(&self, id: state::Id) -> Result<(), Error> {
+    fn remove_old_state(&self) -> Result<(), Error> {
         if self.scope.is_ephemeral() {
             return Err(Error::EphemeralProhibitedOperation);
         }
 
         // After promotion, the old active /usr is now in staging/usr
-        let usr_target = self.installation.root_path(id.to_string()).join("usr");
         let usr_source = self.installation.staging_path("usr");
-        if let Some(parent) = usr_target.parent()
-            && !parent.exists()
-        {
-            fs::create_dir_all(parent)?;
-        }
-        // hot swap the staging/usr into the root/$id/usr
-        fs::rename(usr_source, &usr_target)?;
+
+        // Nuke the old state
+        fs::remove_dir_all(usr_source)?;
         Ok(())
     }
 

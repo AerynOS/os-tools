@@ -286,7 +286,7 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
 
             // Remove the old archive state so the new blit can be archived
             fs::remove_dir_all(client.installation.root_path(state.id.to_string()))?;
-            client.archive_state(state.id)?;
+            client.remove_old_state()?;
         }
 
         println!(" {} state #{}", "»".green(), state.id);
