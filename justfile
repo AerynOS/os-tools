@@ -6,6 +6,7 @@ build-mode := env_var_or_default("MODE", "onboarding")
 # Keep it simple for now and make installs user-local
 home := env_var("HOME")
 # Hacky -- should really check for the XDG_*_DIR env vars...
+xdg-config-home := home + "/.config"
 xdg-data-home := home + "/.local/share"
 xdg-bin-home := home + "/.local/bin"
 # Read '=~' as 'contains' in the regexp sense
@@ -38,8 +39,10 @@ get-started: (build "boulder") (build "moss") (licenses)
   @cp "{{root-dir}}/target/{{build-mode}}"/moss "{{xdg-bin-home}}/"
   @rm -rf "{{xdg-data-home}}/boulder"
   @mkdir -p "{{xdg-data-home}}/boulder/licenses"
-  @cp -R "{{root-dir}}/boulder/data"/* "{{xdg-data-home}}/boulder/"
+  @cp -R "{{root-dir}}/boulder/data"/{macros,*.yaml} "{{xdg-data-home}}/boulder/"
   @cp "{{root-dir}}/license-list-data/text"/* "{{xdg-data-home}}/boulder/licenses"
+  @mkdir -p "{{xdg-config-home}}/boulder/"
+  @cp -R "{{root-dir}}/boulder/data"/profile.d "{{xdg-config-home}}/boulder/"
   @echo ""
   @echo "Listing installed files..."
   @ls -hlF "{{xdg-bin-home}}"/boulder "{{xdg-bin-home}}"/moss "{{xdg-data-home}}/boulder"
@@ -97,8 +100,8 @@ libstone example="read" *ARGS="./test/bash-completion-2.11-1-1-x86_64.stone":
   output=$(mktemp)
   cargo build -p libstone --release
   clang libstone/examples/{{example}}.c -o $output -I./libstone/src/ -lstone -L./target/release/ -Wl,-rpath,./target/release/
-  if [ "$USE_VALGRIND" == "1" ]; 
+  if [ "$USE_VALGRIND" == "1" ];
     then time valgrind --track-origins=yes $output {{ARGS}};
-    else time $output {{ARGS}}; 
+    else time $output {{ARGS}};
   fi
   rm "$output"
