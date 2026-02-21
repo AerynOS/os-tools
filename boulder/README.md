@@ -12,4 +12,4 @@ This will produce a debug build by default, which is available as  `./target/deb
 
 ## Onboarding
 
-Refer to the moss onboarding instructions [here](https://github.com/serpent-os/moss?tab=readme-ov-file#onboarding).
+Refer to the moss onboarding instructions [here](https://github.com/AerynOS/os-tools?tab=readme-ov-file#-onboarding).
