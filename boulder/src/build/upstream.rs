@@ -11,12 +11,12 @@ use std::{
 
 use fs_err as fs;
 use futures_util::{StreamExt, TryStreamExt, stream};
-use moss::{runtime, util};
+use moss::{request, runtime, util};
 use nix::unistd::{LinkatFlags, linkat};
 use sha2::{Digest, Sha256};
 use stone_recipe::upstream;
 use thiserror::Error;
-use tokio::io::AsyncWriteExt;
+use tokio::{fs::File, io::AsyncWriteExt};
 use tui::{MultiProgress, ProgressBar, ProgressStyle, Styled};
 use url::Url;
 
@@ -65,7 +65,7 @@ pub fn sync(recipe: &Recipe, paths: &Paths, upstreams: &[Upstream]) -> Result<()
                 );
                 pb.enable_steady_tick(Duration::from_millis(150));
 
-                let install = upstream.fetch(paths, &pb).await?;
+                let install = upstream.store(paths, &pb).await?;
 
                 pb.set_message(format!("{} {}", "Copying".yellow(), upstream.name().bold()));
                 pb.set_style(
@@ -120,7 +120,7 @@ pub fn remove(paths: &Paths, upstreams: &[Upstream]) -> Result<(), Error> {
 }
 
 #[derive(Clone)]
-pub(crate) enum Installed {
+pub(crate) enum Stored {
     Plain {
         name: String,
         path: PathBuf,
@@ -137,17 +137,17 @@ pub(crate) enum Installed {
     },
 }
 
-impl Installed {
+impl Stored {
     fn was_cached(&self) -> bool {
         match self {
-            Installed::Plain { was_cached, .. } => *was_cached,
-            Installed::Git { was_cached, .. } => *was_cached,
+            Stored::Plain { was_cached, .. } => *was_cached,
+            Stored::Git { was_cached, .. } => *was_cached,
         }
     }
 
     fn share(&self, dest_dir: &Path) -> Result<(), Error> {
         match self {
-            Installed::Plain { name, path, .. } => {
+            Stored::Plain { name, path, .. } => {
                 let target = dest_dir.join(name);
 
                 // Attempt hard link
@@ -158,7 +158,7 @@ impl Installed {
                     fs::copy(path, &target)?;
                 }
             }
-            Installed::Git { name, path, .. } => {
+            Stored::Git { name, path, .. } => {
                 let target = dest_dir.join(name);
                 util::copy_dir(path, &target)?;
             }
@@ -178,7 +178,7 @@ impl Upstream {
     pub fn from_recipe(upstream: upstream::Upstream, original_index: usize) -> Result<Self, Error> {
         match upstream.props {
             upstream::Props::Plain { hash, rename, .. } => Ok(Self::Plain(Plain {
-                uri: upstream.url,
+                url: upstream.url,
                 hash: hash.parse()?,
                 rename,
             })),
@@ -191,6 +191,13 @@ impl Upstream {
         }
     }
 
+    pub async fn fetch_new(uri: SourceUri, dest: &Path) -> Result<Self, Error> {
+        Ok(match uri.kind {
+            Kind::Archive => Self::Plain(Plain::fetch_new(uri.url, &dest).await?),
+            Kind::Git => Self::Git(Git::fetch_new(&uri.url, &dest).await?),
+        })
+    }
+
     fn name(&self) -> &str {
         match self {
             Upstream::Plain(plain) => plain.name(),
@@ -198,10 +205,10 @@ impl Upstream {
         }
     }
 
-    async fn fetch(&self, paths: &Paths, pb: &ProgressBar) -> Result<Installed, Error> {
+    async fn store(&self, paths: &Paths, pb: &ProgressBar) -> Result<Stored, Error> {
         match self {
-            Upstream::Plain(plain) => plain.fetch(paths, pb).await,
-            Upstream::Git(git) => git.fetch(paths, pb).await,
+            Upstream::Plain(plain) => plain.store(paths, pb).await,
+            Upstream::Git(git) => git.store(paths, pb).await,
         }
     }
 
@@ -213,7 +220,7 @@ impl Upstream {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Hash(String);
 
 impl FromStr for Hash {
@@ -228,6 +235,14 @@ impl FromStr for Hash {
     }
 }
 
+impl TryFrom<String> for Hash {
+    type Error = ParseHashError;
+
+    fn try_from(value: String) -> Result<Self, Self::Error> {
+        Self::from_str(value.as_str())
+    }
+}
+
 #[derive(Debug, Error)]
 pub enum ParseHashError {
     #[error("hash too short: {0}")]
@@ -236,17 +251,30 @@ pub enum ParseHashError {
 
 #[derive(Debug, Clone)]
 pub struct Plain {
-    uri: Url,
+    url: Url,
     hash: Hash,
     rename: Option<String>,
 }
 
 impl Plain {
+    pub async fn fetch_new(url: Url, dest_file: &Path) -> Result<Self, Error> {
+        Self::fetch_new_progress(url, dest_file, &ProgressBar::hidden()).await
+    }
+
+    pub async fn fetch_new_progress(url: Url, dest_file: &Path, pb: &ProgressBar) -> Result<Self, Error> {
+        let hash = Self::fetch(&url, dest_file, pb).await?;
+        Ok(Self {
+            url,
+            hash,
+            rename: None,
+        })
+    }
+
     fn name(&self) -> &str {
         if let Some(name) = &self.rename {
             name
         } else {
-            util::uri_file_name(&self.uri)
+            util::uri_file_name(&self.url)
         }
     }
 
@@ -257,7 +285,7 @@ impl Plain {
         // is busted if either uri or hash
         // change
         let mut hasher = Sha256::new();
-        hasher.update(self.uri.as_str());
+        hasher.update(self.url.as_str());
         hasher.update(&self.hash.0);
 
         let hash = hex::encode(hasher.finalize());
@@ -272,8 +300,29 @@ impl Plain {
             .join(hash)
     }
 
-    async fn fetch(&self, paths: &Paths, pb: &ProgressBar) -> Result<Installed, Error> {
-        use moss::request;
+    async fn fetch(url: &Url, dest_file: &Path, pb: &ProgressBar) -> Result<Hash, Error> {
+        pb.set_style(
+            ProgressStyle::with_template(" {spinner} {wide_msg} {binary_bytes_per_sec:>.dim} ")
+                .unwrap()
+                .tick_chars("--=≡■≡=--"),
+        );
+
+        let mut stream = request::stream(url.clone()).await?;
+        let mut hasher = Sha256::new();
+        let mut out = File::create(&dest_file).await?;
+
+        while let Some(chunk) = stream.next().await {
+            let bytes = &chunk?;
+            pb.inc(bytes.len() as u64);
+            hasher.update(bytes);
+            out.write_all(bytes).await?;
+        }
+        out.flush().await?;
+
+        Ok(hex::encode(hasher.finalize()).try_into()?)
+    }
+
+    async fn store(&self, paths: &Paths, pb: &ProgressBar) -> Result<Stored, Error> {
         use tokio::fs;
 
         pb.set_style(
@@ -291,30 +340,15 @@ impl Plain {
         }
 
         if path.exists() {
-            return Ok(Installed::Plain {
+            return Ok(Stored::Plain {
                 name: name.to_owned(),
                 path,
                 was_cached: true,
             });
         }
 
-        let mut stream = request::stream(self.uri.clone()).await?;
-
-        let mut hasher = Sha256::new();
-        let mut out = fs::File::create(&partial_path).await?;
-
-        while let Some(chunk) = stream.next().await {
-            let bytes = &chunk?;
-            pb.inc(bytes.len() as u64);
-            hasher.update(bytes);
-            out.write_all(bytes).await?;
-        }
-
-        out.flush().await?;
-
-        let hash = hex::encode(hasher.finalize());
-
-        if hash != self.hash.0 {
+        let hash = Self::fetch(&self.url, &path, pb).await?;
+        if hash != self.hash {
             fs::remove_file(&partial_path).await?;
 
             return Err(Error::HashMismatch {
@@ -326,7 +360,7 @@ impl Plain {
 
         fs::rename(partial_path, &path).await?;
 
-        Ok(Installed::Plain {
+        Ok(Stored::Plain {
             name: name.to_owned(),
             path,
             was_cached: false,
@@ -355,6 +389,14 @@ pub struct Git {
 }
 
 impl Git {
+    pub async fn fetch_new(url: &Url, dest_dir: &Path) -> Result<Self, Error> {
+        Self::fetch_new_progress(&url, dest_dir, &ProgressBar::hidden()).await
+    }
+
+    pub async fn fetch_new_progress(url: &Url, dest_dir: &Path, pb: &ProgressBar) -> Result<Self, Error> {
+        todo!()
+    }
+
     fn name(&self) -> &str {
         util::uri_file_name(&self.uri)
     }
@@ -376,7 +418,7 @@ impl Git {
             .join(util::uri_relative_path(&self.uri))
     }
 
-    async fn fetch(&self, paths: &Paths, pb: &ProgressBar) -> Result<Installed, Error> {
+    async fn store(&self, paths: &Paths, pb: &ProgressBar) -> Result<Stored, Error> {
         use tokio::fs;
 
         pb.set_style(
@@ -411,7 +453,7 @@ impl Git {
                 move || git::resolve_git_ref(&final_path, &ref_id, &uri)
             })
             .await?;
-            return Ok(Installed::Git {
+            return Ok(Stored::Git {
                 name: self.name().to_owned(),
                 path: final_path,
                 was_cached: true,
@@ -450,7 +492,7 @@ impl Git {
         })
         .await?;
 
-        Ok(Installed::Git {
+        Ok(Stored::Git {
             name: self.name().to_owned(),
             path: final_path,
             was_cached: false,
@@ -533,11 +575,7 @@ pub enum Error {
     #[error("parse hash")]
     ParseHash(#[from] ParseHashError),
     #[error("hash mismatch for {name}, expected {expected:?} got {got:?}")]
-    HashMismatch {
-        name: String,
-        expected: String,
-        got: String,
-    },
+    HashMismatch { name: String, expected: String, got: Hash },
     #[error("request")]
     Request(#[from] moss::request::Error),
     #[error("io")]
