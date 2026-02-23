@@ -32,7 +32,7 @@ use postblit::TriggerScope;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use stone::{StoneDecodedPayload, StonePayloadLayoutFile, StonePayloadLayoutRecord};
 use thiserror::Error;
-use tracing::{info, info_span};
+use tracing::{info, info_span, trace};
 use tui::{MultiProgress, ProgressBar, ProgressStyle, Styled};
 use vfs::tree::{BlitFile, Element, builder::TreeBuilder};
 
@@ -1024,7 +1024,7 @@ fn blit_element(
         Element::Child(_, item) => ("file", item),
     };
 
-    info!(
+    trace!(
         progress = progress.position() as f32 / progress.length().unwrap_or(1) as f32,
         current = progress.position() as usize,
         total = progress.length().unwrap_or(0) as usize,
