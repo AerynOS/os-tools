@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: Copyright © 2020-2025 Serpent OS Developers
+// SPDX-FileCopyrightText: Copyright © 2020-2026 Serpent OS Developers
 //
 // SPDX-License-Identifier: MPL-2.0
 
@@ -14,6 +14,7 @@ use futures_util::{StreamExt, TryStreamExt, stream};
 use moss::{runtime, util};
 use nix::unistd::{LinkatFlags, linkat};
 use sha2::{Digest, Sha256};
+use stone_recipe::upstream;
 use thiserror::Error;
 use tokio::io::AsyncWriteExt;
 use tui::{MultiProgress, ProgressBar, ProgressStyle, Styled};
@@ -174,18 +175,16 @@ pub enum Upstream {
 }
 
 impl Upstream {
-    pub fn from_recipe(upstream: stone_recipe::Upstream, original_index: usize) -> Result<Self, Error> {
-        match upstream {
-            stone_recipe::Upstream::Plain { uri, hash, rename, .. } => Ok(Self::Plain(Plain {
-                uri,
+    pub fn from_recipe(upstream: upstream::Upstream, original_index: usize) -> Result<Self, Error> {
+        match upstream.props {
+            upstream::Props::Plain { hash, rename, .. } => Ok(Self::Plain(Plain {
+                uri: upstream.url,
                 hash: hash.parse()?,
                 rename,
             })),
-            stone_recipe::Upstream::Git {
-                uri, ref_id, staging, ..
-            } => Ok(Self::Git(Git {
-                uri,
-                ref_id,
+            upstream::Props::Git { git_ref, staging } => Ok(Self::Git(Git {
+                uri: upstream.url,
+                ref_id: git_ref,
                 staging,
                 original_index,
             })),
