@@ -67,7 +67,7 @@ pub fn command() -> Command {
         )
         .subcommand(
             Command::new("verify")
-                .about("Verify TODO")
+                .about("Verify and fix system states and assets")
                 .arg(arg!(--verbose "Vebose output").action(ArgAction::SetTrue)),
         )
         .subcommand(Export::command())
