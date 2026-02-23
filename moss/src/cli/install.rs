@@ -18,7 +18,7 @@ pub fn command() -> Command {
         .arg(arg!(<NAME> ... "packages to install").value_parser(value_parser!(String)))
         .arg(
             arg!(--to <blit_target> "Blit this install to the provided directory instead of the root")
-                .long_help(
+                .help(
                     "Blit this install to the provided directory instead of the root. \n\
                      \n\
                      This operation won't be captured as a new state",

@@ -33,8 +33,12 @@ pub enum Subcommand {
         required = true,
         help = "profile repositories",
         value_parser = parse_repository,
-        help = "repository to add to profile, can be passed multiple times",
-        long_help = "repository to add to profile\n\nExample: --repo name=volatile,uri=https://packages.serpentos.com/volatile/x86_64/stone.index,priority=100"
+        help = concat!(
+            "Repositories to add to profile.\n",
+            "It accepts a space-separated list of repository properties.\n",
+            "Each property is then separated by a comma.\n",
+            "\"name\" and \"uri\" are mandatory properties.\n\n",
+            "Example: --repo name=volatile,uri=https://cdn.aerynos.dev/unstable/x86_64/stone.index,priority=100")
         )]
         repos: Vec<(repository::Id, Repository)>,
     },
