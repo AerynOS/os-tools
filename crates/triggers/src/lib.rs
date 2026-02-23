@@ -13,16 +13,16 @@ pub mod format;
 
 /// Grouped management of a set of triggers
 pub struct Collection<'a> {
-    handlers: Vec<ExtractedHandler>,
+    handlers: Vec<ExtractedHandler<'a>>,
     triggers: BTreeMap<String, &'a Trigger>,
     hits: BTreeMap<String, BTreeSet<format::CompiledHandler>>,
 }
 
 #[derive(Debug)]
-struct ExtractedHandler {
-    id: String,
-    pattern: fnmatch::Pattern,
-    handler: format::Handler,
+struct ExtractedHandler<'a> {
+    id: &'a str,
+    pattern: &'a fnmatch::Pattern,
+    handler: &'a format::Handler,
 }
 
 #[derive(Debug, Error)]
@@ -46,9 +46,9 @@ impl<'a> Collection<'a> {
                         .get(used_handler)
                         .ok_or(Error::MissingHandler(trigger.name.clone(), used_handler.clone()))?;
                     handlers.push(ExtractedHandler {
-                        id: trigger.name.clone(),
-                        pattern: p.clone(),
-                        handler: handler.clone(),
+                        id: &trigger.name,
+                        pattern: p,
+                        handler,
                     });
                 }
             }
@@ -66,14 +66,14 @@ impl<'a> Collection<'a> {
         let results = paths.into_iter().flat_map(|p| {
             self.handlers
                 .iter()
-                .filter_map(move |h| h.pattern.match_path(&p).map(|m| (h.id.clone(), h.handler.compiled(&m))))
+                .filter_map(move |h| h.pattern.match_path(&p).map(|m| (h.id, h.handler.compiled(&m))))
         });
 
         for (id, handler) in results {
-            if let Some(map) = self.hits.get_mut(&id) {
+            if let Some(map) = self.hits.get_mut(id) {
                 map.insert(handler);
             } else {
-                self.hits.insert(id, BTreeSet::from_iter([handler]));
+                self.hits.insert(id.into(), BTreeSet::from_iter([handler]));
             }
         }
     }
