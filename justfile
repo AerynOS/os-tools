@@ -2,15 +2,7 @@
 default: moss
 
 root-dir := justfile_directory()
-build-mode := env_var_or_default("MODE", "onboarding")
-# Keep it simple for now and make installs user-local
-home := env_var("HOME")
-# Hacky -- should really check for the XDG_*_DIR env vars...
-xdg-config-home := home + "/.config"
-xdg-data-home := home + "/.local/share"
-xdg-bin-home := home + "/.local/bin"
-# Read '=~' as 'contains' in the regexp sense
-xdg-bin-home-in-path := if env_var("PATH") =~ xdg-bin-home { 'is already in \$PATH. Excellent.' } else { 'is not yet in \$PATH. Please add it.' }
+build-mode := env("MODE", "onboarding")
 
 [private]
 help:
@@ -33,53 +25,57 @@ moss: (build "moss")
 # Onboarding replacement
 get-started: (build "boulder") (build "moss") (licenses)
   @echo ""
-  @echo "Installing boulder and moss to {{xdg-bin-home}}/ ..."
-  @mkdir -p "{{xdg-bin-home}}/"
-  @cp "{{root-dir}}/target/{{build-mode}}"/boulder "{{xdg-bin-home}}/"
-  @cp "{{root-dir}}/target/{{build-mode}}"/moss "{{xdg-bin-home}}/"
-  @rm -rf "{{xdg-data-home}}/boulder"
-  @mkdir -p "{{xdg-data-home}}/boulder/licenses"
-  @cp -R "{{root-dir}}/boulder/data"/{macros,*.yaml} "{{xdg-data-home}}/boulder/"
-  @cp "{{root-dir}}/license-list-data/text"/* "{{xdg-data-home}}/boulder/licenses"
-  @mkdir -p "{{xdg-config-home}}/boulder/"
-  @cp -R "{{root-dir}}/boulder/data"/profile.d "{{xdg-config-home}}/boulder/"
+  @echo "Installing boulder and moss to {{ executable_dir() }}…"
+  @mkdir -p "{{ executable_dir() }}/"
+  @cp "{{ root-dir }}/target/{{ build-mode }}"/boulder "{{ executable_dir() }}/"
+  @cp "{{ root-dir }}/target/{{ build-mode }}"/moss "{{ executable_dir() }}/"
+  @rm -rf "{{ data_dir() }}/boulder"
+  @mkdir -p "{{ data_dir() }}/boulder/licenses"
+  @cp -R "{{ root-dir }}/boulder/data"/{macros,*.yaml} "{{ data_dir() }}/boulder/"
+  @cp "{{ root-dir }}/license-list-data/text"/* "{{ data_dir() }}/boulder/licenses"
+  @mkdir -p "{{ config_dir() }}/boulder/"
+  @cp -R "{{ root-dir }}/boulder/data"/profile.d "{{ config_dir() }}/boulder/"
   @echo ""
-  @echo "Listing installed files..."
-  @ls -hlF "{{xdg-bin-home}}"/boulder "{{xdg-bin-home}}"/moss "{{xdg-data-home}}/boulder"
+  @echo "Listing installed files…"
+  @ls -hlF "{{ executable_dir() }}"/{boulder,moss} "{{ data_dir() }}/boulder" "{{ config_dir() }}/boulder"
   @echo ""
-  @echo "Checking that {{xdg-bin-home}} is in \$PATH..."
-  @echo "... {{xdg-bin-home}} {{xdg-bin-home-in-path}}"
+  @echo "Checking that {{executable_dir() }} is in \$PATH…"
+  @echo "{{
+    if env("PATH") =~ executable_dir() {
+      GREEN + '…the directory is already in \$PATH. Excellent.' + NORMAL
+    } else {
+      RED + '…the directory is not yet in \$PATH. Please add it.' + NORMAL
+    }
+  }}"
   @echo ""
   @echo "Checking the location of boulder and moss executables when executed in a shell:"
   @command -v boulder
   @command -v moss
   @echo ""
   @echo "Done."
-  @echo ""
   @echo "The Aeryn OS documentation lives at https://aerynos.dev"
-  @echo ""
 
 # Fix code issues
 fix:
-  @echo "Applying clippy fixes..."
+  @echo "Applying clippy fixes…"
   cargo clippy --fix --allow-dirty --allow-staged --workspace -- --no-deps
-  @echo "Applying cargo fmt"
+  @echo "Applying cargo fmt…"
   cargo fmt --all
-  @echo "Fixing typos"
+  @echo "Fixing typos…"
   typos -w
 
 # Run lints
 lint:
-  @echo "Running clippy..."
+  @echo "Running clippy…"
   cargo clippy --workspace -- --no-deps
-  @echo "Running cargo fmt.."
+  @echo "Running cargo fmt…"
   cargo fmt --all -- --check
-  @echo "Checking for typos..."
+  @echo "Checking for typos…"
   typos
 
 # Run tests
 test: lint
-  @echo "Running tests in all packages"
+  @echo "Running tests in all packages…"
   cargo test --all
 
 # Run all DB migrations
@@ -90,18 +86,19 @@ migrate-redo: (diesel "meta" "migration redo") (diesel "layout" "migration redo"
 [private]
 diesel db +ARGS:
   diesel \
-    --config-file {{root-dir}}/moss/src/db/{{db}}/diesel.toml \
-    --database-url sqlite://{{root-dir}}/moss/src/db/{{db}}/test.db \
-    {{ARGS}}
+    --config-file {{ root-dir }}/moss/src/db/{{ db }}/diesel.toml \
+    --database-url sqlite://{{ root-dir }}/moss/src/db/{{ db }}/test.db \
+    {{ ARGS }}
 
 # Run libstone example
 libstone example="read" *ARGS="./test/bash-completion-2.11-1-1-x86_64.stone":
   #!/bin/bash
   output=$(mktemp)
   cargo build -p libstone --release
-  clang libstone/examples/{{example}}.c -o $output -I./libstone/src/ -lstone -L./target/release/ -Wl,-rpath,./target/release/
-  if [ "$USE_VALGRIND" == "1" ];
-    then time valgrind --track-origins=yes $output {{ARGS}};
-    else time $output {{ARGS}};
+  clang libstone/examples/{{ example }}.c -o $output -I./libstone/src/ -lstone -L./target/release/ -Wl,-rpath,./target/release/
+  if [ "$USE_VALGRIND" == "1" ]; then
+    time valgrind --track-origins=yes $output {{ ARGS }};
+  else
+    time $output {{ ARGS }};
   fi
   rm "$output"
