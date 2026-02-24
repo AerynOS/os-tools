@@ -24,17 +24,17 @@ jobs:
       uses: crate-ci/typos@v1.29.3
 
     - name: Install LLVM and Clang
-      run: |
-        wget https://apt.llvm.org/llvm.sh
-        chmod +x llvm.sh
-        sudo ./llvm.sh 18
-        echo "/usr/lib/llvm-18/bin" >> $GITHUB_PATH
-        echo "CC=/usr/lib/llvm-18/bin/clang" >> $GITHUB_ENV
+      uses: KyleMayes/install-llvm-action@v2
+      with:
+        version: "20.1"
 
     - name: Install Rust
       uses: dtolnay/rust-toolchain@stable
       with:
         components: rustfmt, clippy
+
+    - name: Install mold
+      uses: rui314/setup-mold@v1
 
     - name: Check Formatting
       run: cargo fmt --all -- --check
