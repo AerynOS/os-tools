@@ -1,5 +1,4 @@
-// SPDX-FileCopyrightText: Copyright © 2020-2024 Serpent OS Developers
-//
+// SPDX-FileCopyrightText: 2025 AerynOS Developers
 // SPDX-License-Identifier: MPL-2.0
 
 use std::io;

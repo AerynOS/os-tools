@@ -1,5 +1,4 @@
-// SPDX-FileCopyrightText: Copyright © 2020-2025 Serpent OS Developers
-//
+// SPDX-FileCopyrightText: 2023 AerynOS Developers
 // SPDX-License-Identifier: MPL-2.0
 
 pub const NAME: &str = env!("CARGO_PKG_NAME");

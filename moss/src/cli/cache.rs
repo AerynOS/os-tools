@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025 AerynOS Developers
+// SPDX-License-Identifier: MPL-2.0
+
 use clap::{ArgMatches, Command};
 use moss::{Client, Installation, client, environment};
 use thiserror::Error;

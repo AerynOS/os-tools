@@ -1,6 +1,10 @@
+# SPDX-FileCopyrightText: 2023 AerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
+
 /target
 /.vscode
 target
+typos
 
 **/db/**/test.db
 
