@@ -1,3 +1,8 @@
+---
+# SPDX-FileCopyrightText: 2024 AerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
+---
+
 # Boulder
 
 This directory contains the Serpent OS package building tool `boulder`.
