@@ -72,9 +72,6 @@ pub enum Subcommand {
             value_parser = parse_updated_source,
             help = concat!(
                 "Update upstream source, can be passed multiple times.\n",
-                "Applied in same order as defined in recipe file."),
-            long_help = concat!(
-                "Update upstream source, can be passed multiple times.\n",
                 "Applied in same order as defined in recipe file. To update a Git upstream,\n",
                 "Use the \"git|commit_or_tag\" syntax.\n\n",
                 "Example: -u \"https://some.plan/file.tar.gz\" -u \"git|v1.1\"")
