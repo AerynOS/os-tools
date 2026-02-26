@@ -28,16 +28,16 @@ use crate::{Client, Installation, State, client::cache, db, package, repository,
 
 /// The prune strategy for removing old states
 #[derive(Debug, Clone, Copy)]
-pub enum Strategy {
+pub enum Strategy<'a> {
     /// Keep the most recent N states, remove the rest
     KeepRecent { keep: u64, include_newer: bool },
-    /// Removes a specific state
-    Remove(state::Id),
+    /// Removes state(s)
+    Remove(&'a [state::Id]),
 }
 
 /// Prune old states using [`Strategy`] and garbage collect
 /// all cached data related to those states being removed
-pub(super) fn prune_states(client: &Client, strategy: Strategy, yes: bool) -> Result<(), Error> {
+pub(super) fn prune_states(client: &Client, strategy: Strategy<'_>, yes: bool) -> Result<(), Error> {
     let installation = &client.installation;
     let layout_db = &client.layout_db;
     let state_db = &client.state_db;
@@ -82,9 +82,7 @@ pub(super) fn prune_states(client: &Client, strategy: Strategy, yes: bool) -> Re
         }
         Strategy::Remove(remove) => state_ids
             .iter()
-            // Remove if this id actually exists
-            .find_map(|(id, _)| (*id == remove).then_some(remove))
-            .into_iter()
+            .filter_map(|(id, _)| remove.contains(id).then_some(*id))
             .collect(),
     };
 

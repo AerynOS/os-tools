@@ -218,7 +218,7 @@ impl Client {
     ///
     /// This allows automatic removal of unused states (and their associated assets)
     /// from the disk, acting as a garbage collection facility.
-    pub fn prune_states(&self, strategy: prune::Strategy, yes: bool) -> Result<(), Error> {
+    pub fn prune_states(&self, strategy: prune::Strategy<'_>, yes: bool) -> Result<(), Error> {
         if self.scope.is_ephemeral() {
             return Err(Error::EphemeralProhibitedOperation);
         }
