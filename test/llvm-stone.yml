@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023 AerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
+
 # TODO: Split out clang/etc and build statically against llvm package!
 name        : llvm
 version     : 16.0.4

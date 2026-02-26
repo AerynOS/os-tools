@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023 AerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
+
 [workspace]
 members = ["boulder", "moss", "libstone", "crates/*"]
 default-members = ["moss"]
@@ -85,7 +88,11 @@ thread-priority = "3.0.0"
 tokio = { version = "1.38.0", features = ["full"] }
 tokio-util = { version = "0.7.11", features = ["io"] }
 tracing = { version = "0.1.41", features = ["attributes"] }
-tracing-subscriber = { version = "0.3.19", default-features = false, features = ["ansi", "fmt", "json"] }
+tracing-subscriber = { version = "0.3.19", default-features = false, features = [
+    "ansi",
+    "fmt",
+    "json",
+] }
 triomphe = { version = "0.1.15", default-features = false }
 url = { version = "2.5.2", features = ["serde"] }
 xxhash-rust = { version = "0.8.11", features = ["xxh3"] }

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 AerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
+
 actions:
     - ninja:
         description: Use ninja, without any additional arguments this will run the default target (likely the build)

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2024 AerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
+
 name: depmod
 description: |
     Needlessly verbose example to show how we could utilise YAML to make

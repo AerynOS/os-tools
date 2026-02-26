@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 AerynOS Developers
+// SPDX-License-Identifier: MPL-2.0
+
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>

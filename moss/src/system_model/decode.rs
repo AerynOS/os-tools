@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2025 AerynOS Developers
+// SPDX-License-Identifier: MPL-2.0
+
 use kdl::{KdlDocument, KdlNode, KdlValue};
 use thiserror::Error;
 

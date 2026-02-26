@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023 AerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
+
 [package]
 name = "stone_recipe"
 edition.workspace = true

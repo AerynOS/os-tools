@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023 AerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
+
 actions:
 
     # We default to using CONFIG_SHELL==SHELL=/usr/bin/dash because our tests show that it is around
