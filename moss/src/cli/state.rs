@@ -59,11 +59,9 @@ pub fn command() -> Command {
                 ),
         )
         .subcommand(
-            Command::new("remove").about("Remove an archived state").arg(
-                arg!(<ID> "State id to be removed")
-                    .action(ArgAction::Set)
-                    .value_parser(clap::value_parser!(u64)),
-            ),
+            Command::new("remove")
+                .about("Remove archived state(s)")
+                .arg(arg!(<ID> ... "State id(s) to be removed").value_parser(clap::value_parser!(u64))),
         )
         .subcommand(
             Command::new("verify")
@@ -182,11 +180,18 @@ pub fn prune(args: &ArgMatches, installation: Installation) -> Result<(), Error>
 }
 
 pub fn remove(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
-    let id = *args.get_one::<u64>("ID").unwrap() as i32;
+    let ids = args
+        .get_many::<u64>("ID")
+        .into_iter()
+        .flatten()
+        .map(|id| *id as i32)
+        .map(Into::into)
+        .collect::<Vec<state::Id>>();
+
     let yes = args.get_flag("yes");
 
     let client = Client::new(environment::NAME, installation)?;
-    client.prune_states(prune::Strategy::Remove(id.into()), yes)?;
+    client.prune_states(prune::Strategy::Remove(&ids), yes)?;
 
     Ok(())
 }
