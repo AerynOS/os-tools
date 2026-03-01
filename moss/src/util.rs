@@ -5,13 +5,17 @@
 use std::{
     io::{self, Read, Seek, Write},
     num::NonZeroUsize,
-    os::unix::fs::symlink,
+    os::{fd::AsFd, unix::fs::symlink},
     path::{Path, PathBuf},
     thread,
 };
 
 use fs_err as fs;
-use nix::unistd::{LinkatFlags, linkat};
+use nix::{
+    fcntl::{AtFlags, OFlag, open},
+    sys::stat::Mode,
+    unistd::linkat,
+};
 use sha2::{Digest, Sha256};
 use stone::{StoneDecodedPayload, StoneReadError};
 use url::Url;
@@ -98,7 +102,17 @@ pub fn list_dirs(dir: &Path) -> io::Result<Vec<PathBuf>> {
 
 pub fn hardlink_or_copy(from: &Path, to: &Path) -> io::Result<()> {
     // Attempt hard link
-    let link_result = linkat(None, from, None, to, LinkatFlags::NoSymlinkFollow);
+    let old_parent = from.parent().unwrap_or(Path::new("."));
+    let new_parent = to.parent().unwrap_or(Path::new("."));
+    let old_dirfd = open(old_parent, OFlag::O_DIRECTORY | OFlag::O_CLOEXEC, Mode::empty())?;
+    let new_dirfd = open(new_parent, OFlag::O_DIRECTORY | OFlag::O_CLOEXEC, Mode::empty())?;
+    let link_result = linkat(
+        old_dirfd.as_fd(),
+        from,
+        new_dirfd.as_fd(),
+        to,
+        AtFlags::AT_SYMLINK_NOFOLLOW,
+    );
 
     // Copy instead
     if link_result.is_err() {

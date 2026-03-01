@@ -2,8 +2,8 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-use std::io;
-use std::os::fd::AsRawFd;
+use std::io::{self};
+use std::os::fd::OwnedFd;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::ptr::addr_of_mut;
@@ -24,7 +24,7 @@ use nix::sys::signal::{SaFlags, SigAction, SigHandler, Signal, kill, sigaction};
 use nix::sys::signalfd::SigSet;
 use nix::sys::stat::{Mode, umask};
 use nix::sys::wait::{WaitStatus, waitpid};
-use nix::unistd::{Pid, Uid, close, pipe, pivot_root, read, sethostname, tcsetpgrp, write};
+use nix::unistd::{Pid, Uid, pipe, pivot_root, read, sethostname, tcsetpgrp, write};
 use snafu::{ResultExt, Snafu};
 
 use self::idmap::idmap;
@@ -132,6 +132,7 @@ impl Container {
 
         // Pipe to synchronize parent & child
         let sync = pipe().context(NixSnafu)?;
+        let (read_fd, write_fd) = sync;
 
         let mut flags =
             CloneFlags::CLONE_NEWNS | CloneFlags::CLONE_NEWPID | CloneFlags::CLONE_NEWIPC | CloneFlags::CLONE_NEWUTS;
@@ -144,22 +145,18 @@ impl Container {
             flags |= CloneFlags::CLONE_NEWNET;
         }
 
-        let clone_cb = Box::new(|| match enter(&self, sync, &mut f) {
+        let clone_cb = Box::new(|| match enter(&self, &read_fd, &mut f) {
             Ok(_) => 0,
-            // Write error back to parent process
             Err(error) => {
                 let error = format_error(error);
                 let mut pos = 0;
 
                 while pos < error.len() {
-                    let Ok(len) = write(sync.1, &error.as_bytes()[pos..]) else {
+                    let Ok(len) = write(&write_fd, &error.as_bytes()[pos..]) else {
                         break;
                     };
-
                     pos += len;
                 }
-
-                let _ = close(sync.1);
 
                 1
             }
@@ -172,9 +169,9 @@ impl Container {
         }
 
         // Allow child to continue
-        write(sync.1, &[Message::Continue as u8]).context(NixSnafu)?;
+        write(&write_fd, &[Message::Continue as u8]).context(NixSnafu)?;
         // Write no longer needed
-        close(sync.1).context(NixSnafu)?;
+        drop(write_fd);
 
         if self.ignore_host_sigint {
             ignore_sigint().context(NixSnafu)?;
@@ -193,7 +190,7 @@ impl Container {
                 let mut buffer = [0u8; 1024];
 
                 loop {
-                    let len = read(sync.0, &mut buffer).context(NixSnafu)?;
+                    let len = read(&read_fd, &mut buffer).context(NixSnafu)?;
 
                     if len == 0 {
                         break;
@@ -215,7 +212,7 @@ impl Container {
 }
 
 /// Reenter the container
-fn enter<E>(container: &Container, sync: (i32, i32), mut f: impl FnMut() -> Result<(), E>) -> Result<(), ContainerError>
+fn enter<E>(container: &Container, sync: &OwnedFd, mut f: impl FnMut() -> Result<(), E>) -> Result<(), ContainerError>
 where
     E: std::error::Error + Send + Sync + 'static,
 {
@@ -224,11 +221,8 @@ where
 
     // Wait for continue message
     let mut message = [0u8; 1];
-    read(sync.0, &mut message).context(ReadContinueMsgSnafu)?;
+    read(sync, &mut message).context(ReadContinueMsgSnafu)?;
     assert_eq!(message[0], Message::Continue as u8);
-
-    // Close unused read end
-    close(sync.0).context(CloseReadFdSnafu)?;
 
     setup(container)?;
 
@@ -347,7 +341,7 @@ fn bind_mount(source: &Path, target: &Path, read_only: bool) -> Result<(), Conta
     unsafe {
         let inner = || {
             // Bind mount to fd
-            let fd = open_tree(AT_FDCWD, source, OPEN_TREE_CLONE | OPEN_TREE_CLOEXEC).map_err(Errno::from_i32)?;
+            let fd = open_tree(AT_FDCWD, source, OPEN_TREE_CLONE | OPEN_TREE_CLOEXEC).map_err(Errno::from_raw)?;
 
             // Set rd flag if applicable
             if read_only {
@@ -365,11 +359,11 @@ fn bind_mount(source: &Path, target: &Path, read_only: bool) -> Result<(), Conta
                     &attr as *const mount_attr_t as usize,
                     size_of::<mount_attr_t>(),
                 )
-                .map_err(Errno::from_i32)?;
+                .map_err(Errno::from_raw)?;
             }
 
             // Move detached mount to target
-            move_mount(fd, Path::new(""), AT_FDCWD, target, MOVE_MOUNT_F_EMPTY_PATH).map_err(Errno::from_i32)?;
+            move_mount(fd, Path::new(""), AT_FDCWD, target, MOVE_MOUNT_F_EMPTY_PATH).map_err(Errno::from_raw)?;
 
             Ok(())
         };
@@ -427,7 +421,7 @@ pub fn set_term_fg(pgid: Pid) -> Result<(), nix::Error> {
         )?
     };
     // Set term fg to pid
-    let res = tcsetpgrp(io::stdin().as_raw_fd(), pgid);
+    let res = tcsetpgrp(io::stdin(), pgid);
     // Set up old handler
     unsafe { sigaction(Signal::SIGTTOU, &prev_handler)? };
 
@@ -492,6 +486,8 @@ pub enum Error {
     // FIXME: Replace with more fine-grained variants
     #[snafu(display("nix"))]
     Nix { source: nix::Error },
+    #[snafu(display("io"))]
+    Io { source: io::Error },
 }
 
 #[derive(Debug, Snafu)]
@@ -508,8 +504,6 @@ enum ContainerError {
     SetPDeathSig { source: nix::Error },
     #[snafu(display("wait for continue message"))]
     ReadContinueMsg { source: nix::Error },
-    #[snafu(display("close read end of pipe"))]
-    CloseReadFd { source: nix::Error },
     #[snafu(display("sethostname"))]
     SetHostname { source: nix::Error },
     #[snafu(display("pivot_root"))]
