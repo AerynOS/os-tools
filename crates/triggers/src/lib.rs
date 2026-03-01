@@ -78,8 +78,8 @@ impl<'a> Collection<'a> {
         }
     }
 
-    /// Bake the trigger collection into a sane dependency order
-    pub fn bake(&mut self) -> Result<Vec<format::CompiledHandler>, Error> {
+    /// Bake the trigger collection into a sane dependency order, grouped by parallelizable stages.
+    pub fn bake_in_stages(&mut self) -> Result<Vec<Vec<format::CompiledHandler>>, Error> {
         let mut graph = dag::Dag::new();
 
         // ensure all keys are in place
@@ -117,11 +117,19 @@ impl<'a> Collection<'a> {
             }
         }
 
-        // Recollect in dependency order
-        let results = graph
-            .topo()
-            .filter_map(|i| self.hits.remove(i))
-            .flatten()
+        // Recollect in dependency order batches
+        let stages = graph.batched_topo();
+
+        let results = stages
+            .into_iter()
+            .map(|stage| {
+                stage
+                    .iter()
+                    .filter_map(|id| self.hits.get(id))
+                    .flatten()
+                    .cloned()
+                    .collect::<Vec<_>>()
+            })
             .collect::<Vec<_>>();
         Ok(results)
     }
