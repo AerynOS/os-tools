@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 AerynOS Developers
+// SPDX-License-Identifier: MPL-2.0
+
 use serde::Deserialize;
 
 pub fn default_true() -> bool {

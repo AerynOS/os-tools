@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2026 AerynOS Developers
+// SPDX-License-Identifier: MPL-2.0
+
 use std::ops::Deref;
 
 use super::AStr;

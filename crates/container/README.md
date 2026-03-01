@@ -1,3 +1,8 @@
+---
+# SPDX-FileCopyrightText: 2023 AerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
+---
+
 # container
 
 container is a crate to start a basic rootless container. Its goal is to create a safe and isolated environment where to build and/or test packages. Environment isolation is desired in that:
