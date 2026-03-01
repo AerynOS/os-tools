@@ -12,7 +12,7 @@
 use std::{
     borrow::Borrow,
     fmt, io,
-    os::{fd::RawFd, unix::fs::symlink},
+    os::{fd::OwnedFd, unix::fs::symlink},
     path::{Path, PathBuf},
     time::{Duration, Instant},
 };
@@ -23,7 +23,7 @@ use futures_util::{StreamExt, TryStreamExt, stream};
 use itertools::Itertools;
 use nix::{
     errno::Errno,
-    fcntl::{self, OFlag},
+    fcntl::{self, AtFlags, OFlag},
     libc::{AT_FDCWD, RENAME_EXCHANGE, SYS_renameat2, syscall},
     sys::stat::{Mode, fchmodat, mkdirat},
     unistd::{close, linkat, mkdir, symlinkat},
@@ -979,7 +979,7 @@ pub fn blit_root(installation: &Installation, tree: &vfs::Tree<PendingFile>, bli
                         .into_par_iter()
                         .map(|child| {
                             let _guard = current_span.enter();
-                            blit_element(root_dir, cache_fd, child, &progress)
+                            blit_element(&root_dir, &cache_fd, child, &progress)
                         })
                         .try_reduce(BlitStats::default, |a, b| Ok(a.merge(b)))?,
                 );
@@ -1010,8 +1010,8 @@ pub fn blit_root(installation: &Installation, tree: &vfs::Tree<PendingFile>, bli
 /// Care is taken to retain the directory file descriptor to avoid costly path
 /// resolution at runtime.
 fn blit_element(
-    parent: RawFd,
-    cache: RawFd,
+    parent: &OwnedFd,
+    cache: &OwnedFd,
     element: Element<'_, PendingFile>,
     progress: &ProgressBar,
 ) -> Result<BlitStats, Error> {
@@ -1047,7 +1047,7 @@ fn blit_element(
                     .into_par_iter()
                     .map(|child| {
                         let _guard = current_span.enter();
-                        blit_element(newdir, cache, child, progress)
+                        blit_element(&newdir, cache, child, progress)
                     })
                     .try_reduce(BlitStats::default, |a, b| Ok(a.merge(b)))?,
             );
@@ -1073,8 +1073,8 @@ fn blit_element(
 /// * `subpath` - the base name of the new inode
 /// * `item`    - New inode being recorded
 fn blit_element_item(
-    parent: RawFd,
-    cache: RawFd,
+    parent: &OwnedFd,
+    cache: &OwnedFd,
     subpath: &str,
     item: &PendingFile,
     stats: &mut BlitStats,
@@ -1105,17 +1105,11 @@ fn blit_element_item(
                 }
                 // Regular file
                 _ => {
-                    linkat(
-                        Some(cache),
-                        fp.to_str().unwrap(),
-                        Some(parent),
-                        subpath,
-                        nix::unistd::LinkatFlags::NoSymlinkFollow,
-                    )?;
+                    linkat(cache, fp.to_str().unwrap(), parent, subpath, AtFlags::empty())?;
 
                     // Fix permissions
                     fchmodat(
-                        Some(parent),
+                        parent,
                         subpath,
                         Mode::from_bits_truncate(item.layout.mode),
                         nix::sys::stat::FchmodatFlags::NoFollowSymlink,
@@ -1126,7 +1120,7 @@ fn blit_element_item(
             stats.num_files += 1;
         }
         StonePayloadLayoutFile::Symlink(source, _) => {
-            symlinkat(source.as_str(), Some(parent), subpath)?;
+            symlinkat(source.as_str(), parent, subpath)?;
             stats.num_symlinks += 1;
         }
         StonePayloadLayoutFile::Directory(_) => {

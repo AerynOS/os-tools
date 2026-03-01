@@ -12,7 +12,11 @@ use std::{
 use fs_err as fs;
 use futures_util::{StreamExt, TryStreamExt, stream};
 use moss::{runtime, util};
-use nix::unistd::{LinkatFlags, linkat};
+use nix::{
+    fcntl::{AtFlags, OFlag, open},
+    sys::stat::Mode,
+    unistd::linkat,
+};
 use sha2::{Digest, Sha256};
 use stone_recipe::upstream;
 use thiserror::Error;
@@ -150,8 +154,14 @@ impl Installed {
             Installed::Plain { name, path, .. } => {
                 let target = dest_dir.join(name);
 
+                let old_parent = path.parent().unwrap_or(Path::new("."));
+                let new_parent = target.parent().unwrap_or(Path::new("."));
+
+                let old_dirfd = open(old_parent, OFlag::O_DIRECTORY | OFlag::O_CLOEXEC, Mode::empty())?;
+                let new_dirfd = open(new_parent, OFlag::O_DIRECTORY | OFlag::O_CLOEXEC, Mode::empty())?;
+
                 // Attempt hard link
-                let link_result = linkat(None, path, None, &target, LinkatFlags::NoSymlinkFollow);
+                let link_result = linkat(old_dirfd, path, new_dirfd, &target, AtFlags::AT_SYMLINK_NOFOLLOW);
 
                 // Copy instead
                 if link_result.is_err() {
@@ -544,4 +554,6 @@ pub enum Error {
     Io(#[from] io::Error),
     #[error("git")]
     Git(#[from] git::GitError),
+    #[error("nix")]
+    Nix(#[from] nix::errno::Errno),
 }
