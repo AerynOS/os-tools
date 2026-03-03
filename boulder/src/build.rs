@@ -24,16 +24,16 @@ use thiserror::Error;
 use tui::Styled;
 
 use self::job::Job;
-use self::upstream::Upstream;
 use crate::{
-    Env, Macros, Paths, Recipe, Timing, architecture::BuildTarget, container, macros, profile, recipe, timing,
+    Env, Macros, Paths, Recipe, Timing,
+    architecture::BuildTarget,
+    container, macros, profile, recipe, timing,
+    upstream::{self, Upstream},
 };
 
-pub mod git;
 pub mod job;
 pub mod pgo;
 mod root;
-pub mod upstream;
 
 pub struct Builder {
     pub targets: Vec<Target>,
@@ -482,8 +482,6 @@ pub enum Error {
     Io(#[from] io::Error),
     #[error("recreate artefacts dir")]
     RecreateArtefactsDir(#[source] io::Error),
-    #[error("git upstream processing")]
-    Git(#[from] git::GitError),
     #[error("moss client")]
     MossClient(#[from] moss::client::Error),
     #[error("moss installation")]
