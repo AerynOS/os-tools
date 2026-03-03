@@ -71,7 +71,8 @@ impl Upstream {
         match self {
             Upstream::Plain(plain) => plain.remove(paths)?,
             Upstream::Git(git) => git.remove(paths)?,
-        };
+        }
+
         Ok(())
     }
 }
