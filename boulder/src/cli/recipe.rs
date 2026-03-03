@@ -14,14 +14,11 @@ use boulder::{
 };
 use clap::Parser;
 use fs_err::{self as fs};
-use futures_util::StreamExt;
 use itertools::Itertools;
 use moss::{request, runtime, util};
-use sha2::{Digest, Sha256};
 use stone_recipe::upstream;
 use tempfile::NamedTempFile;
 use thiserror::Error;
-use tokio::io::AsyncWriteExt;
 use tui::{
     MultiProgress, ProgressBar, ProgressStyle, Styled,
     pretty::{self, ColumnDisplay},
@@ -297,7 +294,7 @@ fn update(
 ///
 /// Returns the sha256 hash of the fetched upstream
 async fn fetch_and_cache_upstream(env: &Env, uri: Url, mpb: &MultiProgress) -> Result<String, Error> {
-    use fs_err::tokio::{self as fs, File};
+    use fs_err::tokio::{self as fs};
 
     let pb = mpb.add(
         ProgressBar::new(u64::MAX)
@@ -310,26 +307,14 @@ async fn fetch_and_cache_upstream(env: &Env, uri: Url, mpb: &MultiProgress) -> R
     );
     pb.enable_steady_tick(Duration::from_millis(150));
 
-    let mut stream = request::stream(uri.clone()).await?;
-
-    let (temp_file, temp_file_path) = NamedTempFile::with_prefix("boulder-")
+    let temp_file_path = NamedTempFile::with_prefix("boulder-")
         .map_err(Error::CreateTempFile)?
-        .into_parts();
-    let mut hasher = Sha256::new();
-    let mut out = File::from_std(fs_err::File::from_parts(temp_file, &temp_file_path));
+        .into_temp_path();
 
-    while let Some(chunk) = stream.next().await {
-        let bytes = &chunk?;
-
-        pb.inc(bytes.len() as u64);
-
-        hasher.update(bytes);
-        out.write_all(bytes).await.map_err(Error::FetchIo)?;
-    }
-
-    out.flush().await.map_err(Error::FetchIo)?;
-
-    let hash = hex::encode(hasher.finalize());
+    let hash = request::download_with_progress_and_sha256(uri.clone(), &temp_file_path, |progress| {
+        pb.inc(progress.delta);
+    })
+    .await?;
 
     // Move fetched asset to cache dir so we don't need to refetch it
     // when the user finally builds this new recipe
@@ -460,8 +445,6 @@ pub enum Error {
     MoveTempFile(#[source] io::Error),
     #[error("fetch upstream")]
     Fetch(#[from] request::Error),
-    #[error("fetch upstream")]
-    FetchIo(#[source] io::Error),
     #[error("invalid utf-8 input")]
     Utf8(#[from] std::string::FromUtf8Error),
     #[error("draft")]

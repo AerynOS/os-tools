@@ -5,13 +5,13 @@ use std::{
     time::Duration,
 };
 
-use fs_err::tokio::{self as fs, File};
+use fs_err::tokio::{self as fs};
 use futures_util::{StreamExt, TryStreamExt, stream};
 use moss::{environment, request, runtime, util};
 use sha2::{Digest, Sha256};
 use tempfile::NamedTempFile;
 use thiserror::Error;
-use tokio::{io::AsyncWriteExt, process::Command};
+use tokio::process::Command;
 use tui::{MultiProgress, ProgressBar, ProgressStyle, Styled};
 use url::Url;
 
@@ -29,8 +29,7 @@ pub fn fetch_and_extract(env: &Env, upstreams: &[Url], extract_root: &Path) -> R
     let ret = runtime::block_on(
         stream::iter(upstreams)
             .map(|uri| async {
-                let (temp_file, temp_path) = NamedTempFile::with_prefix("boulder-")?.into_parts();
-                let archive_file = File::from_std(fs_err::File::from_parts(temp_file, &temp_path));
+                let temp_path = NamedTempFile::with_prefix("boulder-")?.into_temp_path();
 
                 let pb = mpb.add(
                     ProgressBar::new_spinner()
@@ -43,7 +42,7 @@ pub fn fetch_and_extract(env: &Env, upstreams: &[Url], extract_root: &Path) -> R
                 );
                 pb.enable_steady_tick(Duration::from_millis(150));
 
-                let hash = fetch(uri, archive_file).await?;
+                let hash = request::download_with_sha256(uri.clone(), &temp_path).await?;
 
                 // Hardlink or copy fetched asset to cache dir so we don't need
                 // to refetch it when the user finally builds this new recipe
@@ -75,24 +74,6 @@ pub fn fetch_and_extract(env: &Env, upstreams: &[Url], extract_root: &Path) -> R
     println!();
 
     ret
-}
-
-async fn fetch(url: &Url, mut file: File) -> Result<String, Error> {
-    let mut stream = request::stream(url.clone()).await?;
-
-    let mut hasher = Sha256::new();
-
-    while let Some(bytes) = stream.next().await {
-        let mut bytes = bytes?;
-        hasher.update(&bytes);
-        file.write_all_buf(&mut bytes).await?;
-    }
-
-    file.flush().await?;
-
-    let hash = hex::encode(hasher.finalize());
-
-    Ok(hash)
 }
 
 async fn extract(archive: &Path, destination: &Path) -> Result<(), Error> {

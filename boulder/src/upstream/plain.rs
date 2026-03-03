@@ -9,11 +9,9 @@ use std::{
 };
 
 use fs_err as fs;
-use futures_util::StreamExt;
 use moss::{request, runtime, util};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
-use tokio::io::AsyncWriteExt;
 use tui::{ProgressBar, ProgressStyle};
 use url::Url;
 
@@ -71,27 +69,18 @@ impl Plain {
     }
 
     async fn fetch(url: &Url, dest_file: &Path, pb: &ProgressBar) -> Result<Hash, Error> {
-        use fs_err::tokio::File;
-
         pb.set_style(
             ProgressStyle::with_template(" {spinner} {wide_msg} {binary_bytes_per_sec:>.dim} ")
                 .unwrap()
                 .tick_chars("--=≡■≡=--"),
         );
 
-        let mut stream = request::stream(url.clone()).await?;
-        let mut hasher = Sha256::new();
-        let mut out = File::create(&dest_file).await?;
+        let hash = request::download_with_progress_and_sha256(url.clone(), dest_file, |progress| {
+            pb.inc(progress.delta);
+        })
+        .await?;
 
-        while let Some(chunk) = stream.next().await {
-            let bytes = &chunk?;
-            pb.inc(bytes.len() as u64);
-            hasher.update(bytes);
-            out.write_all(bytes).await?;
-        }
-        out.flush().await?;
-
-        Ok(hex::encode(hasher.finalize()).try_into()?)
+        Ok(hash.try_into()?)
     }
 
     pub async fn store(&self, paths: &Paths, pb: &ProgressBar) -> Result<StoredPlain, Error> {
