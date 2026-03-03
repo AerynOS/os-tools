@@ -128,7 +128,12 @@ impl Builder {
         let timer = timing.begin(timing::Kind::Fetch);
 
         // Sync (fetch & share) upstreams to rootfs
-        upstream::sync(&self.recipe, &self.paths, &self.upstreams)?;
+        upstream::sync(
+            &self.recipe,
+            &self.paths.upstreams().host,
+            &self.paths.guest_host_path(&self.paths.upstreams()),
+            &self.upstreams,
+        )?;
 
         timing.finish(timer);
 
@@ -150,7 +155,7 @@ impl Builder {
         }
 
         // Remove downloaded upstreams
-        upstream::remove(&self.paths, &self.upstreams)?;
+        upstream::remove(&self.paths.upstreams().host, &self.upstreams)?;
 
         // Prune moss cache, retaining stones from the repos defined
         // by our boulder profile

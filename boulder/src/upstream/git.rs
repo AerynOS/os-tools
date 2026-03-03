@@ -14,7 +14,7 @@ use thiserror::Error;
 use tui::{ProgressBar, ProgressStyle, Styled};
 use url::Url;
 
-use crate::{Paths, upstream::Stored};
+use crate::upstream::Stored;
 
 #[derive(Clone, Debug)]
 pub struct Git {
@@ -25,11 +25,11 @@ pub struct Git {
 }
 
 impl Git {
-    pub async fn fetch_new(url: &Url, dest_dir: &Path) -> Result<Self, Error> {
-        Self::fetch_new_progress(url, dest_dir, &ProgressBar::hidden()).await
+    pub async fn fetch_new(url: &Url, container_dir: &Path) -> Result<Self, Error> {
+        Self::fetch_new_progress(url, container_dir, &ProgressBar::hidden()).await
     }
 
-    pub async fn fetch_new_progress(url: &Url, dest_dir: &Path, pb: &ProgressBar) -> Result<Self, Error> {
+    pub async fn fetch_new_progress(url: &Url, container_dir: &Path, pb: &ProgressBar) -> Result<Self, Error> {
         todo!()
     }
 
@@ -37,24 +37,17 @@ impl Git {
         util::uri_file_name(&self.uri)
     }
 
-    fn final_path(&self, paths: &Paths) -> PathBuf {
-        paths
-            .upstreams()
-            .host
-            .join("git")
-            .join(util::uri_relative_path(&self.uri))
+    fn final_path(&self, storage_dir: &Path) -> PathBuf {
+        storage_dir.join(util::uri_relative_path(&self.uri))
     }
 
-    fn staging_path(&self, paths: &Paths) -> PathBuf {
-        paths
-            .upstreams()
-            .host
+    fn staging_path(&self, storage_dir: &Path) -> PathBuf {
+        storage_dir
             .join("staging")
-            .join("git")
             .join(util::uri_relative_path(&self.uri))
     }
 
-    pub async fn store(&self, paths: &Paths, pb: &ProgressBar) -> Result<StoredGit, Error> {
+    pub async fn store(&self, storage_dir: &Path, pb: &ProgressBar) -> Result<StoredGit, Error> {
         use fs_err::tokio as fs;
 
         pb.set_style(
@@ -64,13 +57,13 @@ impl Git {
         );
 
         let clone_path = if self.staging {
-            self.staging_path(paths)
+            self.staging_path(storage_dir)
         } else {
-            self.final_path(paths)
+            self.final_path(storage_dir)
         };
         let clone_path_string = clone_path.display().to_string();
 
-        let final_path = self.final_path(paths);
+        let final_path = self.final_path(storage_dir);
         let final_path_string = final_path.display().to_string();
 
         if let Some(parent) = clone_path.parent().map(Path::to_path_buf) {
@@ -191,12 +184,12 @@ impl Git {
         Ok(())
     }
 
-    pub fn remove(&self, paths: &Paths) -> Result<(), Error> {
-        for path in [self.staging_path(paths), self.final_path(paths)] {
+    pub fn remove(&self, storage_dir: &Path) -> Result<(), Error> {
+        for path in [self.staging_path(storage_dir), self.final_path(storage_dir)] {
             fs::remove_dir_all(&path)?;
 
             if let Some(parent) = path.parent() {
-                util::remove_empty_dirs(parent, &paths.upstreams().host)?;
+                util::remove_empty_dirs(parent, storage_dir)?;
             }
         }
 
