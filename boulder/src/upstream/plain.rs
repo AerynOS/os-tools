@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
+use std::ops::Deref;
 use std::{
     io,
     path::{Path, PathBuf},
@@ -14,8 +15,6 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use tui::{ProgressBar, ProgressStyle};
 use url::Url;
-
-use crate::Paths;
 
 #[derive(Debug, Clone)]
 pub struct Plain {
@@ -30,7 +29,7 @@ impl Plain {
     }
 
     pub async fn fetch_new_progress(url: Url, dest_file: &Path, pb: &ProgressBar) -> Result<Self, Error> {
-        let hash = Self::fetch(&url, dest_file, pb).await?;
+        let hash = fetch(url.clone(), dest_file, pb).await?;
         Ok(Self {
             url,
             hash,
@@ -46,98 +45,73 @@ impl Plain {
         }
     }
 
-    fn path(&self, paths: &Paths) -> PathBuf {
-        // Hash uri and file hash together
-        // for a unique file path that can
-        // be used for caching purposes and
-        // is busted if either uri or hash
-        // change
-        let mut hasher = Sha256::new();
-        hasher.update(self.url.as_str());
-        hasher.update(&self.hash.0);
-
-        let hash = hex::encode(hasher.finalize());
-
-        paths
-            .upstreams()
-            .host
-            .join("fetched")
-            // Type safe guaranteed to be >= 5 bytes
-            .join(&hash[..5])
-            .join(&hash[hash.len() - 5..])
-            .join(hash)
-    }
-
-    async fn fetch(url: &Url, dest_file: &Path, pb: &ProgressBar) -> Result<Hash, Error> {
-        pb.set_style(
-            ProgressStyle::with_template(" {spinner} {wide_msg} {binary_bytes_per_sec:>.dim} ")
-                .unwrap()
-                .tick_chars("--=≡■≡=--"),
-        );
-
-        let hash = request::download_with_progress_and_sha256(url.clone(), dest_file, |progress| {
-            pb.inc(progress.delta);
-        })
-        .await?;
-
-        Ok(hash.try_into()?)
-    }
-
-    pub async fn store(&self, paths: &Paths, pb: &ProgressBar) -> Result<StoredPlain, Error> {
+    pub async fn store(&self, storage_dir: &Path, pb: &ProgressBar) -> Result<StoredPlain, Error> {
         use fs_err::tokio as fs;
 
-        pb.set_style(
-            ProgressStyle::with_template(" {spinner} {wide_msg} {binary_bytes_per_sec:>.dim} ")
-                .unwrap()
-                .tick_chars("--=≡■≡=--"),
-        );
-
-        let name = self.name();
-        let path = self.path(paths);
-        let partial_path = path.with_extension("part");
-
-        if let Some(parent) = path.parent().map(Path::to_path_buf) {
-            runtime::unblock(move || util::ensure_dir_exists(&parent)).await?;
-        }
+        let path = self.stored_path(storage_dir);
 
         if path.exists() {
             return Ok(StoredPlain {
-                name: name.to_owned(),
+                name: self.name().to_owned(),
                 path,
                 was_cached: true,
             });
         }
 
-        let hash = Self::fetch(&self.url, &partial_path, pb).await?;
+        if let Some(parent) = path.parent() {
+            let parent = parent.to_owned();
+            runtime::unblock(move || util::ensure_dir_exists(&parent)).await?;
+        }
+
+        let hash = fetch(self.url.clone(), &path, pb).await?;
         if hash != self.hash {
-            fs::remove_file(&partial_path).await?;
+            fs::remove_file(&path).await?;
 
             return Err(Error::HashMismatch {
-                name: name.to_owned(),
-                expected: self.hash.0.clone(),
+                name: self.name().to_owned(),
+                expected: self.hash.to_string(),
                 got: hash,
             });
         }
 
-        fs::rename(partial_path, &path).await?;
-
         Ok(StoredPlain {
-            name: name.to_owned(),
+            name: self.name().to_owned(),
             path,
             was_cached: false,
         })
     }
 
-    pub fn remove(&self, paths: &Paths) -> Result<(), Error> {
-        let path = self.path(paths);
+    pub fn remove(&self, storage_dir: &Path) -> Result<(), Error> {
+        let path = storage_dir.join(self.file_path());
 
         fs::remove_file(&path)?;
 
         if let Some(parent) = path.parent() {
-            util::remove_empty_dirs(parent, &paths.upstreams().host)?;
+            util::remove_empty_dirs(parent, storage_dir)?;
         }
 
         Ok(())
+    }
+
+    /// Returns a relative PathBuf where this archive should be stored
+    /// within the recipe storage.
+    pub fn stored_path(&self, storage_dir: &Path) -> PathBuf {
+        [storage_dir, &self.file_path()].iter().collect()
+    }
+
+    /// Returns a relative PathBuf based on the hash of the archive's URL
+    /// and the archive's very hash.
+    ///
+    /// Hashing this data ensures the path is unique and becomes invalid
+    /// as soon as either the URL or the hash changes.
+    fn file_path(&self) -> PathBuf {
+        let mut hasher = Sha256::new();
+        hasher.update(self.url.as_str());
+        hasher.update(self.hash.as_bytes());
+
+        let hash = hex::encode(hasher.finalize());
+        // Type safe guaranteed to be >= 5 bytes.
+        [&hash[..5], &hash[hash.len() - 5..], &hash].iter().collect()
     }
 }
 
@@ -167,7 +141,18 @@ impl TryFrom<String> for Hash {
     type Error = ParseHashError;
 
     fn try_from(value: String) -> Result<Self, Self::Error> {
-        Self::from_str(value.as_str())
+        if value.len() < 5 {
+            return Err(ParseHashError::TooShort(value));
+        }
+        Ok(Self(value))
+    }
+}
+
+impl Deref for Hash {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        self.0.as_str()
     }
 }
 
@@ -187,4 +172,18 @@ pub enum Error {
     Request(#[from] request::Error),
     #[error("io")]
     Io(#[from] io::Error),
+}
+
+async fn fetch(url: Url, dest: &Path, pb: &ProgressBar) -> Result<Hash, Error> {
+    pb.set_style(
+        ProgressStyle::with_template(" {spinner} {wide_msg} {binary_bytes_per_sec:>.dim} ")
+            .unwrap()
+            .tick_chars("--=≡■≡=--"),
+    );
+
+    request::download_with_progress_and_sha256(url, dest, |progress| pb.inc(progress.delta))
+        .await
+        .map_err(Error::from)?
+        .try_into()
+        .map_err(Error::from)
 }
