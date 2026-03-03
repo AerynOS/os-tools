@@ -12,16 +12,11 @@ use stone_recipe::upstream::{self, SourceUri};
 use thiserror::Error;
 use tui::{MultiProgress, ProgressBar, ProgressStyle, Styled};
 
-use crate::{
-    Paths, Recipe,
-    upstream::{
-        git::{Git, StoredGit},
-        plain::{Plain, StoredPlain},
-    },
-};
+mod git;
+pub use git::*;
 
-pub mod git;
-pub mod plain;
+mod plain;
+pub use plain::*;
 
 #[derive(Debug, Clone)]
 pub enum Upstream {
