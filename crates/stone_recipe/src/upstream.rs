@@ -25,7 +25,8 @@ impl<'de> Deserialize<'de> for Upstream {
     {
         #[derive(Debug, Deserialize)]
         struct SerdeProps {
-            destdir: Option<PathBuf>,
+            #[serde(rename = "unpackdir")]
+            unpack_dir: Option<PathBuf>,
             #[serde(flatten)]
             specific: Props,
         }
@@ -50,7 +51,7 @@ impl<'de> Deserialize<'de> for Upstream {
                 (Props::Git { .. }, Kind::Archive) | (Props::Plain { .. }, Kind::Git) => {
                     return Err(serde::de::Error::custom("mismatched URL type and upstream properties"));
                 }
-                _ => (props.destdir, props.specific),
+                _ => (props.unpack_dir, props.specific),
             },
         };
 
