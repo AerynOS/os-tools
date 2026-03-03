@@ -3,23 +3,20 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use std::{
-    io,
+    io::{self},
     path::{Path, PathBuf},
+    pin::Pin,
     sync::OnceLock,
+    task,
 };
 
-use bytes::Bytes;
 use fs_err::tokio::{self as fs, File};
-use futures_util::{
-    Stream, StreamExt,
-    stream::{self, BoxStream},
-};
+use futures_util::TryStreamExt;
 use thiserror::Error;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio_util::io::ReaderStream;
+use tokio::io::{AsyncRead, AsyncWriteExt, BufReader};
 use url::Url;
 
-use crate::environment;
+use crate::{environment, util::Sha256Wrapper};
 
 /// Shared client for tcp socket reuse and connection limit
 static CLIENT: OnceLock<reqwest::Client> = OnceLock::new();
@@ -34,40 +31,50 @@ fn get_client() -> &'static reqwest::Client {
     })
 }
 
-/// Fetch a resource at the provided [`Url`] and stream response body as bytes
-pub async fn stream(url: Url) -> Result<BoxStream<'static, Result<Bytes, Error>>, Error> {
-    match url_file(&url) {
-        Some(path) => read(path).await,
-        _ => Ok(fetch(url).await?.boxed()),
-    }
-}
-
 /// Downloads a file to the provided path
 pub async fn download(url: Url, to: &Path) -> Result<(), Error> {
-    download_with_progress(url, to, |_| {}).await
+    let mut reader = fetch(url).await?;
+
+    write_to_file(&mut reader, to).await
+}
+
+/// Downloads a file to the provided path & returns it's sha256 hash
+pub async fn download_with_sha256(url: Url, to: &Path) -> Result<String, Error> {
+    let mut reader = Sha256Wrapper::new(fetch(url).await?);
+
+    write_to_file(&mut reader, to).await?;
+
+    Ok(reader.finalize())
 }
 
 /// Downloads a file to the provided path and invokes `on_progress` after each
 /// chunk is downloaded
-pub async fn download_with_progress(url: Url, to: &Path, on_progress: impl Fn(Progress)) -> Result<(), Error> {
+pub async fn download_with_progress(url: Url, to: &Path, on_progress: impl Fn(Progress) + Unpin) -> Result<(), Error> {
+    let mut reader = ProgressRead::new(fetch(url).await?, on_progress);
+
+    write_to_file(&mut reader, to).await
+}
+
+/// Downloads a file to the provided path, invokes `on_progress` after each
+/// chunk is downloaded and retuns its sha256 hash
+pub async fn download_with_progress_and_sha256(
+    url: Url,
+    to: &Path,
+    on_progress: impl Fn(Progress) + Unpin,
+) -> Result<String, Error> {
+    let mut reader = Sha256Wrapper::new(ProgressRead::new(fetch(url).await?, on_progress));
+
+    write_to_file(&mut reader, to).await?;
+
+    Ok(reader.finalize())
+}
+
+async fn write_to_file<T: AsyncRead + Unpin>(reader: &mut T, to: &Path) -> Result<(), Error> {
     let partial_path = PathBuf::from(format!("{}.part", to.display()));
 
-    let mut bytes = stream(url).await?;
     let mut out = File::create(&partial_path).await?;
 
-    let mut total = 0;
-
-    while let Some(chunk) = bytes.next().await {
-        let bytes = chunk?;
-        let delta = bytes.len() as u64;
-        total += delta;
-        out.write_all(&bytes).await?;
-
-        (on_progress)(Progress {
-            delta,
-            completed: total,
-        });
-    }
+    tokio::io::copy(reader, &mut out).await?;
 
     out.flush().await?;
 
@@ -76,41 +83,26 @@ pub async fn download_with_progress(url: Url, to: &Path, on_progress: impl Fn(Pr
     Ok(())
 }
 
+/// Fetch a resource at the provided [`Url`] and return an async reader over its bytes
+async fn fetch(url: Url) -> Result<Box<dyn AsyncRead + Unpin>, Error> {
+    if let Some(path) = &url.to_file_path().ok() {
+        Ok(Box::new(BufReader::with_capacity(
+            environment::FILE_READ_BUFFER_SIZE,
+            File::open(path).await?,
+        )))
+    } else {
+        Ok(Box::new(http_get(url).await?))
+    }
+}
+
 /// Internal fetch helper (sanity control) for `get`
-async fn fetch(url: Url) -> Result<impl Stream<Item = Result<Bytes, Error>>, Error> {
-    let response = get_client().get(url).send().await?;
+async fn http_get(url: Url) -> Result<impl AsyncRead + Unpin, Error> {
+    let response = get_client().get(url).send().await?.error_for_status()?;
 
-    response
-        .error_for_status()
-        .map(reqwest::Response::bytes_stream)
-        .map(|stream| stream.map(|result| result.map_err(Error::Fetch)))
-        .map_err(Error::Fetch)
-}
-
-/// Asynchronously read a filesystem path akin to the fetch API
-async fn read(path: PathBuf) -> Result<BoxStream<'static, Result<Bytes, Error>>, Error> {
-    let mut file = File::open(path).await?;
-    let size = file.metadata().await?.len() as usize;
-
-    if size > environment::FILE_READ_CHUNK_THRESHOLD {
-        let stream = ReaderStream::with_capacity(file, environment::FILE_READ_BUFFER_SIZE);
-
-        Ok(stream.map(|result| result.map_err(Error::Read)).boxed())
-    } else {
-        let mut bytes = Vec::with_capacity(size);
-        file.read_to_end(&mut bytes).await?;
-
-        Ok(stream::once(async move { Ok(bytes.into()) }).boxed())
-    }
-}
-
-/// Specialise handling of `file://` URLs for fetching
-fn url_file(url: &Url) -> Option<PathBuf> {
-    if url.scheme() == "file" {
-        url.to_file_path().ok()
-    } else {
-        None
-    }
+    let stream = response.bytes_stream().map_err(io::Error::other);
+    // Convert the stream into an AsyncReader. This chunks the stream
+    // automatically and we also get compatibility with tokio::io functions.
+    Ok(tokio_util::io::StreamReader::new(stream))
 }
 
 #[derive(Debug, Error)]
@@ -125,4 +117,50 @@ pub enum Error {
 pub struct Progress {
     pub delta: u64,
     pub completed: u64,
+}
+
+struct ProgressRead<R, F>
+where
+    R: AsyncRead + Unpin,
+    F: Fn(Progress) + Unpin,
+{
+    total: u64,
+    reader: R,
+    callback: F,
+}
+
+impl<R, F> ProgressRead<R, F>
+where
+    R: AsyncRead + Unpin,
+    F: Fn(Progress) + Unpin,
+{
+    pub fn new(reader: R, callback: F) -> Self {
+        Self {
+            total: 0,
+            reader,
+            callback,
+        }
+    }
+}
+
+impl<R, F> AsyncRead for ProgressRead<R, F>
+where
+    R: AsyncRead + Unpin,
+    F: Fn(Progress) + Unpin,
+{
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> task::Poll<io::Result<()>> {
+        let previous = buf.filled().len();
+        let result = Pin::new(&mut self.reader).poll_read(cx, buf);
+        let delta = (buf.filled().len() - previous) as u64;
+        self.total += delta;
+        (self.callback)(Progress {
+            completed: self.total,
+            delta,
+        });
+        result
+    }
 }

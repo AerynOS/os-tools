@@ -6,11 +6,9 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use derive_more::{Debug, Display, From, Into};
-use fs_err::tokio::File;
-use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
-use tokio::io::{self, AsyncWriteExt};
+use tokio::io;
 use url::Url;
 
 use config::Config;
@@ -140,16 +138,7 @@ impl Config for Map {
 }
 
 async fn fetch_index(url: Url, out_path: impl Into<PathBuf>) -> Result<(), FetchError> {
-    let mut stream = request::stream(url).await?;
-
-    let mut out = File::create(out_path).await?;
-
-    while let Some(chunk) = stream.next().await {
-        out.write_all(&chunk?).await?;
-    }
-
-    out.flush().await?;
-
+    request::download(url, &out_path.into()).await?;
     Ok(())
 }
 
