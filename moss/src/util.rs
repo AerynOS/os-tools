@@ -7,6 +7,7 @@ use std::{
     num::NonZeroUsize,
     os::unix::fs::symlink,
     path::{Path, PathBuf},
+    pin::Pin,
     thread,
 };
 
@@ -14,6 +15,7 @@ use fs_err as fs;
 use nix::unistd::{LinkatFlags, linkat};
 use sha2::{Digest, Sha256};
 use stone::{StoneDecodedPayload, StoneReadError};
+use tokio::io::AsyncRead;
 use url::Url;
 
 pub fn ensure_dir_exists(path: &Path) -> io::Result<()> {
@@ -202,8 +204,9 @@ impl<T> Sha256Wrapper<T> {
 
 impl<T: Read> Read for Sha256Wrapper<T> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.hasher.update(&buf);
-        self.inner.read(buf)
+        let read = self.inner.read(buf)?;
+        self.hasher.update(&buf[0..read]);
+        Ok(read)
     }
 }
 
@@ -215,6 +218,19 @@ impl<T: Write> Write for Sha256Wrapper<T> {
 
     fn flush(&mut self) -> io::Result<()> {
         self.inner.flush()
+    }
+}
+
+impl<T: AsyncRead + Unpin> AsyncRead for Sha256Wrapper<T> {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<io::Result<()>> {
+        let previous = buf.filled().len();
+        let result = Pin::new(&mut self.inner).poll_read(cx, buf);
+        self.hasher.update(&buf.filled()[previous..]);
+        result
     }
 }
 
