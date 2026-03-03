@@ -4,6 +4,7 @@
 
 use std::{io, path::Path, time::Duration};
 
+use crate::recipe::Recipe;
 use fs_err as fs;
 use futures_util::{StreamExt, TryStreamExt, stream};
 use moss::{runtime, util};
@@ -60,17 +61,17 @@ impl Upstream {
         }
     }
 
-    async fn store(&self, paths: &Paths, pb: &ProgressBar) -> Result<Stored, Error> {
+    async fn store(&self, storage_dir: &Path, pb: &ProgressBar) -> Result<Stored, Error> {
         Ok(match self {
-            Upstream::Plain(plain) => Stored::Plain(plain.store(paths, pb).await?),
-            Upstream::Git(git) => Stored::Git(git.store(paths, pb).await?),
+            Upstream::Plain(plain) => Stored::Plain(plain.store(storage_dir, pb).await?),
+            Upstream::Git(git) => Stored::Git(git.store(&storage_dir.join("git"), pb).await?),
         })
     }
 
-    fn remove(&self, paths: &Paths) -> Result<(), Error> {
+    fn remove(&self, storage_dir: &Path) -> Result<(), Error> {
         match self {
-            Upstream::Plain(plain) => plain.remove(paths)?,
-            Upstream::Git(git) => git.remove(paths)?,
+            Upstream::Plain(plain) => plain.remove(storage_dir)?,
+            Upstream::Git(git) => git.remove(&storage_dir.join("git"))?,
         }
 
         Ok(())
@@ -127,7 +128,7 @@ pub fn parse(recipe: &Recipe) -> Result<Vec<Upstream>, Error> {
 
 /// Cache all upstreams from the provided [`Recipe`], make them available
 /// in the guest rootfs, and update the stone.yaml with resolved git upstream hashes.
-pub fn sync(recipe: &Recipe, paths: &Paths, upstreams: &[Upstream]) -> Result<(), Error> {
+pub fn sync(upstreams: &[Upstream], storage_dir: &Path, share_dir: &Path) -> Result<Vec<Shared>, Error> {
     println!();
     println!("Sharing {} upstream(s) with the build container", upstreams.len());
 
@@ -141,8 +142,7 @@ pub fn sync(recipe: &Recipe, paths: &Paths, upstreams: &[Upstream]) -> Result<()
     );
     tp.tick();
 
-    let upstream_dir = paths.guest_host_path(&paths.upstreams());
-    util::ensure_dir_exists(&upstream_dir)?;
+    util::ensure_dir_exists(share_dir)?;
 
     let installed_upstreams = runtime::block_on(
         stream::iter(upstreams)
@@ -157,7 +157,7 @@ pub fn sync(recipe: &Recipe, paths: &Paths, upstreams: &[Upstream]) -> Result<()
                 );
                 pb.enable_steady_tick(Duration::from_millis(150));
 
-                let install = upstream.store(paths, &pb).await?;
+                let install = upstream.store(storage_dir, &pb).await?;
 
                 pb.set_message(format!("{} {}", "Copying".yellow(), upstream.name().bold()));
                 pb.set_style(
@@ -168,7 +168,7 @@ pub fn sync(recipe: &Recipe, paths: &Paths, upstreams: &[Upstream]) -> Result<()
 
                 runtime::unblock({
                     let install = install.clone();
-                    let dir = upstream_dir.clone();
+                    let dir = share_dir.to_owned();
                     move || install.share(&dir)
                 })
                 .await?;
@@ -203,9 +203,9 @@ pub fn sync(recipe: &Recipe, paths: &Paths, upstreams: &[Upstream]) -> Result<()
     Ok(())
 }
 
-pub fn remove(paths: &Paths, upstreams: &[Upstream]) -> Result<(), Error> {
+pub fn remove(storage_dir: &Path, upstreams: &[Upstream]) -> Result<(), Error> {
     for upstream in upstreams {
-        upstream.remove(paths)?;
+        upstream.remove(storage_dir)?;
     }
 
     Ok(())
