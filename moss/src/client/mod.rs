@@ -414,7 +414,9 @@ impl Client {
     fn apply_triggers(scope: TriggerScope<'_>, fstree: &vfs::Tree<PendingFile>) -> Result<(), postblit::Error> {
         let triggers = postblit::triggers(scope, fstree)?;
 
-        let progress = ProgressBar::new(triggers.len() as u64).with_style(
+        let total_items: u64 = triggers.iter().map(|batch| batch.len() as u64).sum();
+
+        let progress_bar = ProgressBar::new(total_items).with_style(
             ProgressStyle::with_template("\n|{bar:20.green/blue}| {pos}/{len} {msg}")
                 .unwrap()
                 .progress_chars("■≡=- "),
@@ -422,11 +424,11 @@ impl Client {
 
         let phase_name = match &scope {
             TriggerScope::Transaction(_, _) => {
-                progress.set_message("Running transaction-scope triggers");
+                progress_bar.set_message("Running transaction-scope triggers");
                 "transaction-scope-triggers"
             }
             TriggerScope::System(_, _) => {
-                progress.set_message("Running system-scope triggers");
+                progress_bar.set_message("Running system-scope triggers");
                 "system-scope-triggers"
             }
         };
@@ -435,37 +437,32 @@ impl Client {
 
         info!(
             phase = phase_name,
-            total_items = triggers.len(),
+            total_items = total_items,
             progress = 0.0,
             event_type = "progress_start",
         );
 
-        for (i, trigger) in progress.wrap_iter(triggers.iter()).enumerate() {
-            trigger.execute()?;
-
-            let trigger_command = match trigger.handler() {
-                triggers::format::Handler::Run { run, .. } => run.clone(),
-                triggers::format::Handler::Delete { .. } => "delete operation".to_owned(),
-            };
+        postblit::execute_triggers(scope, &triggers, |progress| {
+            progress_bar.set_position(progress.completed);
             info!(
-                progress = (i + 1) as f32 / triggers.len() as f32,
-                current = i + 1,
-                total = triggers.len(),
+                progress = progress.completed as f32 / total_items as f32,
+                current = progress.completed,
+                total = total_items,
                 event_type = "progress_update",
-                "Executing {}",
-                trigger_command
+                "Executing {:?}",
+                progress.item
             );
-        }
+        })?;
 
         info!(
             phase = phase_name,
             duration_ms = timer.elapsed().as_millis(),
-            items_processed = triggers.len(),
+            items_processed = total_items,
             progress = 1.0,
             event_type = "progress_completed",
         );
 
-        progress.finish_and_clear();
+        progress_bar.finish_and_clear();
 
         Ok(())
     }
