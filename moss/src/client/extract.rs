@@ -1,10 +1,9 @@
 use std::{
-    fs::File,
     io::{self, Read, Seek, SeekFrom},
     path::{Path, PathBuf},
 };
 
-use fs_err as fs;
+use fs_err::{self as fs, File};
 use stone::{StoneDecodedPayload, StoneReadError};
 use thiserror::Error;
 use tui::{ProgressBar, ProgressStyle};

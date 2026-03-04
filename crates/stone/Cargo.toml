@@ -12,6 +12,7 @@ ffi = []
 
 [dependencies]
 astr.workspace = true
+fs-err.workspace = true
 strum.workspace = true
 thiserror.workspace = true
 xxhash-rust.workspace = true

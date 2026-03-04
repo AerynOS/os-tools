@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
+use fs_err as fs;
 use rapidfuzz::distance::levenshtein;
 use rayon::prelude::*;
 use std::collections::HashSet;
@@ -17,7 +18,7 @@ fn collect_spdx_licenses(dir: &Path) -> Result<(HashSet<PathBuf>, HashSet<PathBu
     let mut purified_spdx_licenses = HashSet::new();
     let mut spdx_license_paths = HashSet::new();
 
-    for entry_res in std::fs::read_dir(dir)? {
+    for entry_res in fs::read_dir(dir)? {
         let entry = entry_res?;
 
         if !entry.file_name().to_str().unwrap_or_default().contains("deprecated_") {
@@ -99,7 +100,7 @@ pub fn match_licences(dir: &Path, spdx_dir: &Path) -> Result<Vec<String>, Error>
     let matches: Vec<_> = licenses
         .par_iter()
         .filter_map(|license| {
-            let license_content = std::fs::read_to_string(license).ok();
+            let license_content = fs::read_to_string(license).ok();
             if license_content.as_ref().is_some_and(|s| !s.is_empty()) {
                 Some(license_content)
             } else {
@@ -122,7 +123,7 @@ pub fn match_licences(dir: &Path, spdx_dir: &Path) -> Result<Vec<String>, Error>
                 // NOTE: Although only reading up to n lines/chars would be quicker it has difficulty differentiating
                 //       between subtle differences e.g. Apache-2.0 vs Pixar or GFDL-1.2-* vs GFDL-1.3-*.
                 // TODO: How to match against multiple licences in one file? hybrid sliding window approach approach?
-                let truncated_canonical: String = std::fs::read_to_string(spdx_license)
+                let truncated_canonical: String = fs::read_to_string(spdx_license)
                     .ok()?
                     .split_whitespace()
                     .collect::<Vec<_>>()

@@ -316,7 +316,9 @@ async fn fetch_index(
 ) -> Result<PathBuf, Error> {
     let out_dir = cache_dir(identifier, &state.repository, installation);
 
-    tokio::fs::create_dir_all(&out_dir).await.map_err(Error::CreateDir)?;
+    fs_err::tokio::create_dir_all(&out_dir)
+        .await
+        .map_err(Error::CreateDir)?;
 
     let out_path = out_dir.join("stone.index");
 

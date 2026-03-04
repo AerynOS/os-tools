@@ -3,11 +3,12 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use std::{
-    fs, io,
+    io,
     path::{Path, PathBuf},
     process, string,
 };
 
+use fs_err as fs;
 use moss::{runtime, util};
 use thiserror::Error;
 use tui::{ProgressBar, ProgressStyle, Styled};
@@ -54,7 +55,7 @@ impl Git {
     }
 
     pub async fn store(&self, paths: &Paths, pb: &ProgressBar) -> Result<StoredGit, Error> {
-        use tokio::fs;
+        use fs_err::tokio as fs;
 
         pb.set_style(
             ProgressStyle::with_template(" {spinner} {wide_msg} ")
@@ -334,7 +335,7 @@ mod tests {
     use crate::upstream::plain::StoredPlain;
 
     use super::*;
-    use std::fs;
+    use fs_err as fs;
     use std::process::Command;
     use tempfile::TempDir;
 

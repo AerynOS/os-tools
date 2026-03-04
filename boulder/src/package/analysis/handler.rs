@@ -1,14 +1,13 @@
 use filetime::FileTime;
 use itertools::Itertools;
 use std::{
-    fs::File,
     io::{BufReader, BufWriter, Write},
     os::unix::fs::symlink,
     path::{Component, Path, PathBuf},
     process::Command,
 };
 
-use fs_err as fs;
+use fs_err::{self as fs, File};
 use moss::{Dependency, Provider, dependency};
 
 use crate::package::collect::PathInfo;
@@ -209,7 +208,7 @@ pub fn compressman(bucket: &mut BucketMut<'_>, info: &mut PathInfo) -> Result<Re
          * the new compressed file may not yet exist, so compress it _now_
          * in order that the correct metadata src info is returned to the binary writer.
          */
-        if !std::fs::exists(&new_zst_symlink)? {
+        if !fs::exists(&new_zst_symlink)? {
             compress_file_zstd(&uncompressed_file)?;
             let _ = bucket.paths.install().guest.join(&compressed_zst_file);
         }
@@ -237,7 +236,7 @@ pub fn compressman(bucket: &mut BucketMut<'_>, info: &mut PathInfo) -> Result<Re
 
     /* Restore the original {a,m}times for reproducibility */
     filetime::set_file_handle_times(
-        &File::open(&compressed_zst_file)?,
+        &File::open(&compressed_zst_file)?.into_file(),
         Some(FileTime::from_system_time(atime)),
         Some(FileTime::from_system_time(mtime)),
     )?;
