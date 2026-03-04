@@ -6,13 +6,15 @@ use clap::builder::NonEmptyStringValueParser;
 use clap::{Arg, ArgMatches, Command};
 
 use moss::client;
+use moss::dependency::Kind;
 use moss::package::{self, Name};
-use moss::{Client, Installation, environment};
+use moss::{Client, Installation, Provider, environment};
 use tui::Styled;
 use tui::pretty::{ColumnDisplay, print_columns};
 
 const ARG_KEYWORD: &str = "KEYWORD";
 const FLAG_INSTALLED: &str = "installed";
+const FLAG_PROVIDES: &str = "provides";
 
 /// Returns the Clap struct for this command.
 pub fn command() -> Command {
@@ -33,26 +35,28 @@ pub fn command() -> Command {
                 .num_args(0)
                 .help("Search among installed packages only"),
         )
+        .arg(
+            Arg::new(FLAG_PROVIDES)
+                .short('p')
+                .long("provides")
+                .num_args(0)
+                .conflicts_with(FLAG_INSTALLED)
+                .help("Search for packages providing a binary"),
+        )
 }
 
 pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
     let keyword = args.get_one::<String>(ARG_KEYWORD).unwrap();
     let only_installed = args.get_flag(FLAG_INSTALLED);
+    let provides = args.get_flag(FLAG_PROVIDES);
 
     let client = Client::new(environment::NAME, installation)?;
-    let flags = if only_installed {
-        package::Flags::new().with_installed()
-    } else {
-        package::Flags::new().with_available()
-    };
 
-    let output: Vec<Output> = client
-        .search_packages(keyword, flags)
-        .map(|pkg| Output {
-            name: pkg.meta.name,
-            summary: pkg.meta.summary,
-        })
-        .collect();
+    let output = if provides {
+        search_providing_packages(client, keyword)
+    } else {
+        search_packages(client, only_installed, keyword)
+    };
 
     if output.is_empty() {
         return Ok(());
@@ -61,6 +65,36 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     print_columns(&output, 1);
 
     Ok(())
+}
+
+fn search_packages(client: Client, only_installed: bool, keyword: &str) -> Vec<Output> {
+    let flags = if only_installed {
+        package::Flags::new().with_installed()
+    } else {
+        package::Flags::new().with_available()
+    };
+    client
+        .search_packages(keyword, flags)
+        .map(|pkg| Output {
+            name: pkg.meta.name,
+            summary: pkg.meta.summary,
+        })
+        .collect()
+}
+
+fn search_providing_packages(client: Client, name: &str) -> Vec<Output> {
+    let provider = Provider {
+        kind: Kind::Binary,
+        name: name.to_owned(),
+    };
+    client
+        .lookup_packages_by_provider(&provider)
+        .into_iter()
+        .map(|pkg| Output {
+            name: pkg.meta.name,
+            summary: pkg.meta.summary,
+        })
+        .collect()
 }
 
 #[derive(Debug, thiserror::Error)]
