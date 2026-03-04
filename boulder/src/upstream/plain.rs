@@ -116,7 +116,7 @@ impl Plain {
             });
         }
 
-        let hash = Self::fetch(&self.url, &path, pb).await?;
+        let hash = Self::fetch(&self.url, &partial_path, pb).await?;
         if hash != self.hash {
             fs::remove_file(&partial_path).await?;
 
