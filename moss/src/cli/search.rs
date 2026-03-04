@@ -51,11 +51,16 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     let provides = args.get_flag(FLAG_PROVIDES);
 
     let client = Client::new(environment::NAME, installation)?;
+    let flags = if only_installed {
+        package::Flags::new().with_installed()
+    } else {
+        package::Flags::new().with_available()
+    };
 
     let output = if provides {
         search_providing_packages(client, keyword)
     } else {
-        search_packages(client, only_installed, keyword)
+        search_packages(client, flags, keyword)
     };
 
     if output.is_empty() {
@@ -67,12 +72,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     Ok(())
 }
 
-fn search_packages(client: Client, only_installed: bool, keyword: &str) -> Vec<Output> {
-    let flags = if only_installed {
-        package::Flags::new().with_installed()
-    } else {
-        package::Flags::new().with_available()
-    };
+fn search_packages(client: Client, flags: package::Flags, keyword: &str) -> Vec<Output> {
     client
         .search_packages(keyword, flags)
         .map(|pkg| Output {
