@@ -24,36 +24,38 @@ moss: (build "moss")
 
 # Onboarding replacement
 get-started: (build "boulder") (build "moss") (licenses)
-  @echo ""
-  @echo "Installing boulder and moss to {{ executable_dir() }}…"
-  @mkdir -p "{{ executable_dir() }}/"
-  @cp "{{ root-dir }}/target/{{ build-mode }}"/boulder "{{ executable_dir() }}/"
-  @cp "{{ root-dir }}/target/{{ build-mode }}"/moss "{{ executable_dir() }}/"
-  @rm -rf "{{ data_dir() }}/boulder"
-  @mkdir -p "{{ data_dir() }}/boulder/licenses"
-  @cp -R "{{ root-dir }}/boulder/data"/{macros,*.yaml} "{{ data_dir() }}/boulder/"
-  @cp "{{ root-dir }}/license-list-data/text"/* "{{ data_dir() }}/boulder/licenses"
-  @mkdir -p "{{ config_dir() }}/boulder/"
-  @cp -R "{{ root-dir }}/boulder/data"/profile.d "{{ config_dir() }}/boulder/"
-  @echo ""
-  @echo "Listing installed files…"
-  @ls -hlF "{{ executable_dir() }}"/{boulder,moss} "{{ data_dir() }}/boulder" "{{ config_dir() }}/boulder"
-  @echo ""
-  @echo "Checking that {{executable_dir() }} is in \$PATH…"
-  @echo "{{
+  #!/usr/bin/env bash
+  # ^ is needed because debian's default shell is /bin/sh and we use bash-isms
+  echo ""
+  echo "Installing boulder and moss to {{ executable_dir() }}…"
+  mkdir -p "{{ executable_dir() }}/"
+  cp "{{ root-dir }}/target/{{ build-mode }}"/boulder "{{ executable_dir() }}/"
+  cp "{{ root-dir }}/target/{{ build-mode }}"/moss "{{ executable_dir() }}/"
+  rm -rf "{{ data_dir() }}/boulder"
+  mkdir -p "{{ data_dir() }}/boulder/licenses"
+  cp -R "{{ root-dir }}/boulder/data"/{macros,*.yaml} "{{ data_dir() }}/boulder/"
+  cp "{{ root-dir }}/license-list-data/text"/* "{{ data_dir() }}/boulder/licenses"
+  mkdir -p "{{ config_dir() }}/boulder/"
+  cp -R "{{ root-dir }}/boulder/data"/profile.d "{{ config_dir() }}/boulder/"
+  echo ""
+  echo "Listing installed files…"
+  ls -hlF "{{ executable_dir() }}"/{boulder,moss} "{{ data_dir() }}/boulder" "{{ config_dir() }}/boulder"
+  echo ""
+  echo "Checking that {{executable_dir() }} is in \$PATH…"
+  echo "{{
     if env("PATH") =~ executable_dir() {
       GREEN + '…the directory is already in \$PATH. Excellent.' + NORMAL
     } else {
       RED + '…the directory is not yet in \$PATH. Please add it.' + NORMAL
     }
   }}"
-  @echo ""
-  @echo "Checking the location of boulder and moss executables when executed in a shell:"
-  @command -v boulder
-  @command -v moss
-  @echo ""
-  @echo "Done."
-  @echo "The Aeryn OS documentation lives at https://aerynos.dev"
+  echo ""
+  echo "Checking the location of boulder and moss executables when executed in a shell:"
+  command -v boulder
+  command -v moss
+  echo ""
+  echo "Done."
+  echo "The Aeryn OS documentation lives at https://aerynos.dev"
 
 # Fix code issues
 fix:
