@@ -83,13 +83,17 @@ fn search_packages(client: Client, only_installed: bool, keyword: &str) -> Vec<O
 }
 
 fn search_providing_packages(client: Client, name: &str) -> Vec<Output> {
-    let provider = Provider {
-        kind: Kind::Binary,
-        name: name.to_owned(),
-    };
-    client
-        .lookup_packages_by_provider(&provider)
+    // We need to search both Binary and SystemBinary for possible programs
+    // TODO: Could include shared libraries down the line, maybe with a flag
+    [Kind::Binary, Kind::SystemBinary]
         .into_iter()
+        .flat_map(|kind| {
+            let provider = Provider {
+                kind,
+                name: name.to_owned(),
+            };
+            client.lookup_packages_by_provider(&provider)
+        })
         .map(|pkg| Output {
             name: pkg.meta.name,
             summary: pkg.meta.summary,
