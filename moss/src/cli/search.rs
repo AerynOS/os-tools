@@ -40,7 +40,6 @@ pub fn command() -> Command {
                 .short('p')
                 .long("provides")
                 .num_args(0)
-                .conflicts_with(FLAG_INSTALLED)
                 .help("Search for packages providing a binary"),
         )
 }
@@ -58,7 +57,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     };
 
     let output = if provides {
-        search_providing_packages(client, keyword)
+        search_providing_packages(client, flags, keyword)
     } else {
         search_packages(client, flags, keyword)
     };
@@ -82,7 +81,7 @@ fn search_packages(client: Client, flags: package::Flags, keyword: &str) -> Vec<
         .collect()
 }
 
-fn search_providing_packages(client: Client, name: &str) -> Vec<Output> {
+fn search_providing_packages(client: Client, flags: package::Flags, name: &str) -> Vec<Output> {
     // We need to search both Binary and SystemBinary for possible programs
     // TODO: Could include shared libraries down the line, maybe with a flag
     [Kind::Binary, Kind::SystemBinary]
@@ -92,7 +91,7 @@ fn search_providing_packages(client: Client, name: &str) -> Vec<Output> {
                 kind,
                 name: name.to_owned(),
             };
-            client.lookup_packages_by_provider(&provider)
+            client.lookup_packages_by_provider(&provider, flags)
         })
         .map(|pkg| Output {
             name: pkg.meta.name,
