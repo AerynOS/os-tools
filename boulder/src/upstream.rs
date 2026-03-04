@@ -33,7 +33,7 @@ impl Upstream {
         match upstream.props {
             upstream::Props::Plain { hash, rename, .. } => Ok(Self::Plain(Plain {
                 url: upstream.url,
-                hash: hash.parse().map_err(|e| plain::Error::from(e))?,
+                hash: hash.parse().map_err(plain::Error::from)?,
                 rename,
             })),
             upstream::Props::Git { git_ref, staging } => Ok(Self::Git(Git {
@@ -47,8 +47,8 @@ impl Upstream {
 
     pub async fn fetch_new(uri: SourceUri, dest: &Path) -> Result<Self, Error> {
         Ok(match uri.kind {
-            upstream::Kind::Archive => Self::Plain(Plain::fetch_new(uri.url, &dest).await?),
-            upstream::Kind::Git => Self::Git(Git::fetch_new(&uri.url, &dest).await?),
+            upstream::Kind::Archive => Self::Plain(Plain::fetch_new(uri.url, dest).await?),
+            upstream::Kind::Git => Self::Git(Git::fetch_new(&uri.url, dest).await?),
         })
     }
 
@@ -67,10 +67,11 @@ impl Upstream {
     }
 
     fn remove(&self, paths: &Paths) -> Result<(), Error> {
-        Ok(match self {
+        match self {
             Upstream::Plain(plain) => plain.remove(paths)?,
             Upstream::Git(git) => git.remove(paths)?,
-        })
+        };
+        Ok(())
     }
 }
 
