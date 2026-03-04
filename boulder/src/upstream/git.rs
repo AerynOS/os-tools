@@ -26,7 +26,7 @@ pub struct Git {
 
 impl Git {
     pub async fn fetch_new(url: &Url, dest_dir: &Path) -> Result<Self, Error> {
-        Self::fetch_new_progress(&url, dest_dir, &ProgressBar::hidden()).await
+        Self::fetch_new_progress(url, dest_dir, &ProgressBar::hidden()).await
     }
 
     pub async fn fetch_new_progress(url: &Url, dest_dir: &Path, pb: &ProgressBar) -> Result<Self, Error> {
