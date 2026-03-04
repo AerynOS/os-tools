@@ -1,1 +1,4 @@
+# SPDX-FileCopyrightText: 2020 AerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
+
 allow-mixed-uninlined-format-args = false

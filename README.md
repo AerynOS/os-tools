@@ -1,3 +1,8 @@
+---
+# SPDX-FileCopyrightText: 2023 AerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
+---
+
 # 🛠️ OS Tools - Modern System State Management
 
 ## 📦 Core Tools
