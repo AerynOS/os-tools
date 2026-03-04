@@ -103,6 +103,7 @@ flags               :
             c         : "-fprofile-generate=%(pgo_dir)/IR"
             cxx       : "-fprofile-generate=%(pgo_dir)/IR"
             ld        : "-fprofile-generate=%(pgo_dir)/IR"
+            rust      : "-Cprofile-generate=%(pgo_dir)/IR"
         gnu:
             c         : "-fprofile-generate -fprofile-dir=%(pgo_dir)"
             cxx       : "-fprofile-generate -fprofile-dir=%(pgo_dir)"
@@ -121,6 +122,7 @@ flags               :
             c         : "-fprofile-use=%(pgo_dir)/combined.profdata"
             cxx       : "-fprofile-use=%(pgo_dir)/combined.profdata"
             ld        : "-fprofile-use=%(pgo_dir)/combined.profdata"
+            rust      : "-Cprofile-use=%(pgo_dir)/combined.profdata -Cllvm-args=-pgo-warn-missing-function"
         gnu:
             c         : "-fprofile-use -fprofile-dir=%(pgo_dir) -fprofile-correction"
             cxx       : "-fprofile-use -fprofile-dir=%(pgo_dir) -fprofile-correction"
