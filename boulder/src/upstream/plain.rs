@@ -183,7 +183,7 @@ pub enum ParseHashError {
 pub enum Error {
     #[error("parse hash")]
     ParseHash(#[from] ParseHashError),
-    #[error("hash mismatch for {name}, expected {expected:?} got {got:?}")]
+    #[error("hash mismatch for {name}, expected {expected:?} got {:?}", got.0)]
     HashMismatch { name: String, expected: String, got: Hash },
     #[error("request")]
     Request(#[from] request::Error),
