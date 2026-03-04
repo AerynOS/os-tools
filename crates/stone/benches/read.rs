@@ -3,20 +3,20 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use std::{
-    fs::File,
     hint::black_box,
     io::{BufReader, Read, Seek, sink},
-    path::Path,
+    path::PathBuf,
 };
 
 use criterion::{Criterion, criterion_group, criterion_main};
+use fs_err::File;
 use stone::StoneDecodedPayload;
 
-fn read_unbuffered(path: impl AsRef<Path>) {
+fn read_unbuffered(path: impl Into<PathBuf>) {
     read(File::open(path).unwrap());
 }
 
-fn read_buffered(path: impl AsRef<Path>) {
+fn read_buffered(path: impl Into<PathBuf>) {
     read(BufReader::new(File::open(path).unwrap()));
 }
 

@@ -3,16 +3,17 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use std::{
-    fs, io,
+    io,
     path::{Path, PathBuf},
     str::FromStr,
 };
 
+use fs_err as fs;
 use futures_util::StreamExt;
 use moss::{request, runtime, util};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
-use tokio::{fs::File, io::AsyncWriteExt};
+use tokio::io::AsyncWriteExt;
 use tui::{ProgressBar, ProgressStyle};
 use url::Url;
 
@@ -70,6 +71,8 @@ impl Plain {
     }
 
     async fn fetch(url: &Url, dest_file: &Path, pb: &ProgressBar) -> Result<Hash, Error> {
+        use fs_err::tokio::File;
+
         pb.set_style(
             ProgressStyle::with_template(" {spinner} {wide_msg} {binary_bytes_per_sec:>.dim} ")
                 .unwrap()
@@ -92,7 +95,7 @@ impl Plain {
     }
 
     pub async fn store(&self, paths: &Paths, pb: &ProgressBar) -> Result<StoredPlain, Error> {
-        use tokio::fs;
+        use fs_err::tokio as fs;
 
         pb.set_style(
             ProgressStyle::with_template(" {spinner} {wide_msg} {binary_bytes_per_sec:>.dim} ")

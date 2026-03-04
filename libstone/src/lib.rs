@@ -1,8 +1,9 @@
 // SPDX-FileCopyrightText: Copyright © 2020-2024 Serpent OS Developers
 //
 // SPDX-License-Identifier: MPL-2.0
-#![allow(clippy::missing_safety_doc)]
 #![allow(non_camel_case_types)]
+#![allow(clippy::disallowed_types)] // created with File::from_raw_fd, which fs-err doesn't have
+#![allow(clippy::missing_safety_doc)]
 
 use std::{
     fs::File,

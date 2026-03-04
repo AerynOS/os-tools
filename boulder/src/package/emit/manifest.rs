@@ -111,6 +111,7 @@ impl<'a> Manifest<'a> {
         }
 
         // Extracts all meta payloads
+        #[allow(clippy::disallowed_types)] // needed to accept either fs_err::File or NamedTempFile
         let extract_metas = |reader: &mut std::fs::File| {
             // Reset seek position to read stone payloads
             reader.seek(SeekFrom::Start(0))?;

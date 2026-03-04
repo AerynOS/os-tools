@@ -2,8 +2,9 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-use std::{fs, io, path::Path, time::Duration};
+use std::{io, path::Path, time::Duration};
 
+use fs_err as fs;
 use futures_util::{StreamExt, TryStreamExt, stream};
 use moss::{runtime, util};
 use nix::unistd::{LinkatFlags, linkat};
