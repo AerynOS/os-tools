@@ -1,1 +1,36 @@
 allow-mixed-uninlined-format-args = false
+disallowed-methods = [
+    { path = "std::fs::canonicalize", replacement = "fs_err::canonicalize" },
+    { path = "std::fs::create_dir", replacement = "fs_err::create_dir" },
+    { path = "std::fs::create_dir_all", replacement = "fs_err::create_dir_all" },
+    { path = "std::fs::exists", replacement = "fs_err::exists" },
+    { path = "std::fs::metadata", replacement = "fs_err::metadata" },
+    { path = "std::fs::read", replacement = "fs_err::read" },
+    { path = "std::fs::read_dir", replacement = "fs_err::read_dir" },
+    { path = "std::fs::read_link", replacement = "fs_err::read_link" },
+    { path = "std::fs::read_to_string", replacement = "fs_err::read_to_string" },
+    { path = "std::fs::remove_dir", replacement = "fs_err::remove_dir" },
+    { path = "std::fs::remove_dir_all", replacement = "fs_err::remove_dir_all" },
+    { path = "std::fs::remove_file", replacement = "fs_err::remove_file" },
+    { path = "std::fs::rename", replacement = "fs_err::rename" },
+    { path = "std::fs::write", replacement = "fs_err::write" },
+
+    { path = "tokio::canonicalize", replacement = "fs_err::tokio::canonicalize" },
+    { path = "tokio::create_dir", replacement = "fs_err::tokio::create_dir" },
+    { path = "tokio::create_dir_all", replacement = "fs_err::tokio::create_dir_all" },
+    { path = "tokio::metadata", replacement = "fs_err::tokio::metadata" },
+    { path = "tokio::read", replacement = "fs_err::tokio::read" },
+    { path = "tokio::read_dir", replacement = "fs_err::tokio::read_dir" },
+    { path = "tokio::read_link", replacement = "fs_err::tokio::read_link" },
+    { path = "tokio::read_to_string", replacement = "fs_err::tokio::read_to_string" },
+    { path = "tokio::remove_dir", replacement = "fs_err::tokio::remove_dir" },
+    { path = "tokio::remove_dir_all", replacement = "fs_err::tokio::remove_dir_all" },
+    { path = "tokio::remove_file", replacement = "fs_err::tokio::remove_file" },
+    { path = "tokio::rename", replacement = "fs_err::tokio::rename" },
+    { path = "tokio::try_exists", replacement = "fs_err::tokio::try_exists" },
+    { path = "tokio::write", replacement = "fs_err::tokio::write" },
+]
+disallowed-types = [
+    { path = "std::fs::File", replacement = "fs_err::File" },
+    { path = "tokio::fs::File", replacement = "fs_err::tokio::File" },
+]
