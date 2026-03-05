@@ -2,8 +2,7 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-use clap::builder::NonEmptyStringValueParser;
-use clap::{Arg, ArgMatches, Command};
+use clap::{Arg, ArgMatches, Command, arg, value_parser};
 
 use moss::client;
 use moss::package::{self, Name};
@@ -11,7 +10,6 @@ use moss::{Client, Installation, environment};
 use tui::Styled;
 use tui::pretty::{ColumnDisplay, print_columns};
 
-const ARG_KEYWORD: &str = "KEYWORD";
 const FLAG_INSTALLED: &str = "installed";
 
 /// Returns the Clap struct for this command.
@@ -20,12 +18,7 @@ pub fn command() -> Command {
         .visible_alias("sr")
         .about("Search packages")
         .long_about("Search packages by looking into package names and summaries.")
-        .arg(
-            Arg::new(ARG_KEYWORD)
-                .required(true)
-                .num_args(1)
-                .value_parser(NonEmptyStringValueParser::new()),
-        )
+        .arg(arg!(<KEYWORD> ... "filter search by keywords").value_parser(value_parser!(String)))
         .arg(
             Arg::new(FLAG_INSTALLED)
                 .short('i')
@@ -36,7 +29,13 @@ pub fn command() -> Command {
 }
 
 pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
-    let keyword = args.get_one::<String>(ARG_KEYWORD).unwrap();
+    let keywords = args
+        .get_many::<String>("KEYWORD")
+        .into_iter()
+        .flatten()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+
     let only_installed = args.get_flag(FLAG_INSTALLED);
 
     let client = Client::new(environment::NAME, installation)?;
@@ -47,17 +46,12 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     };
 
     let output: Vec<Output> = client
-        .search_packages(keyword, flags)
+        .search_packages(&keywords, flags)
         .map(|pkg| Output {
             name: pkg.meta.name,
             summary: pkg.meta.summary,
         })
         .collect();
-
-    if output.is_empty() {
-        return Ok(());
-    }
-
     print_columns(&output, 1);
 
     Ok(())

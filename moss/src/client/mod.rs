@@ -289,10 +289,18 @@ impl Client {
     /// and match the given flags
     pub fn search_packages<'a>(
         &'a self,
-        keyword: &'a str,
+        keywords: &'a [&str],
         flags: package::Flags,
     ) -> impl Iterator<Item = Package> + 'a {
-        self.registry.by_keyword(keyword, flags)
+        // Initial result
+        let mut iter: Box<dyn Iterator<Item = Package> + 'a> = Box::new(self.registry.by_keyword(keywords[0], flags));
+
+        // Sequential filtered search by keyword
+        for keyword in &keywords[1..] {
+            iter =
+                Box::new(iter.filter(move |pkg| pkg.meta.name.contains(keyword) || pkg.meta.summary.contains(keyword)));
+        }
+        iter
     }
 
     /// Activates the provided state and runs system triggers once applied.
