@@ -74,13 +74,18 @@ async fn write_to_file<T: AsyncRead + Unpin>(reader: &mut T, to: &Path) -> Resul
 
     let mut out = File::create(&partial_path).await?;
 
-    tokio::io::copy(reader, &mut out).await?;
+    let result = async {
+        tokio::io::copy(reader, &mut out).await?;
+        out.flush().await?;
+        fs::rename(&partial_path, to).await
+    }
+    .await;
 
-    out.flush().await?;
+    if result.is_err() {
+        let _ = fs::remove_file(&partial_path).await;
+    }
 
-    fs::rename(partial_path, to).await?;
-
-    Ok(())
+    result.map_err(Error::from)
 }
 
 /// Fetch a resource at the provided [`Url`] and return an async reader over its bytes
