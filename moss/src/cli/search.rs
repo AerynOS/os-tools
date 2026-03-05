@@ -56,7 +56,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         package::Flags::new().with_available()
     };
 
-    let output: Vec<Output> = if provides {
+    let output = if provides {
         search_providing_packages(client, flags, keyword)
     } else {
         search_packages(client, flags, keyword)
