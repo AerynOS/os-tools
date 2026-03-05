@@ -6,7 +6,7 @@ use clap::builder::NonEmptyStringValueParser;
 use clap::{Arg, ArgMatches, Command};
 
 use moss::client;
-use moss::dependency::Kind;
+use moss::dependency;
 use moss::package::{self, Name};
 use moss::{Client, Installation, Provider, environment};
 use tui::Styled;
@@ -84,7 +84,7 @@ fn search_packages(client: Client, flags: package::Flags, keyword: &str) -> Vec<
 fn search_providing_packages(client: Client, flags: package::Flags, name: &str) -> Vec<Output> {
     // We need to search both Binary and SystemBinary for possible programs
     // TODO: Could include shared libraries down the line, maybe with a flag
-    [Kind::Binary, Kind::SystemBinary]
+    [dependency::Kind::Binary, dependency::Kind::SystemBinary]
         .into_iter()
         .flat_map(|kind| {
             let provider = Provider {
