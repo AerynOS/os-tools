@@ -273,9 +273,9 @@ impl Client {
     }
 
     /// Returns all unique packages which provide the supplied [`Provider`]
-    pub fn lookup_packages_by_provider(&self, provider: &Provider) -> Vec<Package> {
+    pub fn lookup_packages_by_provider(&self, provider: &Provider, flags: package::Flags) -> Vec<Package> {
         self.registry
-            .by_provider(provider, package::Flags::default())
+            .by_provider(provider, flags)
             .unique_by(|p| p.id.clone())
             .collect()
     }

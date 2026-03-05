@@ -7,7 +7,7 @@ use itertools::Itertools;
 use moss::{
     Installation, Package, Provider,
     client::{self, Client},
-    environment,
+    environment, package,
 };
 use stone::StonePayloadLayoutFile;
 use thiserror::Error;
@@ -38,7 +38,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
 
     for pkg in pkgs {
         let lookup = Provider::from_name(&pkg).unwrap();
-        let resolved = client.lookup_packages_by_provider(&lookup);
+        let resolved = client.lookup_packages_by_provider(&lookup, package::Flags::default());
 
         if resolved.is_empty() {
             return Err(Error::NotFound(pkg));

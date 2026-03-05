@@ -6,13 +6,15 @@ use clap::builder::NonEmptyStringValueParser;
 use clap::{Arg, ArgMatches, Command};
 
 use moss::client;
+use moss::dependency;
 use moss::package::{self, Name};
-use moss::{Client, Installation, environment};
+use moss::{Client, Installation, Provider, environment};
 use tui::Styled;
 use tui::pretty::{ColumnDisplay, print_columns};
 
 const ARG_KEYWORD: &str = "KEYWORD";
 const FLAG_INSTALLED: &str = "installed";
+const FLAG_PROVIDES: &str = "provides";
 
 /// Returns the Clap struct for this command.
 pub fn command() -> Command {
@@ -33,11 +35,19 @@ pub fn command() -> Command {
                 .num_args(0)
                 .help("Search among installed packages only"),
         )
+        .arg(
+            Arg::new(FLAG_PROVIDES)
+                .short('p')
+                .long("provides")
+                .num_args(0)
+                .help("Search for packages providing a binary"),
+        )
 }
 
 pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
     let keyword = args.get_one::<String>(ARG_KEYWORD).unwrap();
     let only_installed = args.get_flag(FLAG_INSTALLED);
+    let provides = args.get_flag(FLAG_PROVIDES);
 
     let client = Client::new(environment::NAME, installation)?;
     let flags = if only_installed {
@@ -46,13 +56,11 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         package::Flags::new().with_available()
     };
 
-    let output: Vec<Output> = client
-        .search_packages(keyword, flags)
-        .map(|pkg| Output {
-            name: pkg.meta.name,
-            summary: pkg.meta.summary,
-        })
-        .collect();
+    let output = if provides {
+        search_providing_packages(client, flags, keyword)
+    } else {
+        search_packages(client, flags, keyword)
+    };
 
     if output.is_empty() {
         return Ok(());
@@ -61,6 +69,35 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     print_columns(&output, 1);
 
     Ok(())
+}
+
+fn search_packages(client: Client, flags: package::Flags, keyword: &str) -> Vec<Output> {
+    client
+        .search_packages(keyword, flags)
+        .map(|pkg| Output {
+            name: pkg.meta.name,
+            summary: pkg.meta.summary,
+        })
+        .collect()
+}
+
+fn search_providing_packages(client: Client, flags: package::Flags, name: &str) -> Vec<Output> {
+    // We need to search both Binary and SystemBinary for possible programs
+    // TODO: Could include shared libraries down the line, maybe with a flag
+    [dependency::Kind::Binary, dependency::Kind::SystemBinary]
+        .into_iter()
+        .flat_map(|kind| {
+            let provider = Provider {
+                kind,
+                name: name.to_owned(),
+            };
+            client.lookup_packages_by_provider(&provider, flags)
+        })
+        .map(|pkg| Output {
+            name: pkg.meta.name,
+            summary: pkg.meta.summary,
+        })
+        .collect()
 }
 
 #[derive(Debug, thiserror::Error)]
