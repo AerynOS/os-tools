@@ -95,7 +95,7 @@ pub async fn fetch(
         fs::create_dir_all(parent).await?;
     }
 
-    if tokio::fs::try_exists(&destination_path).await? {
+    if fs::try_exists(&destination_path).await? {
         return Ok(Download {
             id: meta.id().into(),
             path: destination_path,
