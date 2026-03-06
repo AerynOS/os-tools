@@ -118,7 +118,7 @@ moss -D aosroot/ list available
 moss -D aosroot/ install systemd bash libx11-32bit
 ```
 
-If you want to create systemd-nspawn roots or bootable VMs, please check out the [img-tests](https://github.com/aeryn-os/img-tests) repository.
+If you want to create systemd-nspawn roots or bootable VMs, please check out the [img-tests](https://github.com/aerynos/img-tests) repository.
 
 
 ## 🤝 Contributing changes
