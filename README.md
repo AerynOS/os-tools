@@ -60,9 +60,9 @@ The `.stone` format is a structured binary package format designed for modern, r
 
 ```bash
 # clone the AerynOS os-tools repo somewhere reasonable
-mkdir -pv ~/repos/aeryn-os/
-cd ~/repos/aeryn-os/
-git clone https://github.com/aerynos/os-tools.git
+mkdir -pv ~/repos/aos/
+cd ~/repos/aos/
+git clone https://github.com/AerynOS/os-tools.git
 cd tools/
 
 # Install a few prerequisites (this how you'd do it on AerynOS)
@@ -118,7 +118,7 @@ moss -D aosroot/ list available
 moss -D aosroot/ install systemd bash libx11-32bit
 ```
 
-If you want to create systemd-nspawn roots or bootable VMs, please check out the [img-tests](https://github.com/aeryn-os/img-tests) repository.
+If you want to create systemd-nspawn roots or bootable VMs, please check out the [img-tests](https://github.com/AerynOS/img-tests) repository.
 
 
 ## 🤝 Contributing changes
@@ -139,4 +139,4 @@ Then create a Pull Request with your changes.
 
 ## ⚖️ License
 
-`moss-rs` is available under the terms of the [MPL-2.0](https://spdx.org/licenses/MPL-2.0.html)
+`moss` & `boulder` are available under the terms of the [MPL-2.0](https://spdx.org/licenses/MPL-2.0.html)
