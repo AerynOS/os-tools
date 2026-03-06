@@ -12,6 +12,7 @@ use std::{
 
 use fs_err as fs;
 use nix::unistd::{LinkatFlags, linkat};
+use rayon::iter::{ParallelBridge, ParallelIterator};
 use sha2::{Digest, Sha256};
 use stone::{StoneDecodedPayload, StoneReadError};
 use url::Url;
@@ -168,6 +169,78 @@ pub fn remove_empty_dirs(starting: &Path, root: &Path) -> io::Result<()> {
     }
 
     Ok(())
+}
+
+/// Removes a directory at this path, after removing all its contents. Use carefully!
+/// If root `path` is not found return Ok, this avoids having to check the root directory
+/// exists first, avoiding a TOCTOU.
+pub fn remove_dir_all(path: &Path) -> io::Result<()> {
+    Ok(fs::remove_dir_all(path).or_else(|e| {
+        if e.kind() == io::ErrorKind::NotFound {
+            Ok(())
+        } else {
+            Err(e)
+        }
+    })?)
+}
+
+/// Removes a directory at this path, after removing all its contents in parallel. Use carefully!
+///
+/// Attempts to match std::fs::remove_dir_all as close as possible whilst also ignoring `NotFound`
+/// error if the root `path` does not exist.
+pub fn par_remove_dir_all(path: &Path) -> io::Result<()> {
+    let rayon_runtime = rayon::ThreadPoolBuilder::new().build().expect("rayon runtime");
+
+    rayon_runtime.install(|| -> io::Result<()> {
+        let filetype = match fs::symlink_metadata(path) {
+            Ok(metadata) => metadata.file_type(),
+            Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
+            Err(e) => return Err(e),
+        };
+        if filetype.is_symlink() {
+            fs::remove_file(path)
+        } else {
+            par_remove_dir_all_recursive(path)
+        }
+    })?;
+    Ok(())
+}
+
+fn par_remove_dir_all_recursive(path: &Path) -> io::Result<()> {
+    fs::read_dir(path)?
+        .par_bridge()
+        // TODO: Use try {} here once it becomes stable to match stdlib
+        //       and simplify error handling
+        .try_for_each(|child| -> io::Result<()> {
+            let child = match child {
+                Ok(c) => c,
+                Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
+                Err(e) => return Err(e),
+            };
+
+            let child_path = child.path();
+
+            let result = if child.file_type()?.is_dir() {
+                par_remove_dir_all_recursive(&child_path)
+            } else {
+                fs::remove_file(&child_path)
+            };
+
+            match result {
+                Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+                other => other,
+            }
+        })?;
+
+    ignore_notfound(fs::remove_dir(path))
+}
+
+fn ignore_notfound<T>(result: io::Result<T>) -> io::Result<()> {
+    match result {
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
+        Ok(_) => Ok(()),
+        Err(err) => Err(err),
+    }
 }
 
 /// Computes the sha256 hash of the provided reader
