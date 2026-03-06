@@ -98,7 +98,7 @@ See [aerynos.dev](https://aerynos.dev/).
 
 ## 🧪 Experiment
 
-**NB:** Remember to use the `-D sosroot/` argument to specify a root directory, otherwise moss will happily
+**NB:** Remember to use the `-D aerynroot/` argument to specify a root directory, otherwise moss will happily
 eat your current operating system.
 
 
@@ -106,16 +106,16 @@ eat your current operating system.
 just get-started
 
 # create the sosroot/ directory
-mkdir -pv sosroot/
+mkdir -pv aerynroot/
 
-# Add the volatile repo
-moss -D sosroot/ repo add volatile https://packages.serpentos.com/volatile/x86_64/stone.index
+# Add the unstable repo
+moss -D aerynroot/ repo add unstable https://packages.aerynos.dev/unstable/x86_64/stone.index
 
 # List packages
-moss -D sosroot/ list available
+moss -D aerynroot/ list available
 
 # Install something
-moss -D sosroot/ install systemd bash libx11-32bit
+moss -D aerynroot/ install systemd bash libx11-32bit
 ```
 
 If you want to create systemd-nspawn roots or bootable VMs, please check out the [img-tests](https://github.com/aeryn-os/img-tests) repository.
