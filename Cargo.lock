@@ -1227,6 +1227,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "gitwrap"
+version = "0.26.1"
+dependencies = [
+ "thiserror",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "glob"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
