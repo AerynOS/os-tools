@@ -29,29 +29,29 @@ use super::Client;
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("blsforme: {0}")]
+    #[error("blsforme")]
     Blsforme(#[from] blsforme::Error),
 
     #[error("sd_boot")]
     SdBoot(#[from] systemd_boot::interface::Error),
 
-    #[error("layoutdb: {0}")]
+    #[error("layoutdb")]
     Client(#[from] db::layout::Error),
 
-    #[error("io: {0}")]
+    #[error("io")]
     IO(#[from] io::Error),
 
-    #[error("os_info: {0}")]
+    #[error("os_info")]
     OsInfo(#[from] os_info::Error),
 
-    #[error("os_release: {0}")]
+    #[error("os_release")]
     OsRelease(#[from] os_release::Error),
 
     /// fnmatch pattern compilation for boot, etc.
-    #[error("fnmatch pattern: {0}")]
+    #[error("fnmatch pattern")]
     Pattern(#[from] fnmatch::Error),
 
-    #[error("incomplete kernel tree: {0}")]
+    #[error("incomplete kernel tree")]
     IncompleteKernel(String),
 }
 
