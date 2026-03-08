@@ -340,6 +340,6 @@ pub enum Error {
     #[error("installation")]
     Installation(#[from] installation::Error),
 
-    #[error("I/O error: {0}")]
+    #[error("I/O error")]
     Io(#[from] io::Error),
 }
