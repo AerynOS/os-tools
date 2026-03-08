@@ -10,7 +10,7 @@ use std::{
 };
 
 use fs_err as fs;
-use moss::{request, runtime, util};
+use moss::{request, util};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 use tui::{ProgressBar, ProgressStyle};
@@ -48,19 +48,16 @@ impl Plain {
     pub async fn store(&self, storage_dir: &Path, pb: &ProgressBar) -> Result<StoredPlain, Error> {
         use fs_err::tokio as fs;
 
-        let path = self.stored_path(storage_dir);
-
-        if path.exists() {
-            return Ok(StoredPlain {
-                name: self.name().to_owned(),
-                path,
-                was_cached: true,
-            });
+        match self.stored(storage_dir) {
+            Ok(stored) => return Ok(stored),
+            Err(Error::Io(e)) if e.kind() == io::ErrorKind::NotFound => {}
+            Err(Error::HashMismatch { .. }) => {}
+            Err(err) => return Err(err),
         }
 
+        let path = self.stored_path(storage_dir);
         if let Some(parent) = path.parent() {
-            let parent = parent.to_owned();
-            runtime::unblock(move || util::ensure_dir_exists(&parent)).await?;
+            fs::create_dir_all(&parent).await?;
         }
 
         let hash = fetch(self.url.clone(), &path, pb).await?;
@@ -81,16 +78,27 @@ impl Plain {
         })
     }
 
-    pub fn remove(&self, storage_dir: &Path) -> Result<(), Error> {
-        let path = storage_dir.join(self.file_path());
+    /// Returns an already-stored archive.
+    pub fn stored(&self, storage_dir: &Path) -> Result<StoredPlain, Error> {
+        let path = self.stored_path(storage_dir);
 
-        fs::remove_file(&path)?;
-
-        if let Some(parent) = path.parent() {
-            util::remove_empty_dirs(parent, storage_dir)?;
+        let mut file = fs_err::File::open(&path)?;
+        let mut hasher = Sha256::new();
+        io::copy(&mut file, &mut hasher)?;
+        let hash = hex::encode(hasher.finalize());
+        if hash != self.hash.deref() {
+            return Err(Error::HashMismatch {
+                name: self.name().to_owned(),
+                expected: self.hash.to_string(),
+                got: Hash(hash),
+            });
         }
 
-        Ok(())
+        Ok(StoredPlain {
+            name: self.name().to_owned(),
+            path,
+            was_cached: true,
+        })
     }
 
     /// Returns a relative PathBuf where this archive should be stored
@@ -120,6 +128,55 @@ pub struct StoredPlain {
     pub name: String,
     pub path: PathBuf,
     pub was_cached: bool,
+}
+
+impl StoredPlain {
+    pub fn share(&self, dest_dir: &Path) -> Result<SharedPlain, Error> {
+        let target = dest_dir.join(self.name.clone());
+
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        // Attempt hard link.
+        let result = fs::hard_link(&self.path, &target);
+        if let Err(err) = &result
+            && err.kind() == io::ErrorKind::CrossesDevices
+        {
+            // Source and destination paths
+            // reside on different filesystems.
+            // Copy it instead.
+            fs::copy(&self.path, &target).map(|_| ())
+        } else {
+            result
+        }?;
+
+        Ok(SharedPlain { path: target })
+    }
+
+    pub fn remove(&self) -> Result<(), Error> {
+        fs::remove_file(&self.path)?;
+
+        let parents = self.path.parent().unwrap_or(Path::new("")).iter();
+        for parent in parents.rev() {
+            match fs::remove_dir(parent) {
+                Ok(_) => {}
+                Err(e) if e.kind() == io::ErrorKind::DirectoryNotEmpty => break,
+                Err(e) => return Err(Error::from(e)),
+            }
+        }
+
+        Ok(())
+    }
+}
+
+pub struct SharedPlain {
+    pub path: PathBuf,
+}
+
+impl SharedPlain {
+    pub fn remove(&self) -> Result<(), Error> {
+        fs::remove_file(&self.path).map_err(Error::from)
+    }
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
