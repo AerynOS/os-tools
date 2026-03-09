@@ -285,7 +285,13 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
             client.apply_ephemeral_blit(fstree, &client.installation.staging_dir(), system_model)?;
 
             // Remove the old archive state so the new blit can be archived
-            fs::remove_dir_all(client.installation.root_path(state.id.to_string()))?;
+            fs::remove_dir_all(client.installation.root_path(state.id.to_string())).or_else(|e| {
+                if e.kind() == io::ErrorKind::NotFound {
+                    Ok(())
+                } else {
+                    Err(e)
+                }
+            })?;
             client.archive_state(state.id)?;
         }
 
