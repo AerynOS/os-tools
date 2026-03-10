@@ -5,24 +5,20 @@
 use std::{io, path::Path, time::Duration};
 
 use crate::recipe::Recipe;
-use fs_err as fs;
+use elf::abi::SHT_MIPS_REGINFO;
 use futures_util::{StreamExt, TryStreamExt, stream};
 use moss::{runtime, util};
-use nix::unistd::{LinkatFlags, linkat};
 use stone_recipe::upstream::{self, SourceUri};
 use thiserror::Error;
 use tui::{MultiProgress, ProgressBar, ProgressStyle, Styled};
 
-use crate::{
-    Paths, Recipe,
-    upstream::{
-        git::{Git, StoredGit},
-        plain::{Plain, StoredPlain},
-    },
+use crate::upstream::{
+    git::{Git, SharedGit, StoredGit},
+    plain::{Plain, SharedPlain, StoredPlain},
 };
 
-pub mod git;
-pub mod plain;
+mod git;
+mod plain;
 
 #[derive(Debug, Clone)]
 pub enum Upstream {
@@ -31,18 +27,16 @@ pub enum Upstream {
 }
 
 impl Upstream {
-    pub fn from_recipe(upstream: upstream::Upstream, original_index: usize) -> Result<Self, Error> {
+    pub fn from_recipe(upstream: upstream::Upstream) -> Result<Self, Error> {
         match upstream.props {
             upstream::Props::Plain { hash, rename, .. } => Ok(Self::Plain(Plain {
                 url: upstream.url,
                 hash: hash.parse().map_err(plain::Error::from)?,
                 rename,
             })),
-            upstream::Props::Git { git_ref, staging } => Ok(Self::Git(Git {
-                uri: upstream.url,
+            upstream::Props::Git { git_ref, .. } => Ok(Self::Git(Git {
+                url: upstream.url,
                 ref_id: git_ref,
-                staging,
-                original_index,
             })),
         }
     }
@@ -68,17 +62,14 @@ impl Upstream {
         })
     }
 
-    fn remove(&self, storage_dir: &Path) -> Result<(), Error> {
-        match self {
-            Upstream::Plain(plain) => plain.remove(storage_dir)?,
-            Upstream::Git(git) => git.remove(&storage_dir.join("git"))?,
-        }
-
-        Ok(())
+    fn stored(&self, storage_dir: &Path) -> Result<Stored, Error> {
+        Ok(match self {
+            Upstream::Plain(plain) => Stored::Plain(plain.stored(storage_dir)?),
+            Upstream::Git(git) => Stored::Git(git.stored(&storage_dir.join("git"))?.0),
+        })
     }
 }
 
-#[derive(Clone)]
 pub(crate) enum Stored {
     Plain(StoredPlain),
     Git(StoredGit),
@@ -92,37 +83,44 @@ impl Stored {
         }
     }
 
-    fn share(&self, dest_dir: &Path) -> Result<(), Error> {
+    fn share(&self, dest_dir: &Path) -> Result<Shared, Error> {
+        Ok(match self {
+            Stored::Plain(plain) => Shared::Plain(plain.share(dest_dir)?),
+            Stored::Git(git) => Shared::Git(git.share(dest_dir)?),
+        })
+    }
+
+    fn remove(&self) -> Result<(), Error> {
         match self {
-            Stored::Plain(plain) => {
-                let target = dest_dir.join(plain.name.clone());
-
-                // Attempt hard link
-                let link_result = linkat(None, &plain.path, None, &target, LinkatFlags::NoSymlinkFollow);
-
-                // Copy instead
-                if link_result.is_err() {
-                    fs::copy(plain.path.clone(), &target)?;
-                }
-            }
-            Stored::Git(git) => {
-                let target = dest_dir.join(git.name.clone());
-                util::copy_dir(&git.path, &target)?;
-            }
+            Self::Plain(plain) => plain.remove()?,
+            Self::Git(git) => git.remove()?,
         }
-
         Ok(())
     }
 }
 
-pub fn parse(recipe: &Recipe) -> Result<Vec<Upstream>, Error> {
+pub enum Shared {
+    Plain(SharedPlain),
+    Git(SharedGit),
+}
+
+impl Shared {
+    pub fn remove(&self) -> Result<(), Error> {
+        match self {
+            Self::Plain(plain) => plain.remove()?,
+            Self::Git(git) => git.remove()?,
+        };
+        Ok(())
+    }
+}
+
+pub fn parse_recipe(recipe: &Recipe) -> Result<Vec<Upstream>, Error> {
     recipe
         .parsed
         .upstreams
         .iter()
         .cloned()
-        .enumerate()
-        .map(|(index, upstream)| Upstream::from_recipe(upstream, index))
+        .map(Upstream::from_recipe)
         .collect()
 }
 
@@ -142,9 +140,7 @@ pub fn sync(recipe: &Recipe, storage_dir: &Path, share_dir: &Path, upstreams: &[
     );
     tp.tick();
 
-    util::ensure_dir_exists(share_dir)?;
-
-    let installed_upstreams = runtime::block_on(
+    runtime::block_on(
         stream::iter(upstreams)
             .map(|upstream| async {
                 let pb = mp.insert_before(
@@ -157,7 +153,7 @@ pub fn sync(recipe: &Recipe, storage_dir: &Path, share_dir: &Path, upstreams: &[
                 );
                 pb.enable_steady_tick(Duration::from_millis(150));
 
-                let install = upstream.store(storage_dir, &pb).await?;
+                let stored = upstream.store(storage_dir, &pb).await?;
 
                 pb.set_message(format!("{} {}", "Copying".yellow(), upstream.name().bold()));
                 pb.set_style(
@@ -166,14 +162,9 @@ pub fn sync(recipe: &Recipe, storage_dir: &Path, share_dir: &Path, upstreams: &[
                         .tick_chars("--=≡■≡=--"),
                 );
 
-                runtime::unblock({
-                    let install = install.clone();
-                    let dir = share_dir.to_owned();
-                    move || install.share(&dir)
-                })
-                .await?;
+                stored.share(share_dir)?;
 
-                let cached_tag = install
+                let cached_tag = stored
                     .was_cached()
                     .then_some(format!("{}", " (cached)".dim()))
                     .unwrap_or_default();
@@ -183,19 +174,11 @@ pub fn sync(recipe: &Recipe, storage_dir: &Path, share_dir: &Path, upstreams: &[
                 mp.suspend(|| println!("{} {}{cached_tag}", "Shared".green(), upstream.name().bold()));
                 tp.inc(1);
 
-                Ok(install) as Result<_, Error>
+                Ok(stored) as Result<_, Error>
             })
             .buffer_unordered(moss::environment::MAX_NETWORK_CONCURRENCY)
             .try_collect::<Vec<_>>(),
     )?;
-
-    if let Some(updated_yaml) = git::update_git_upstream_refs(&recipe.source, &installed_upstreams)? {
-        fs::write(&recipe.path, updated_yaml)?;
-        println!(
-            "{} | Git references resolved to commit hashes and saved to stone.yaml. This ensures reproducible builds since tags and branches can move over time.",
-            "Warning".yellow()
-        );
-    }
 
     mp.clear()?;
     println!();
@@ -205,9 +188,9 @@ pub fn sync(recipe: &Recipe, storage_dir: &Path, share_dir: &Path, upstreams: &[
 
 pub fn remove(storage_dir: &Path, upstreams: &[Upstream]) -> Result<(), Error> {
     for upstream in upstreams {
-        upstream.remove(storage_dir)?;
+        let stored = upstream.stored(storage_dir)?;
+        stored.remove()?;
     }
-
     Ok(())
 }
 
@@ -215,11 +198,6 @@ pub fn remove(storage_dir: &Path, upstreams: &[Upstream]) -> Result<(), Error> {
 pub enum Error {
     #[error("git")]
     Git(#[from] git::Error),
-    // FIXME: this error comes from a module that
-    // used to live on its own. Now it's merged into this one,
-    // thus there is no need for duplicated error types.
-    #[error("git")]
-    GitOperation(#[from] git::GitError),
     #[error("io")]
     Io(#[from] io::Error),
     #[error("plain")]

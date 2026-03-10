@@ -5,7 +5,6 @@
 use std::{
     io,
     path::{Path, PathBuf},
-    string,
 };
 
 use fs_err as fs;
@@ -186,14 +185,4 @@ fn progress_bar_style() -> ProgressStyle {
     ProgressStyle::with_template(" {spinner} {msg}/s ")
         .unwrap()
         .tick_chars("--=≡■≡=--")
-}
-
-#[derive(Debug, Error)]
-pub enum GitError {
-    #[error("ref '{ref_id}' did not resolve to a valid commit hash for {uri}")]
-    UnresolvedRef { ref_id: String, uri: Url },
-    #[error(transparent)]
-    Io(#[from] io::Error),
-    #[error(transparent)]
-    Utf8(#[from] string::FromUtf8Error),
 }
