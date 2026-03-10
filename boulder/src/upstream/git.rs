@@ -5,7 +5,6 @@
 use std::{
     io,
     path::{Path, PathBuf},
-    string,
 };
 
 use fs_err as fs;
@@ -174,14 +173,4 @@ fn set_progress_bar_style(pb: &ProgressBar) -> impl Fn(gitwrap::FetchProgress) {
         pb.set_position(prog.percent as u64);
         pb.set_message(format!("{}", HumanBytes(prog.speed)));
     }
-}
-
-#[derive(Debug, Error)]
-pub enum GitError {
-    #[error("ref '{ref_id}' did not resolve to a valid commit hash for {uri}")]
-    UnresolvedRef { ref_id: String, uri: Url },
-    #[error(transparent)]
-    Io(#[from] io::Error),
-    #[error(transparent)]
-    Utf8(#[from] string::FromUtf8Error),
 }
