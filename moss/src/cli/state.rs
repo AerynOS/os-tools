@@ -61,7 +61,7 @@ pub fn command() -> Command {
         .subcommand(
             Command::new("remove")
                 .about("Remove archived state(s)")
-                .arg(arg!(<ID> ... "State id(s) to be removed").value_parser(clap::value_parser!(u64))),
+                .arg(arg!(<ID> ... "State id(s) to be removed").value_parser(clap::value_parser!(String))),
         )
         .subcommand(
             Command::new("verify")
@@ -101,6 +101,21 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         Some(("verify", args)) => verify(args, installation),
         Some(("export", args)) => export(args, installation),
         _ => unreachable!(),
+    }
+}
+
+pub fn parse_id_or_range(s: &str) -> Result<Vec<u64>, String> {
+    if let Some((start, end)) = s.split_once('-') {
+        let start = start.parse::<u64>().map_err(|_| "invalid start")?;
+        let end = end.parse::<u64>().map_err(|_| "invalid end")?;
+
+        if start > end {
+            return Err("range start must be <= end".into());
+        }
+
+        Ok((start..=end).collect())
+    } else {
+        Ok(vec![s.parse().map_err(|_| "invalid number")?])
     }
 }
 
@@ -181,11 +196,15 @@ pub fn prune(args: &ArgMatches, installation: Installation) -> Result<(), Error>
 
 pub fn remove(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
     let ids = args
-        .get_many::<u64>("ID")
+        .get_many::<String>("ID")
         .into_iter()
         .flatten()
-        .map(|id| *id as i32)
-        .map(Into::into)
+        .map(|s| parse_id_or_range(s))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(Error::InvalidRange)?
+        .into_iter()
+        .flatten()
+        .map(|id| state::Id::from(id as i32))
         .collect::<Vec<state::Id>>();
 
     let yes = args.get_flag("yes");
@@ -342,4 +361,6 @@ pub enum Error {
     Io(#[from] io::Error),
     #[error("no active state")]
     NoActiveState,
+    #[error("invalid state id or range: {0}")]
+    InvalidRange(String),
 }
