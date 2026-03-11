@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024 AerynOS Developers
+// SPDX-License-Identifier: MPL-2.0
+
 use std::io::stdout;
 
 use crossterm::{style::Stylize, tty::IsTty};

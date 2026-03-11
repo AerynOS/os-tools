@@ -1,3 +1,8 @@
+---
+# SPDX-FileCopyrightText: 2025 AerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
+---
+
 # How AerynOS delivers software to OS installs
 
 ## Software package metadata: manifest.*.bin
@@ -10,7 +15,7 @@ The `manifest.${ARCH}.bin` files contain all the metadata needed by the AerynOS 
     > and the stone archive type flag is set to buildmanifest
     > sneaksy
     > (in fact, our repo format is also just a set of meta payloads in a stone file..)
-    > but its also strongly typed, fixed headers, version agnostic header unpack and compressed with zstd with CRC checks 
+    > but its also strongly typed, fixed headers, version agnostic header unpack and compressed with zstd with CRC checks
     > soo. a little less weak than sounding
     > crc is actually xxh64 iirc
 
@@ -22,7 +27,7 @@ AerynOS distributes software via its custom `stone` format. This format was expl
     > Context: we dont mix layout + metadata (unlike in alpine, where tar records are used for metadata)
     > in fact we explicitly separate them
     > so a "normal" stone file has a meta payload with strongly typed/tagged key value pairs/sets
-    > a content payload which is every unique file concatenated into a "megablob" and compressed singly 
+    > a content payload which is every unique file concatenated into a "megablob" and compressed singly
     > an index payload which is a jump table into offsets in the unpacked content payload
     > to allow the xxhash128 keying
     > ie "position one is hash xyz"

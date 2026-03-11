@@ -1,3 +1,8 @@
+---
+# SPDX-FileCopyrightText: 2025 AerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
+---
+
 # Moss vs. filesystem speed
 
 - i7-6700K@4.6GHz

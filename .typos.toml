@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2024 AerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
+
 [default]
 
 [default.extend-words]
@@ -7,6 +10,4 @@ restat = "restat"
 idae = "idae"
 
 [files]
-extend-exclude = [
-    "serpent-style/**/*"
-]
+extend-exclude = ["serpent-style/**/*"]

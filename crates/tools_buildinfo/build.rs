@@ -1,3 +1,6 @@
+// SPDX-FileCopyrightText: 2024 AerynOS Developers
+// SPDX-License-Identifier: MPL-2.0
+
 // build.rs
 use std::os::unix::ffi::OsStringExt;
 
