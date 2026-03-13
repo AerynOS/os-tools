@@ -100,6 +100,7 @@ impl Git {
             });
         }
 
+        // clean up the dirs we are about to create if they already exist
         let _ = fs::remove_dir_all(&clone_path).await;
         if self.staging {
             let _ = fs::remove_dir_all(&final_path).await;
@@ -193,7 +194,10 @@ impl Git {
 
     pub fn remove(&self, paths: &Paths) -> Result<(), Error> {
         for path in [self.staging_path(paths), self.final_path(paths)] {
-            fs::remove_dir_all(&path)?;
+            // only attempt to remove path if it actually exists on the fs
+            if path.exists() {
+                fs::remove_dir_all(&path)?;
+            }
 
             if let Some(parent) = path.parent() {
                 util::remove_empty_dirs(parent, &paths.upstreams().host)?;
