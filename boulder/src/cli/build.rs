@@ -11,6 +11,7 @@ use boulder::package::Packager;
 use boulder::{Env, Timing, container, package, profile, timing};
 use chrono::Local;
 use clap::Parser;
+use moss::runtime;
 use moss::signal::inhibit;
 use thiserror::Error;
 use thread_priority::{NormalThreadSchedulePolicy, ThreadPriority, ThreadSchedulePolicy, thread_native_id};
@@ -103,7 +104,7 @@ pub fn handle(command: Command, env: Env) -> Result<(), Error> {
     );
     println!("boulder {}", tools_buildinfo::get_simple_version());
     println!("└─ building {pkg_name}-{build_release}\n");
-    builder.setup(&mut timing, timer, update)?;
+    let shared = builder.setup(&mut timing, timer, update)?;
 
     let paths = &builder.paths;
     let networking = builder.recipe.parsed.options.networking;
@@ -146,9 +147,20 @@ pub fn handle(command: Command, env: Env) -> Result<(), Error> {
     // Copy artefacts to host recipe dir
     package::sync_artefacts(paths).map_err(Error::SyncArtefacts)?;
 
-    if cleanup {
-        builder.cleanup().map_err(Error::Cleanup)?;
-    }
+    runtime::block_on(async {
+        // Unconditionally clean up shared sources...
+        for share in shared {
+            share
+                .remove()
+                .await
+                .map_err(|e| Error::Cleanup(build::Error::from(e)))?;
+        }
+        // ...but only delete stored sources upon request.
+        if cleanup {
+            builder.cleanup().await.map_err(Error::Cleanup)?;
+        }
+        Ok::<(), Error>(())
+    })?;
 
     println!(
         "Build finished successfully at {}",
