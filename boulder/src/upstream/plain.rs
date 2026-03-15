@@ -69,8 +69,6 @@ impl Plain {
     }
 
     async fn fetch(url: &Url, dest_file: &Path, pb: &ProgressBar) -> Result<Hash, Error> {
-        use fs_err::tokio::File;
-
         pb.set_style(
             ProgressStyle::with_template(" {spinner} {wide_msg} {binary_bytes_per_sec:>.dim} ")
                 .unwrap()

@@ -56,7 +56,7 @@ pub async fn download_with_progress(url: Url, to: &Path, on_progress: impl Fn(Pr
 }
 
 /// Downloads a file to the provided path, invokes `on_progress` after each
-/// chunk is downloaded and retuns its sha256 hash
+/// chunk is downloaded and returns its sha256 hash
 pub async fn download_with_progress_and_sha256(
     url: Url,
     to: &Path,
