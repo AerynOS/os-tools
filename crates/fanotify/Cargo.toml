@@ -1,0 +1,13 @@
+[package]
+name = "fanotify"
+description = "file-write and symlink tracker using fanotify"
+edition.workspace = true
+version.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+# Pin to carlvoller's PR #2552 branch
+nix = { git = "https://github.com/carlvoller/nix.git", rev = "8be3098ab6a7de81231d05146d952ebe24ac687f", features = ["fanotify", "fs"] }
+libc.workspace = true
+fs-err.workspace = true
+snafu.workspace = true
