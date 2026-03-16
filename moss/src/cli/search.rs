@@ -72,13 +72,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
 }
 
 fn search_packages(client: Client, flags: package::Flags, keyword: &str) -> Vec<Output> {
-    client
-        .search_packages(keyword, flags)
-        .map(|pkg| Output {
-            name: pkg.meta.name,
-            summary: pkg.meta.summary,
-        })
-        .collect()
+    client.search_packages(keyword, flags).map(Output::from).collect()
 }
 
 fn search_providing_packages(client: Client, flags: package::Flags, name: &str) -> Vec<Output> {
@@ -93,10 +87,7 @@ fn search_providing_packages(client: Client, flags: package::Flags, name: &str) 
             };
             client.lookup_packages_by_provider(&provider, flags)
         })
-        .map(|pkg| Output {
-            name: pkg.meta.name,
-            summary: pkg.meta.summary,
-        })
+        .map(Output::from)
         .collect()
 }
 
@@ -124,5 +115,14 @@ impl ColumnDisplay for Output {
             " ".repeat(width),
             self.summary
         );
+    }
+}
+
+impl From<package::Package> for Output {
+    fn from(pkg: package::Package) -> Self {
+        Output {
+            name: pkg.meta.name,
+            summary: pkg.meta.summary,
+        }
     }
 }
