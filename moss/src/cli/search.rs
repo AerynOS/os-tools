@@ -91,11 +91,20 @@ fn search_providing_packages_by_kind(
 fn search_providing_packages(client: Client, flags: package::Flags, name: &str) -> Vec<Output> {
     // We need to search both Binary and SystemBinary for possible programs
     // TODO: Could include shared libraries down the line, maybe with a flag
-    [dependency::Kind::Binary, dependency::Kind::SystemBinary]
-        .into_iter()
-        .flat_map(|kind| search_providing_packages_by_kind(&client, flags, name, kind))
-        .map(Output::from)
-        .collect()
+    if name.contains('(') {
+        let provider = Provider::from_name(name).expect("Invalid provider format");
+        client
+            .lookup_packages_by_provider(&provider, flags)
+            .into_iter()
+            .map(Output::from)
+            .collect()
+    } else {
+        [dependency::Kind::Binary, dependency::Kind::SystemBinary]
+            .into_iter()
+            .flat_map(|kind| search_providing_packages_by_kind(&client, flags, name, kind))
+            .map(Output::from)
+            .collect()
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
