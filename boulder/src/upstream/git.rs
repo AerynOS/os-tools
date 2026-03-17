@@ -13,35 +13,47 @@ use thiserror::Error;
 use tui::{ProgressBar, ProgressStyle};
 use url::Url;
 
+/// Upstream based on a Git repository.
 #[derive(Clone, Debug)]
 pub struct Git {
+    /// URL of origin.
     pub url: Url,
-    pub ref_id: String,
+    /// Hash of the commit to be considered as source.
+    pub commit: String,
 }
 
 impl Git {
+    /// Fetches a new Git upstream into a destination directory.
+    /// A local URL (i.e. starting with `file://`) is allowed; in that case
+    /// the Git repository is copied.
     pub async fn fetch_new(url: &Url, container_dir: &Path) -> Result<Self, Error> {
         Self::fetch_new_progress(url, container_dir, &ProgressBar::hidden()).await
     }
 
+    /// Fetches a new Git upstream into a destination directory.
+    /// It is identical to [Self::fetch_new], but accepts a progress bar
+    /// for progress reporting.
     pub async fn fetch_new_progress(_url: &Url, _dest_dir: &Path, _pb: &ProgressBar) -> Result<Self, Error> {
         todo!()
     }
 
+    /// Returns the name of the upstream. It is implied from the URL.
     pub fn name(&self) -> &str {
         util::uri_file_name(&self.url)
     }
 
+    /// Stores the upstream into the storage directory.
+    /// If the upstream was already stored but does not include [Self::commit],
+    /// it is updated contextually. If it does not exist, the Git repository is cloned.
     pub async fn store(&self, storage_dir: &Path, pb: &ProgressBar) -> Result<StoredGit, Error> {
         let dir = storage_dir.join(self.directory_name());
 
         let mut cached = true;
         let repo = match gitwrap::Repository::open_bare(&dir).await {
             Ok(repo) => {
-                if !repo.has_commit(&self.ref_id).await? {
+                if !repo.has_commit(&self.commit).await? {
                     fetch(&repo, pb).await?;
                     cached = false;
-        // clean up the dirs we are about to create if they already exist
                 }
                 repo
             }
@@ -55,21 +67,26 @@ impl Git {
             name: self.name().to_owned(),
             was_cached: cached,
             repo,
-            commit: self.ref_id.to_owned(),
+            commit: self.commit.to_owned(),
         })
     }
 
+    /// Returns the stored upstream if it exists.
+    ///
+    /// If successful, a tuple is returned containing the
+    /// stored upstream and a boolean flag, indicating whether
+    /// the stored Git repository contains [Self::commit].
     pub async fn stored(&self, storage_dir: &Path) -> Result<(StoredGit, bool), Error> {
         let dir = storage_dir.join(self.directory_name());
 
         let repo = gitwrap::Repository::open_bare(&dir).await?;
-        let has_ref = repo.has_commit(&self.ref_id).await?;
+        let has_ref = repo.has_commit(&self.commit).await?;
         Ok((
             StoredGit {
                 name: self.name().to_owned(),
                 was_cached: has_ref,
                 repo,
-                commit: self.ref_id.to_owned(),
+                commit: self.commit.to_owned(),
             },
             has_ref,
         ))
@@ -99,14 +116,23 @@ impl Git {
     }
 }
 
+/// Information available after [Git] is stored on disk.
 pub struct StoredGit {
+    /// Name of the upstream, as returned by [Git::name].
     pub name: String,
+    /// Whether the stored Git repository was
+    /// synchronized with [Git],
+    /// that is, it existed and contained [Git::commit].
     pub was_cached: bool,
     repo: gitwrap::Repository,
     commit: String,
 }
 
 impl StoredGit {
+    /// Shares the Git repository in preparation of a build.
+    ///
+    /// This function tries to be as efficient as possible in terms
+    /// of actual bytes written/copied from the original Git repository.
     pub async fn share(&self, dest_dir: &Path) -> Result<SharedGit, Error> {
         if let Some(parent) = dest_dir.parent() {
             fs::create_dir_all(parent)?;
@@ -114,6 +140,9 @@ impl StoredGit {
         Ok(SharedGit(self.repo.add_worktree(dest_dir, &self.commit).await?))
     }
 
+    /// Removes the stored Git repository.
+    /// Should the stored repository no longer exist,
+    /// this function returns successfully (it is idempotent).
     pub fn remove(&self) -> Result<(), Error> {
         let result = fs::remove_dir_all(self.repo.path());
         if let Err(err) = result
@@ -125,18 +154,26 @@ impl StoredGit {
     }
 }
 
+/// A shared Git repository is a copy of a stored Git
+/// in a location useful for a build.
 pub struct SharedGit(gitwrap::Worktree);
 
 impl SharedGit {
+    /// Removes the shared Git repository.
+    /// Should the shared repository no longer exist,
+    /// this function returns successfully (it is idempotent).
     pub async fn remove(&self) -> Result<(), Error> {
         self.0.remove().await.map_err(Error::from)
     }
 }
 
+/// Possible errors returned by functions in this module.
 #[derive(Debug, Error)]
 pub enum Error {
+    /// An error occured while handling a Git repository.
     #[error("{0}")]
     Git(#[from] gitwrap::Error),
+    /// A generic I/O error occured.
     #[error("{0}")]
     Io(#[from] io::Error),
 }
