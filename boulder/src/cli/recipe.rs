@@ -13,6 +13,7 @@ use boulder::{
     macros, recipe,
 };
 use clap::Parser;
+use ent_core::{data::updates::get_latest_version, recipes::ParserRegistration};
 use fs_err::{self as fs};
 use futures_util::StreamExt;
 use itertools::Itertools;
@@ -26,6 +27,7 @@ use tui::{
     MultiProgress, ProgressBar, ProgressStyle, Styled,
     pretty::{self, ColumnDisplay},
 };
+use upstreams_rs::versioning::VersionExtractor;
 use url::Url;
 
 #[derive(Debug, Parser)]
@@ -37,6 +39,16 @@ pub struct Command {
 
 #[derive(Debug, clap::Subcommand)]
 pub enum Subcommand {
+    #[command(about = "Auto-update a recipe file to the latest upstream version")]
+    Autoupdate {
+        #[arg(
+            short,
+            long,
+            default_value = "./stone.yaml",
+            help = "Location of the recipe file to update"
+        )]
+        recipe: PathBuf,
+    },
     #[command(about = "Bump a recipe's release")]
     Bump {
         #[arg(
@@ -116,6 +128,7 @@ fn parse_updated_source(s: &str) -> Result<UpdatedSource, String> {
 
 pub fn handle(command: Command, env: Env) -> Result<(), Error> {
     match command.subcommand {
+        Subcommand::Autoupdate { recipe } => autoupdate(env, recipe),
         Subcommand::Bump { recipe, release } => bump(recipe, release),
         Subcommand::New { output, upstreams } => new(env, output, upstreams),
         Subcommand::Update {
@@ -127,6 +140,105 @@ pub fn handle(command: Command, env: Env) -> Result<(), Error> {
         } => update(env, recipe, overwrite, version, upstreams, no_bump),
         Subcommand::Macros { _macro } => macros(_macro, env),
     }
+}
+
+fn autoupdate(env: Env, recipe: PathBuf) -> Result<(), Error> {
+    let path = recipe::resolve_path(&recipe).map_err(Error::ResolvePath)?;
+    let input = fs::read_to_string(path).map_err(Error::Read)?;
+
+    let parsed_recipe: recipe::Parsed = serde_yaml::from_str(&input)?;
+
+    // Setup ent parser
+    // TODO: Can we avoid the inventory dep and parse the stone directly?
+    let registration = inventory::iter::<ParserRegistration>
+        .into_iter()
+        .find(|p| p.name == "stone_recipe")
+        .expect("Stone parser registration missing");
+    let ent_parser = (registration.parser)();
+
+    // Parse our recipe with ent
+    let ent_parsed = ent_parser.parse(recipe.as_path())?;
+
+    if let Some(m) = ent_parsed.monitoring {
+        // Call the release-monitoring.org API using the ID found in monitoring.yaml
+        let response = runtime::block_on(get_latest_version(m.project_id))?;
+
+        let current_version = parsed_recipe.source.version;
+
+        let newest = response
+            .stable_versions
+            .first()
+            .cloned()
+            .unwrap_or_else(|| response.latest_version.unwrap_or_default());
+
+        println!("Newest version found: {newest}, current version: {current_version}");
+
+        if newest == current_version {
+            println!("Already up-to-date!");
+            return Ok(());
+        }
+
+        // Only parse the first upstream source for now...
+        let (first_upstream, _) = parsed_recipe
+            .upstreams
+            .split_first()
+            .expect("sources must not be empty");
+
+        let new_url = guess_new_url(newest.as_str(), first_upstream.url.as_str())?;
+
+        let updated_source = parse_updated_source(new_url.as_str()).unwrap();
+
+        update(env, Some(recipe), true, newest, vec![updated_source], false)?;
+    };
+
+    Ok(())
+}
+
+fn guess_new_url(new_version: &str, current_url: &str) -> Result<String, Error> {
+    let upstreams_parser = VersionExtractor::new()?;
+    let parsed_upstream = upstreams_parser.extract(current_url)?;
+    println!(
+        "Parsed URI: name = {}, version = {}, sub-version = {:?}",
+        parsed_upstream.name, parsed_upstream.version, parsed_upstream.sub_version
+    );
+
+    let current_version = &parsed_upstream.version;
+
+    let new_sub_version = parsed_upstream
+        .sub_version
+        .as_deref()
+        .map(|sv| (sv, derive_sub_version(sv, new_version)));
+
+    Ok(current_url
+        .split('/')
+        .map(|segment| {
+            if let Some((old_sub, ref new_sub)) = new_sub_version
+                && segment == old_sub
+            {
+                return new_sub.clone();
+            }
+            if segment.contains(current_version.as_str()) {
+                segment.replace(current_version.as_str(), new_version)
+            } else {
+                segment.to_owned()
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("/"))
+}
+
+fn derive_sub_version(old_sub_version: &str, new_version: &str) -> String {
+    let (prefix, stripped) = if let Some(stripped) = old_sub_version.strip_prefix('v') {
+        ("v", stripped)
+    } else {
+        ("", old_sub_version)
+    };
+
+    let segment_count = stripped.split('.').count();
+
+    let new_sub = new_version.split('.').take(segment_count).collect::<Vec<_>>().join(".");
+
+    format!("{prefix}{new_sub}")
 }
 
 fn bump(recipe: PathBuf, release: Option<u64>) -> Result<(), Error> {
@@ -466,4 +578,10 @@ pub enum Error {
     Utf8(#[from] std::string::FromUtf8Error),
     #[error("draft")]
     Draft(#[from] draft::Error),
+    #[error("statuscode")]
+    StatusCode(#[from] reqwest::Error),
+    #[error("upstreams-rs")]
+    Upstreams(#[from] upstreams_rs::versioning::VersionError),
+    #[error("ent recipe parse failure")]
+    Ent(#[from] ent_core::recipes::RecipeError),
 }

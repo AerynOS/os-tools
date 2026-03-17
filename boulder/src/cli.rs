@@ -133,6 +133,7 @@ pub fn process() -> Result<(), Error> {
 
 fn replace_aliases(args: std::env::Args) -> Vec<String> {
     const ALIASES: &[(&str, &[&str])] = &[
+        ("autoup", &["recipe", "autoupdate"]),
         ("bump", &["recipe", "bump"]),
         ("new", &["recipe", "new"]),
         ("macros", &["recipe", "macros"]),

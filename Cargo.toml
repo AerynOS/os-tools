@@ -33,11 +33,13 @@ diesel = { version = "2.2.1", features = [
 diesel_migrations = "2.2.0"
 dirs = "6.0.0"
 elf = "0.8.0"
+ent_core = { git = "https://github.com/AerynOS/ent.git", rev = "cd6ba4720ba31e6c3887f07c591d0f08ffefb398" }
+upstreams-rs = { git = "https://github.com/joebonrichie/upstreams-rs.git", rev = "9be517c0991fd751b8e8bb79ec6a00a5663bd719" }
 indicatif = "0.18.0"
 itertools = "0.14.0"
 filetime = "0.2.24"
 fs-err = { version = "3.3.0", features = ["tokio"] }
-
+inventory = "0.3.15"
 futures-util = "0.3.31"
 glob = "0.3.1"
 hex = "0.4.3"

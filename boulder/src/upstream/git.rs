@@ -29,7 +29,7 @@ impl Git {
         Self::fetch_new_progress(url, dest_dir, &ProgressBar::hidden()).await
     }
 
-    pub async fn fetch_new_progress(url: &Url, dest_dir: &Path, pb: &ProgressBar) -> Result<Self, Error> {
+    pub async fn fetch_new_progress(_url: &Url, _dest_dir: &Path, _pb: &ProgressBar) -> Result<Self, Error> {
         todo!()
     }
 

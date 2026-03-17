@@ -49,6 +49,9 @@ walkdir = "2.5.0"
 zstd.workspace = true
 astr.workspace = true
 tempfile.workspace = true
+ent_core.workspace = true
+upstreams-rs.workspace = true
+inventory.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
