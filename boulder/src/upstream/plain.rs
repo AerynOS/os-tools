@@ -16,18 +16,29 @@ use thiserror::Error;
 use tui::{ProgressBar, ProgressStyle};
 use url::Url;
 
+/// Upstream based on an archive (typically a tarball).
 #[derive(Debug, Clone)]
 pub struct Plain {
+    /// URL from where the source archive is fetched.
     pub url: Url,
+    /// SHA256 hash of the archive.
     pub hash: Hash,
+    /// Name of the upstream when stored in the storage
+    /// directory. If None, a default name is implied from [Self::url].
     pub rename: Option<String>,
 }
 
 impl Plain {
+    /// Fetches a new source archive into a destination file path.
+    /// A local URL (i.e. starting with `file://`) is allowed; in that case
+    /// the source archived is copied.
     pub async fn fetch_new(url: Url, dest_file: &Path) -> Result<Self, Error> {
         Self::fetch_new_progress(url, dest_file, &ProgressBar::hidden()).await
     }
 
+    /// Fetches a new source archive into a destination file path.
+    /// It is identical to [Self::fetch_new], but accepts a progress bar
+    /// for progress reporting.
     pub async fn fetch_new_progress(url: Url, dest_file: &Path, pb: &ProgressBar) -> Result<Self, Error> {
         let hash = fetch(url.clone(), dest_file, pb).await?;
         Ok(Self {
@@ -37,6 +48,8 @@ impl Plain {
         })
     }
 
+    /// Returns the name of the source archive.
+    /// If [Self::rename] is not defined, it is implied from the URL.
     pub fn name(&self) -> &str {
         if let Some(name) = &self.rename {
             name
@@ -45,6 +58,11 @@ impl Plain {
         }
     }
 
+    /// Stores the source archive into the storage directory.
+    ///
+    /// If the upstream was already stored and [Self::hash] matches,
+    /// no write operation takes place. If the source archive was
+    /// not stored or the hash does not match, it is overwritten.
     pub async fn store(&self, storage_dir: &Path, pb: &ProgressBar) -> Result<StoredPlain, Error> {
         use fs_err::tokio as fs;
 
@@ -78,7 +96,10 @@ impl Plain {
         })
     }
 
-    /// Returns an already-stored archive.
+    /// Returns an already-stored source archive.
+    /// An error is instead returned if the source archive is
+    /// not found in the storage directory, or its hash doesn't match
+    /// [Self::hash].
     pub fn stored(&self, storage_dir: &Path) -> Result<StoredPlain, Error> {
         let path = self.stored_path(storage_dir);
 
@@ -101,16 +122,16 @@ impl Plain {
         })
     }
 
-    /// Returns a relative PathBuf where this archive should be stored
-    /// within the recipe storage.
+    /// Returns a relative PathBuf where this source archive
+    /// should be stored within the storage directory.
     pub fn stored_path(&self, storage_dir: &Path) -> PathBuf {
         [storage_dir, &self.file_path()].iter().collect()
     }
 
-    /// Returns a relative PathBuf based on the hash of the archive's URL
-    /// and the archive's very hash.
+    /// Returns a relative PathBuf based on the hashes of [Self::url]
+    /// and [Self::hash].
     ///
-    /// Hashing this data ensures the path is unique and becomes invalid
+    /// Hashing both ensures the path is unique and becomes invalid
     /// as soon as either the URL or the hash changes.
     fn file_path(&self) -> PathBuf {
         let mut hasher = Sha256::new();
@@ -123,14 +144,22 @@ impl Plain {
     }
 }
 
+/// Information available after [Plain] is stored on disk.
 #[derive(Clone)]
 pub struct StoredPlain {
+    /// Name of the upstream, as returned by [Plain::name].
     pub name: String,
+    /// Path of the source archive after it was stored.
     pub path: PathBuf,
+    /// Whether the source archived was already stored with valid hash.
     pub was_cached: bool,
 }
 
 impl StoredPlain {
+    /// Shares the Git repository in preparation of a build.
+    ///
+    /// This function tries to be as efficient as possible in terms
+    /// of actual bytes copied: a hard link is created if possible.
     pub fn share(&self, dest_dir: &Path) -> Result<SharedPlain, Error> {
         let target = dest_dir.join(self.name.clone());
 
@@ -153,6 +182,9 @@ impl StoredPlain {
         Ok(SharedPlain { path: target })
     }
 
+    /// Removes the stored source archive.
+    /// Should the archive no longer exist,
+    /// this function returns successfully (it is idempotent).
     pub fn remove(&self) -> Result<(), Error> {
         fs::remove_file(&self.path)?;
 
@@ -169,16 +201,24 @@ impl StoredPlain {
     }
 }
 
+/// A shared source archive is a copy of a stored source archive
+/// in a location useful for a build.
 pub struct SharedPlain {
+    /// Path of the source archive after it was shared.
     pub path: PathBuf,
 }
 
 impl SharedPlain {
+    /// Removes the shared source archive.
+    /// Should the archive no longer exist,
+    /// this function returns successfully (it is idempotent).
     pub fn remove(&self) -> Result<(), Error> {
         fs::remove_file(&self.path).map_err(Error::from)
     }
 }
 
+/// Thin wrapper around String that represents a
+/// hexadecimal SHA256 hash.
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Hash(String);
 
@@ -213,21 +253,27 @@ impl Deref for Hash {
     }
 }
 
+/// Reasons why [Hash] may be invalid.
 #[derive(Debug, Error)]
 pub enum ParseHashError {
     #[error("hash too short: {0}")]
     TooShort(String),
 }
 
+/// Possible errors returned by functions in this module.
 #[derive(Debug, Error)]
 pub enum Error {
+    /// [Hash] is malformed.
     #[error("parse hash")]
     ParseHash(#[from] ParseHashError),
+    /// Two hashes did not match.
     #[error("hash mismatch for {name}, expected {expected:?} got {:?}", got.0)]
     HashMismatch { name: String, expected: String, got: Hash },
     #[error("request")]
+    /// A local or remote fetch failed.
     Request(#[from] request::Error),
     #[error("io")]
+    /// A generic I/O error occured.
     Io(#[from] io::Error),
 }
 
