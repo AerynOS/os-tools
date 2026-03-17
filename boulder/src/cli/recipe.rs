@@ -24,6 +24,7 @@ use tui::{
     pretty::{self, ColumnDisplay},
 };
 use url::Url;
+use version_parse::VersionExtractor;
 
 #[derive(Debug, Parser)]
 #[command(about = "Utilities to create and manipulate stone recipe files")]
@@ -60,8 +61,8 @@ pub enum Subcommand {
     },
     #[command(about = "Update a recipe file")]
     Update {
-        #[arg(id = "recipe_version", long = "ver", required = true, help = "Update version")]
-        version: String,
+        #[arg(id = "recipe_version", long = "ver", required = false, help = "Update version")]
+        version: Option<String>,
         #[arg(
             short = 'u',
             long = "upstream",
@@ -175,7 +176,7 @@ fn update(
     env: Env,
     recipe: Option<PathBuf>,
     overwrite: bool,
-    version: String,
+    version: Option<String>,
     sources: Vec<UpdatedSource>,
     no_bump: bool,
 ) -> Result<(), Error> {
@@ -197,6 +198,22 @@ fn update(
     let parsed: recipe::Parsed = serde_yaml::from_str(&input)?;
     // Value allows us to access map keys in their original form
     let value: serde_yaml::Value = serde_yaml::from_str(&input)?;
+
+    // If version isn't specified guess it from parsing the first upstream url
+    let version = if let Some(v) = version {
+        v
+    } else {
+        let (first_upstream, _) = sources.split_first().expect("sources must not be empty");
+        let ver_ext = VersionExtractor::new();
+        match first_upstream {
+            UpdatedSource::Git(_) => return Err(Error::GitUpstreamMustProvideVersion),
+            UpdatedSource::Plain(new_uri) => {
+                let parsed_upstream = ver_ext.extract(new_uri.as_str())?;
+                println!("No version provided, guessed: {}", parsed_upstream.version);
+                parsed_upstream.version
+            }
+        }
+    };
 
     #[derive(Debug)]
     enum Update {
@@ -449,4 +466,8 @@ pub enum Error {
     Utf8(#[from] std::string::FromUtf8Error),
     #[error("draft")]
     Draft(#[from] draft::Error),
+    #[error("upstreams-rs")]
+    Upstreams(#[from] version_parse::VersionError),
+    #[error("Must provide version if first upstream provided is of type git")]
+    GitUpstreamMustProvideVersion,
 }
