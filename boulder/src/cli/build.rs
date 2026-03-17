@@ -14,6 +14,8 @@ use clap::Parser;
 use moss::signal::inhibit;
 use thiserror::Error;
 use thread_priority::{NormalThreadSchedulePolicy, ThreadPriority, ThreadSchedulePolicy, thread_native_id};
+use tui::Styled;
+use version_parse::VersionExtractor;
 
 #[derive(Debug, Parser)]
 #[command(about = "Build stone package(s) from a stone recipe file")]
@@ -150,10 +152,43 @@ pub fn handle(command: Command, env: Env) -> Result<(), Error> {
         builder.cleanup().map_err(Error::Cleanup)?;
     }
 
+    verify_versions_match(&builder)?;
+
     println!(
         "Build finished successfully at {}",
         Local::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
     );
+
+    Ok(())
+}
+
+fn verify_versions_match(builder: &Builder) -> Result<(), Error> {
+    // Only check the first upstream, as that'll be the actual version
+    // in the majority of cases.
+    let first_upstream = if let Some(get) = builder.recipe.parsed.upstreams.first() {
+        get
+    } else {
+        // We may not have any upstreams for meta packages
+        return Ok(());
+    };
+
+    let ver_ext = VersionExtractor::new();
+    let parsed_upstream = ver_ext.extract(first_upstream.url.as_str());
+    match parsed_upstream {
+        Ok(ext) => {
+            if ext.version != builder.recipe.parsed.source.version {
+                println!(
+                    "{} | 'version' and first parsed upstream version do not match. Expected: {}, got: {}",
+                    "Warning".yellow(),
+                    ext.version,
+                    builder.recipe.parsed.source.version
+                );
+                println!();
+            }
+        }
+        // Swallow error if the url couldn't be parsed
+        Err(_) => return Ok(()),
+    }
 
     Ok(())
 }
@@ -176,4 +211,6 @@ pub enum Error {
     Cleanup(#[source] build::Error),
     #[error("Binary manifest required for verification, got {0:?}")]
     VerifyBinaryManifestRequired(PathBuf),
+    #[error("version parse")]
+    Upstreams(#[from] version_parse::VersionError),
 }

@@ -14,6 +14,7 @@ tools_buildinfo = { path = "../crates/tools_buildinfo" }
 stone = { path = "../crates/stone" }
 stone_recipe = { path = "../crates/stone_recipe" }
 tui = { path = "../crates/tui" }
+version_parse = { path = "../crates/version_parse" }
 yaml = { path = "../crates/yaml" }
 
 chrono.workspace = true
