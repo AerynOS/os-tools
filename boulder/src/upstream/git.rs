@@ -8,7 +8,6 @@ use std::{
     process, string,
 };
 
-use fs_err as fs;
 use moss::{runtime, util};
 use thiserror::Error;
 use tui::{ProgressBar, ProgressStyle, Styled};
@@ -192,18 +191,14 @@ impl Git {
         Ok(())
     }
 
+    /// Remove paths while squashing ErrorKind::NotFound errors.
     pub fn remove(&self, paths: &Paths) -> Result<(), Error> {
         for path in [self.staging_path(paths), self.final_path(paths)] {
-            // only attempt to remove path if it actually exists on the fs
-            if path.exists() {
-                fs::remove_dir_all(&path)?;
-            }
-
+            util::remove_dir_all(&path)?;
             if let Some(parent) = path.parent() {
                 util::remove_empty_dirs(parent, &paths.upstreams().host)?;
             }
         }
-
         Ok(())
     }
 }
