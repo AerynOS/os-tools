@@ -45,6 +45,11 @@ jobs:
     - name: Build project
       run: cargo build
 
+    - name: Setup aosroot
+      run: |
+        mkdir -pv aosroot/
+        cargo run -- -D aosroot/ repo add unstable https://cdn.aerynos.dev/stream/unstable/x86_64/stone.index
+
     - name: Test project
       run: cargo test --all
 
