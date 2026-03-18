@@ -142,3 +142,24 @@ impl From<package::Package> for Output {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::path::Path;
+
+    use super::*;
+
+    fn setup_client() -> Client {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../aosroot");
+        let installation = Installation::open(root, None).expect("Could not find root");
+        Client::new("TEST", installation).expect("Could not set up client")
+    }
+
+    #[test]
+    fn test_find_packages() {
+        let client = setup_client();
+        let flags = package::Flags::new().with_available();
+        let output = search_packages(client, flags, "jq");
+        assert!(!output.is_empty(), "expected match for package jq");
+    }
+}
