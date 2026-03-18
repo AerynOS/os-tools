@@ -1,3 +1,14 @@
+//! Git repository manipulation utilities based
+//! on the `git` executable.
+//!
+//! For any operation, `git` is called under the hood:
+//! make sure it is available in your `$PATH`, otherwise
+//! [Error::Io] will be returned.
+//!
+//! Even though we are aware that calling executables is brittle API,
+//! neither libgit2 nor gitoxide had all operations available in this
+//! module implemented.
+
 use std::ffi::OsStr;
 use std::fmt::Debug;
 use std::path::{self, Path, PathBuf};
