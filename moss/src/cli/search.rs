@@ -57,9 +57,9 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     };
 
     let output = if provides {
-        search_providing_packages(client, flags, keyword)
+        search_providing_packages(&client, flags, keyword)
     } else {
-        search_packages(client, flags, keyword)
+        search_packages(&client, flags, keyword)
     };
 
     if output.is_empty() {
@@ -71,7 +71,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     Ok(())
 }
 
-fn search_packages(client: Client, flags: package::Flags, keyword: &str) -> Vec<Output> {
+fn search_packages(client: &Client, flags: package::Flags, keyword: &str) -> Vec<Output> {
     client.search_packages(keyword, flags).map(Output::from).collect()
 }
 
@@ -88,7 +88,7 @@ fn search_providing_packages_by_kind(
     client.lookup_packages_by_provider(&provider, flags)
 }
 
-fn search_providing_packages(client: Client, flags: package::Flags, name: &str) -> Vec<Output> {
+fn search_providing_packages(client: &Client, flags: package::Flags, name: &str) -> Vec<Output> {
     // We need to search both Binary and SystemBinary for possible programs
     // TODO: Could include shared libraries down the line, maybe with a flag
     if name.contains('(') {
@@ -101,7 +101,7 @@ fn search_providing_packages(client: Client, flags: package::Flags, name: &str) 
     } else {
         [dependency::Kind::Binary, dependency::Kind::SystemBinary]
             .into_iter()
-            .flat_map(|kind| search_providing_packages_by_kind(&client, flags, name, kind))
+            .flat_map(|kind| search_providing_packages_by_kind(client, flags, name, kind))
             .map(Output::from)
             .collect()
     }
@@ -159,7 +159,7 @@ mod tests {
     fn test_find_packages() {
         let client = setup_client();
         let flags = package::Flags::new().with_available();
-        let output = search_packages(client, flags, "jq");
+        let output = search_packages(&client, flags, "jq");
         assert!(!output.is_empty(), "expected match for package jq");
     }
 }
