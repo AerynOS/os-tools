@@ -19,13 +19,21 @@ use crate::upstream::{
 mod git;
 mod plain;
 
+/// An upstream is a backend where
+/// to get source code from.
 #[derive(Debug, Clone)]
 pub enum Upstream {
+    /// An archive containing source code, typically
+    /// a tarball. In order to be usable, it must compatible with
+    /// [bsdtar](https://man.freebsd.org/cgi/man.cgi?query=bsdtar&sektion=1&format=html).
     Plain(Plain),
+    /// The source code is from a Git repository.
     Git(Git),
 }
 
 impl Upstream {
+    /// Constructs an [Upstream] based on the information provided
+    /// in the `upstream` section of a Stone recipe.
     pub fn from_recipe_upstream(upstream: upstream::Upstream) -> Result<Self, Error> {
         match upstream.props {
             upstream::Props::Plain { hash, rename, .. } => Ok(Self::Plain(Plain {
@@ -35,11 +43,17 @@ impl Upstream {
             })),
             upstream::Props::Git { git_ref, .. } => Ok(Self::Git(Git {
                 url: upstream.url,
-                ref_id: git_ref,
+                commit: git_ref,
             })),
         }
     }
 
+    /// Tries to construct an upstream according to the URI provided,
+    /// saving the resources at `path`. The path will be created as a file
+    /// or as a directory depending on the kind of source.
+    ///
+    /// Information will be inferred according to the kind of source URI.
+    /// See variants of [Upstream] for more details.
     pub async fn fetch_new(uri: SourceUri, dest: &Path) -> Result<Self, Error> {
         Ok(match uri.kind {
             upstream::Kind::Archive => Self::Plain(Plain::fetch_new(uri.url, dest).await?),
@@ -47,6 +61,9 @@ impl Upstream {
         })
     }
 
+    /// Returns the name of the upstream. This is an informal
+    /// name used for logging or when a path to be created
+    /// doesn't need to be unique.
     fn name(&self) -> &str {
         match self {
             Upstream::Plain(plain) => plain.name(),
@@ -54,6 +71,10 @@ impl Upstream {
         }
     }
 
+    /// Stores the upstream into the storage directory.
+    /// The final path contained in the storage directory, and the write logic,
+    /// depend on the upstream variant. The final path where the upstream is stored
+    /// is unique inside the storage directory.
     async fn store(&self, storage_dir: &Path, pb: &ProgressBar) -> Result<Stored, Error> {
         Ok(match self {
             Upstream::Plain(plain) => Stored::Plain(plain.store(storage_dir, pb).await?),
@@ -61,6 +82,8 @@ impl Upstream {
         })
     }
 
+    /// Returns an already-stored upstream. An error is returned
+    /// if the upstream wasn't stored up front, or if the content is invalid.
     async fn stored(&self, storage_dir: &Path) -> Result<Stored, Error> {
         Ok(match self {
             Upstream::Plain(plain) => Stored::Plain(plain.stored(storage_dir)?),
@@ -69,12 +92,15 @@ impl Upstream {
     }
 }
 
+/// Information available after [Upstream] is stored on disk.
 pub(crate) enum Stored {
     Plain(StoredPlain),
     Git(StoredGit),
 }
 
 impl Stored {
+    /// Whether the upstream did not need to be written at the moment
+    /// of being stored, because the contant was already there and valid.
     fn was_cached(&self) -> bool {
         match self {
             Stored::Plain(plain) => plain.was_cached,
@@ -82,6 +108,10 @@ impl Stored {
         }
     }
 
+    /// Shares the upstream in preparation of a build.
+    ///
+    /// This function tries to be as efficient as possible in terms
+    /// of actual bytes written/copied, by linking files from the storage directory.
     async fn share(&self, dest_dir: &Path) -> Result<Shared, Error> {
         Ok(match self {
             Stored::Plain(plain) => Shared::Plain(plain.share(dest_dir)?),
@@ -89,6 +119,9 @@ impl Stored {
         })
     }
 
+    /// Removes the stored upstream.
+    /// Should the upstream no longer exist,
+    /// this function returns successfully (it is idempotent).
     fn remove(&self) -> Result<(), Error> {
         match self {
             Self::Plain(plain) => plain.remove()?,
@@ -98,12 +131,17 @@ impl Stored {
     }
 }
 
+/// A shared upstream is a copy of an upstream
+/// in a location useful for a build.
 pub enum Shared {
     Plain(SharedPlain),
     Git(SharedGit),
 }
 
 impl Shared {
+    /// Removes the shared upstream.
+    /// Should the upstream no longer exist,
+    /// this function returns successfully (it is idempotent).
     pub async fn remove(&self) -> Result<(), Error> {
         match self {
             Self::Plain(plain) => plain.remove()?,
@@ -113,6 +151,7 @@ impl Shared {
     }
 }
 
+/// Returns a list of upstream from a Stone recipe.
 pub fn parse_recipe(recipe: &Recipe) -> Result<Vec<Upstream>, Error> {
     recipe
         .parsed
@@ -123,8 +162,7 @@ pub fn parse_recipe(recipe: &Recipe) -> Result<Vec<Upstream>, Error> {
         .collect()
 }
 
-/// Cache all upstreams from the provided [`Recipe`], make them available
-/// in the guest rootfs, and update the stone.yaml with resolved git upstream hashes.
+/// Helper that stores and shares a list of [Upstream]s.
 pub fn sync(upstreams: &[Upstream], storage_dir: &Path, share_dir: &Path) -> Result<Vec<Shared>, Error> {
     println!();
     println!("Sharing {} upstream(s) with the build container", upstreams.len());
@@ -185,6 +223,7 @@ pub fn sync(upstreams: &[Upstream], storage_dir: &Path, share_dir: &Path) -> Res
     Ok(shared)
 }
 
+/// Helper that removes a list of [Upstream]s from the storage directory.
 pub async fn remove(storage_dir: &Path, upstreams: &[Upstream]) -> Result<(), Error> {
     for upstream in upstreams {
         let stored = upstream.stored(storage_dir).await?;
@@ -193,14 +232,16 @@ pub async fn remove(storage_dir: &Path, upstreams: &[Upstream]) -> Result<(), Er
     Ok(())
 }
 
+/// Possible errors returned by functions in this module.
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error("plain")]
+    /// An error occured while dealing with an archive-based [Upstream].
+    Plain(#[from] plain::Error),
+    /// An error occured while dealing with a Git-based [Upstream].
     #[error("git")]
     Git(#[from] git::Error),
     #[error("io")]
+    // A generic I/O error occured.
     Io(#[from] io::Error),
-    #[error("plain")]
-    Plain(#[from] plain::Error),
-    #[error("request")]
-    Request(#[from] moss::request::Error),
 }
