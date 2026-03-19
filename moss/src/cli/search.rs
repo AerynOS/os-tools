@@ -39,7 +39,9 @@ pub fn command() -> Command {
             Arg::new(FLAG_PROVIDES)
                 .short('p')
                 .long("provides")
-                .num_args(0)
+                .num_args(0..=1)
+                .require_equals(true)
+                .default_missing_value("binaries")
                 .help("Search for packages providing a binary"),
         )
 }
@@ -47,7 +49,8 @@ pub fn command() -> Command {
 pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
     let keyword = args.get_one::<String>(ARG_KEYWORD).unwrap();
     let only_installed = args.get_flag(FLAG_INSTALLED);
-    let provides = args.get_flag(FLAG_PROVIDES);
+    // let provides = args.get_flag(FLAG_PROVIDES);
+    let provides = args.get_one::<String>(FLAG_PROVIDES).map(|s| s.as_str());
 
     let client = Client::new(environment::NAME, installation)?;
     let flags = if only_installed {
@@ -56,8 +59,8 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         package::Flags::new().with_available()
     };
 
-    let output = if provides {
-        provides_package(&client, flags, keyword)
+    let output = if let Some(provider) = provides {
+        provides_package(&client, flags, provider, keyword)
     } else {
         search_packages(&client, flags, keyword)
     };
@@ -104,14 +107,23 @@ fn search_providing_packages_by_kind(
     client.lookup_packages_by_provider(&provider, flags)
 }
 
-fn provides_package(client: &Client, flags: package::Flags, name: &str) -> Vec<Output> {
-    // We need to search both Binary and SystemBinary for possible programs
-    // TODO: Could include shared libraries down the line, maybe with a flag
-    [dependency::Kind::Binary, dependency::Kind::SystemBinary]
-        .into_iter()
-        .flat_map(|kind| search_providing_packages_by_kind(client, flags, name, kind))
-        .map(Output::from)
-        .collect()
+fn provides_package(client: &Client, flags: package::Flags, provider: &str, name: &str) -> Vec<Output> {
+    let packages = match provider.parse::<dependency::Kind>() {
+        Ok(kind) => search_providing_packages_by_kind(client, flags, name, kind),
+        Err(_) => match provider {
+            // Default search with no argument to `--provides`
+            "binaries" => [dependency::Kind::Binary, dependency::Kind::SystemBinary]
+                .into_iter()
+                .flat_map(|kind| search_providing_packages_by_kind(client, flags, name, kind))
+                .collect(),
+            "library" => search_providing_packages_by_kind(client, flags, name, dependency::Kind::SharedLibrary),
+            _ => {
+                println!("Provider not recognized: {provider}");
+                vec![]
+            }
+        },
+    };
+    packages.into_iter().map(Output::from).collect()
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -223,7 +235,7 @@ mod tests {
             );
 
             // We can find hits for all these binaries with the `--provides` flag
-            let output = provides_package(client, flags, binary_name);
+            let output = provides_package(client, flags, "binaries", binary_name);
             assert!(
                 !output.is_empty(),
                 "`search --provides {binary_name} should not be empty"
@@ -260,7 +272,7 @@ mod tests {
         let client = &TEST_CLIENT;
         let flags = package::Flags::new().with_available();
         for binary_name in ["hx", "telnet", "toast"] {
-            let output_a = provides_package(client, flags, binary_name);
+            let output_a = provides_package(client, flags, "binaries", binary_name);
             let provider_syntax = format!("binary({binary_name})");
             let output_b = search_packages(client, flags, &provider_syntax);
             assert_eq!(output_a, output_b);
