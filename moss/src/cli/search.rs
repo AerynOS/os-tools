@@ -167,4 +167,47 @@ mod tests {
         let output = search_packages(client, flags, "jq");
         assert!(!output.is_empty(), "expected match for package jq");
     }
+
+    #[test]
+    fn test_find_binaries_with_provides_flag() {
+        let client = &TEST_CLIENT;
+        let flags = package::Flags::new().with_available();
+        for binary_name in ["hx", "telnet", "toast", "zramctl"] {
+            // These binary names don't appear when searching by package name
+            let output = search_packages(client, flags, binary_name);
+            assert!(output.is_empty());
+
+            // We can find hits for all these binaries with the `--provides` flag
+            let output = search_providing_packages(client, flags, binary_name);
+            assert!(!output.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_find_binaries_with_provider_syntax() {
+        let client = &TEST_CLIENT;
+        let flags = package::Flags::new().with_available();
+        for binary_name in ["hx", "telnet", "toast"] {
+            // These binary names don't appear when searching by package name
+            let output = search_packages(client, flags, binary_name);
+            assert!(output.is_empty());
+
+            // We can find hits for all these binaries with the provider syntax
+            let provider_syntax = format!("binary({binary_name})");
+            let output = search_packages(client, flags, &provider_syntax);
+            assert!(!output.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_provider_syntax_produces_same_output_as_provides_flag() {
+        let client = &TEST_CLIENT;
+        let flags = package::Flags::new().with_available();
+        for binary_name in ["hx", "telnet", "toast"] {
+            let output_a = search_providing_packages(client, flags, binary_name);
+            let provider_syntax = format!("binary({binary_name})");
+            let output_b = search_packages(client, flags, &provider_syntax);
+            assert_eq!(output_a, output_b);
+        }
+    }
 }
