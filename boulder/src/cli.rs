@@ -24,7 +24,7 @@ pub struct Command {
     #[command(flatten)]
     pub global: Global,
     #[command(subcommand)]
-    pub subcommand: Option<Subcommand>,
+    pub subcommand: Subcommand,
 }
 
 #[derive(Debug, Args)]
@@ -110,7 +110,7 @@ pub fn process() -> Result<(), Error> {
 
     if global.verbose {
         match subcommand {
-            Some(Subcommand::Version(_)) => (),
+            Subcommand::Version(_) => (),
             _ => version::print(),
         }
         println!("{:?}", env.config);
@@ -120,12 +120,11 @@ pub fn process() -> Result<(), Error> {
     }
 
     match subcommand {
-        Some(Subcommand::Build(command)) => build::handle(command, env)?,
-        Some(Subcommand::Chroot(command)) => chroot::handle(command, env)?,
-        Some(Subcommand::Profile(command)) => profile::handle(command, env)?,
-        Some(Subcommand::Recipe(command)) => recipe::handle(command, env)?,
-        Some(Subcommand::Version(command)) => version::handle(command),
-        None => (),
+        Subcommand::Build(command) => build::handle(command, env)?,
+        Subcommand::Chroot(command) => chroot::handle(command, env)?,
+        Subcommand::Profile(command) => profile::handle(command, env)?,
+        Subcommand::Recipe(command) => recipe::handle(command, env)?,
+        Subcommand::Version(command) => version::handle(command),
     }
 
     Ok(())
