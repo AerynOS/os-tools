@@ -57,7 +57,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     };
 
     let output = if provides {
-        search_providing_packages(&client, flags, keyword)
+        provides_package(&client, flags, keyword)
     } else {
         search_packages(&client, flags, keyword)
     };
@@ -100,7 +100,7 @@ fn search_providing_packages_by_kind(
     client.lookup_packages_by_provider(&provider, flags)
 }
 
-fn search_providing_packages(client: &Client, flags: package::Flags, name: &str) -> Vec<Output> {
+fn provides_package(client: &Client, flags: package::Flags, name: &str) -> Vec<Output> {
     // We need to search both Binary and SystemBinary for possible programs
     // TODO: Could include shared libraries down the line, maybe with a flag
     [dependency::Kind::Binary, dependency::Kind::SystemBinary]
@@ -178,7 +178,7 @@ mod tests {
             assert!(output.is_empty());
 
             // We can find hits for all these binaries with the `--provides` flag
-            let output = search_providing_packages(client, flags, binary_name);
+            let output = provides_package(client, flags, binary_name);
             assert!(!output.is_empty());
         }
     }
@@ -204,7 +204,7 @@ mod tests {
         let client = &TEST_CLIENT;
         let flags = package::Flags::new().with_available();
         for binary_name in ["hx", "telnet", "toast"] {
-            let output_a = search_providing_packages(client, flags, binary_name);
+            let output_a = provides_package(client, flags, binary_name);
             let provider_syntax = format!("binary({binary_name})");
             let output_b = search_packages(client, flags, &provider_syntax);
             assert_eq!(output_a, output_b);
