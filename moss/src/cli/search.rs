@@ -116,6 +116,7 @@ pub enum Error {
     Client(#[from] client::Error),
 }
 
+#[cfg_attr(test, derive(Debug, PartialEq))] // Only derive these traits in test suite
 struct Output {
     name: Name,
     summary: String,
@@ -149,20 +150,21 @@ impl From<package::Package> for Output {
 #[cfg(test)]
 mod tests {
     use std::path::Path;
+    use std::sync::LazyLock;
 
     use super::*;
 
-    fn setup_client() -> Client {
+    static TEST_CLIENT: LazyLock<Client> = LazyLock::new(|| {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../aosroot");
         let installation = Installation::open(root, None).expect("Could not find root");
         Client::new("TEST", installation).expect("Could not set up client")
-    }
+    });
 
     #[test]
     fn test_find_packages() {
-        let client = setup_client();
+        let client = &TEST_CLIENT;
         let flags = package::Flags::new().with_available();
-        let output = search_packages(&client, flags, "jq");
+        let output = search_packages(client, flags, "jq");
         assert!(!output.is_empty(), "expected match for package jq");
     }
 }
