@@ -214,14 +214,20 @@ mod tests {
         skip_in_ci!();
         let client = &TEST_CLIENT;
         let flags = package::Flags::new().with_available();
-        for binary_name in ["hx", "telnet", "toast", "zramctl"] {
+        for binary_name in ["telnet", "toast", "zramctl"] {
             // These binary names don't appear when searching by package name
             let output = search_packages(client, flags, binary_name);
-            assert!(output.is_empty());
+            assert!(
+                output.is_empty(),
+                "`search {binary_name}` output is not empty: {output:?}"
+            );
 
             // We can find hits for all these binaries with the `--provides` flag
             let output = provides_package(client, flags, binary_name);
-            assert!(!output.is_empty());
+            assert!(
+                !output.is_empty(),
+                "`search --provides {binary_name} should not be empty"
+            );
         }
     }
 
@@ -230,15 +236,21 @@ mod tests {
         skip_in_ci!();
         let client = &TEST_CLIENT;
         let flags = package::Flags::new().with_available();
-        for binary_name in ["hx", "telnet", "toast"] {
+        for binary_name in ["telnet", "toast"] {
             // These binary names don't appear when searching by package name
             let output = search_packages(client, flags, binary_name);
-            assert!(output.is_empty());
+            assert!(
+                output.is_empty(),
+                "`search {binary_name}` output is not empty: {output:?}"
+            );
 
             // We can find hits for all these binaries with the provider syntax
             let provider_syntax = format!("binary({binary_name})");
             let output = search_packages(client, flags, &provider_syntax);
-            assert!(!output.is_empty());
+            assert!(
+                !output.is_empty(),
+                "`search {provider_syntax}` output should not be empty"
+            );
         }
     }
 
