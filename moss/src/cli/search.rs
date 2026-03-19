@@ -127,6 +127,15 @@ struct Output {
     search_match: Option<String>,
 }
 
+fn highlight_string(content: &str, expression: &str) -> (String, String, String) {
+    if let Some(index) = content.find(expression) {
+        let (prefix, body) = content.split_at(index);
+        let (matched, suffix) = body.split_at(expression.len());
+        (prefix.to_owned(), matched.to_owned(), suffix.to_owned())
+    } else {
+        (content.to_owned(), String::default(), String::default())
+    }
+}
 impl ColumnDisplay for Output {
     fn get_display_width(&self) -> usize {
         self.name.as_str().chars().count()
@@ -134,36 +143,19 @@ impl ColumnDisplay for Output {
 
     fn display_column(&self, writer: &mut impl std::io::prelude::Write, _col: tui::pretty::Column, width: usize) {
         if let Some(expression) = self.search_match.clone() {
-            if let Some(index) = self
-                .name
-                .as_str()
-                .to_ascii_lowercase()
-                .find(&expression.to_ascii_lowercase())
-            {
-                let (prefix, body) = self.name.as_str().split_at(index);
-                let (matched, suffix) = body.split_at(expression.len());
-                let _ = write!(
-                    writer,
-                    " {}{}{}{:width$}  {}",
-                    prefix.bold(),
-                    matched.bold().green(),
-                    suffix.bold(),
-                    " ".repeat(width),
-                    self.summary
-                );
-            } else if let Some(index) = self.summary.to_ascii_lowercase().find(&expression.to_ascii_lowercase()) {
-                let (prefix, body) = self.summary.split_at(index);
-                let (matched, suffix) = body.split_at(expression.len());
-                let _ = write!(
-                    writer,
-                    " {}{:width$}  {}{}{}",
-                    self.name.as_str().bold(),
-                    " ".repeat(width),
-                    prefix.bold(),
-                    matched.bold().green(),
-                    suffix.bold(),
-                );
-            }
+            let (name_prefix, name_matched, name_suffix) = highlight_string(self.name.as_str(), &expression);
+            let (summary_prefix, summary_matched, summary_suffix) = highlight_string(&self.summary, &expression);
+            let _ = write!(
+                writer,
+                " {}{}{}{:width$}  {}{}{}",
+                name_prefix.bold(),
+                name_matched.bold().green(),
+                name_suffix.bold(),
+                " ".repeat(width),
+                summary_prefix.bold(),
+                summary_matched.bold().green(),
+                summary_suffix.bold(),
+            );
         } else {
             let _ = write!(
                 writer,
