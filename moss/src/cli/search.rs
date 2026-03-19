@@ -94,7 +94,7 @@ fn search_packages(client: &Client, flags: package::Flags, keyword: &str) -> Vec
     }
 }
 
-fn search_providing_packages_by_kind(
+fn provides_package_by_kind(
     client: &Client,
     flags: package::Flags,
     name: &str,
@@ -109,14 +109,14 @@ fn search_providing_packages_by_kind(
 
 fn provides_package(client: &Client, flags: package::Flags, provider: &str, name: &str) -> Vec<Output> {
     let packages = match provider.parse::<dependency::Kind>() {
-        Ok(kind) => search_providing_packages_by_kind(client, flags, name, kind),
+        Ok(kind) => provides_package_by_kind(client, flags, name, kind),
         Err(_) => match provider {
             // Default search with no argument to `--provides`
             "binaries" => [dependency::Kind::Binary, dependency::Kind::SystemBinary]
                 .into_iter()
-                .flat_map(|kind| search_providing_packages_by_kind(client, flags, name, kind))
+                .flat_map(|kind| provides_package_by_kind(client, flags, name, kind))
                 .collect(),
-            "library" => search_providing_packages_by_kind(client, flags, name, dependency::Kind::SharedLibrary),
+            "library" => provides_package_by_kind(client, flags, name, dependency::Kind::SharedLibrary),
             _ => {
                 println!("Provider not recognized: {provider}");
                 vec![]
