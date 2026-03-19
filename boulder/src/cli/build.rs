@@ -16,7 +16,7 @@ use thiserror::Error;
 use thread_priority::{NormalThreadSchedulePolicy, ThreadPriority, ThreadSchedulePolicy, thread_native_id};
 
 #[derive(Debug, Parser)]
-#[command(about = "Build ... TODO")]
+#[command(about = "Build stone package(s) from a stone recipe file")]
 pub struct Command {
     #[arg(short, long, default_value = "default-x86_64")]
     profile: profile::Id,
