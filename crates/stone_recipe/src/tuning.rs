@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use serde::Deserialize;
+use snafu::{OptionExt, Snafu};
 use std::collections::{BTreeMap, BTreeSet};
-use thiserror::Error;
 
 use crate::{KeyValue, Macros, sequence_of_key_value, single_as_sequence};
 
@@ -170,21 +170,17 @@ impl Builder {
 
     pub fn enable(&mut self, name: impl ToString, config: Option<String>) -> Result<(), Error> {
         let name = name.to_string();
-
-        let group = self
-            .groups
-            .get(&name)
-            .ok_or_else(|| Error::UnknownGroup(name.clone()))?;
+        let group = self.groups.get(&name).context(UnknownGroupSnafu { name: &name })?;
 
         self.enabled.insert(name.clone());
         self.disabled.remove(&name);
 
         if let Some(value) = config.or_else(|| group.default.clone()) {
-            if group.choices.iter().any(|kv| kv.key == value) {
-                self.option_sets.insert(name, value);
-            } else {
-                return Err(Error::UnknownGroupValue(value, name));
-            }
+            snafu::ensure!(
+                group.choices.iter().any(|kv| kv.key == value),
+                UnknownGroupValueSnafu { value, group: name }
+            );
+            self.option_sets.insert(name, value);
         }
 
         Ok(())
@@ -192,10 +188,7 @@ impl Builder {
 
     pub fn disable(&mut self, name: impl ToString) -> Result<(), Error> {
         let name = name.to_string();
-
-        if !self.groups.contains_key(&name) {
-            return Err(Error::UnknownGroup(name));
-        }
+        snafu::ensure!(self.groups.contains_key(&name), UnknownGroupSnafu { name });
 
         self.disabled.insert(name.clone());
         self.enabled.remove(&name);
@@ -232,9 +225,7 @@ impl Builder {
         }
 
         for flag in enabled_flags.iter().chain(&disabled_flags) {
-            if !self.flags.contains_key(flag) {
-                return Err(Error::UnknownFlag(flag.clone()));
-            }
+            snafu::ensure!(self.flags.contains_key(flag), UnknownFlagSnafu { name: flag });
         }
 
         Ok(enabled_flags
@@ -247,12 +238,12 @@ impl Builder {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Snafu)]
 pub enum Error {
-    #[error("unknown flag {0}")]
-    UnknownFlag(String),
-    #[error("unknown group {0}")]
-    UnknownGroup(String),
-    #[error("unknown value {0} for group {1}")]
-    UnknownGroupValue(String, String),
+    #[snafu(display("unknown flag {name}"))]
+    UnknownFlag { name: String },
+    #[snafu(display("unknown group {name}"))]
+    UnknownGroup { name: String },
+    #[snafu(display("unknown value {value} for group {group}"))]
+    UnknownGroupValue { value: String, group: String },
 }

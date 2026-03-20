@@ -11,8 +11,8 @@ use nom::{
     multi::{many_till, many1},
     sequence::{delimited, preceded, terminated},
 };
+use snafu::{OptionExt, ResultExt, Snafu};
 use std::collections::{BTreeMap, BTreeSet};
-use thiserror::Error;
 
 use crate::{Macros, macros::Action};
 
@@ -162,9 +162,7 @@ fn parse(
     tokens(input, |token| {
         match token {
             Token::Action(identifier) => {
-                let action = actions
-                    .get(identifier)
-                    .ok_or(Error::UnknownAction(identifier.to_owned()))?;
+                let action = actions.get(identifier).context(UnknownActionSnafu { identifier })?;
                 dependencies.extend(action.dependencies.clone());
 
                 if let Some(nested) = parse_content_only(&action.command, actions, definitions, dependencies)? {
@@ -174,7 +172,7 @@ fn parse(
             Token::Definition(identifier) => {
                 let definition = definitions
                     .get(identifier)
-                    .ok_or(Error::UnknownDefinition(identifier.to_owned()))?;
+                    .context(UnknownDefinitionSnafu { identifier })?;
 
                 if let Some(nested) = parse_content_only(definition, actions, definitions, dependencies)? {
                     content.push_str(&nested);
@@ -266,7 +264,7 @@ fn tokens(input: &str, f: impl FnMut(Token<'_>) -> Result<(), Error>) -> Result<
 
     iter.map(f).collect::<Result<(), Error>>()?;
 
-    iter.finish().map_err(convert_error)?;
+    iter.finish().map_err(convert_error).context(ParserSnafu)?;
 
     Ok(())
 }
@@ -275,14 +273,16 @@ fn convert_error(err: nom::Err<(&str, nom::error::ErrorKind)>) -> nom::Err<nom::
     err.to_owned().map(|(i, e)| nom::error::Error::new(i, e))
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Snafu)]
 pub enum Error {
-    #[error("unknown action macro: %{0}")]
-    UnknownAction(String),
-    #[error("unknown definition macro: %({0})")]
-    UnknownDefinition(String),
-    #[error("parse script")]
-    Parser(#[from] nom::Err<nom::error::Error<String>>),
+    #[snafu(display("unknown action macro: %{identifier}"))]
+    UnknownAction { identifier: String },
+    #[snafu(display("unknown definition macro: %({identifier})"))]
+    UnknownDefinition { identifier: String },
+    #[snafu(display("parse script"))]
+    Parser {
+        source: nom::Err<nom::error::Error<String>>,
+    },
 }
 
 #[cfg(test)]

@@ -6,7 +6,6 @@ use std::collections::BTreeMap;
 
 use serde::Deserialize;
 pub use serde_yaml::Error;
-use thiserror::Error;
 
 use crate::serde_util::{default_true, stringy_bool};
 use crate::upstream::Upstream;
