@@ -10,8 +10,8 @@ rust-version.workspace = true
 nom.workspace = true
 serde.workspace = true
 serde_yaml.workspace = true
+snafu.workspace = true
 strum.workspace = true
-thiserror.workspace = true
 url.workspace = true
 
 [lints]

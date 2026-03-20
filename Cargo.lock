@@ -2825,8 +2825,8 @@ dependencies = [
  "nom",
  "serde",
  "serde_yaml",
+ "snafu",
  "strum",
- "thiserror",
  "url",
 ]
 
