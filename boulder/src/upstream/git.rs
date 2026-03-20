@@ -194,9 +194,11 @@ impl Git {
 
     pub fn remove(&self, paths: &Paths) -> Result<(), Error> {
         for path in [self.staging_path(paths), self.final_path(paths)] {
-            // only attempt to remove path if it actually exists on the fs
-            if path.exists() {
-                fs::remove_dir_all(&path)?;
+            let result = fs::remove_dir_all(&path);
+            if let Err(err) = result
+                && err.kind() != io::ErrorKind::NotFound
+            {
+                return Err(Error::from(err));
             }
 
             if let Some(parent) = path.parent() {
