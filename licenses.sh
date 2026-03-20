@@ -1,4 +1,6 @@
 #!/bin/bash
+# SPDX-FileCopyrightText: 2025 AerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
 
 rm -rf license-list-data
 mkdir -p license-list-data/text

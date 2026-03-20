@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2023 AerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
+
 # Based on x86_64 - provides the stage1 bootstrap definitions
 # We force a new cross compilation step into existence with
 # our "-xvendorID"
