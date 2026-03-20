@@ -19,11 +19,14 @@ use tokio::{
 };
 use url::Url;
 
+/// A Git repository.
 pub struct Repository {
     path: PathBuf,
 }
 
 impl Repository {
+    /// Opens a local bare Git repository.
+    /// [Error::NotBare] is returned if it is not a bare repository.
     pub async fn open_bare(path: &Path) -> Result<Self, Error> {
         let path = path::absolute(path)?;
         let output = run_git(&[
@@ -53,6 +56,9 @@ impl Repository {
         Ok(Self { path })
     }
 
+    /// Clones a local or remote Git repository as bare into `path`.
+    /// A callback is fired repeatedly to track the cloning
+    /// process in real time.
     pub async fn clone_bare_progress<F>(path: &Path, url: &Url, callback: F) -> Result<Self, Error>
     where
         F: Fn(FetchProgress),
@@ -72,6 +78,7 @@ impl Repository {
         Ok(Self { path })
     }
 
+    /// Whether this repository has a commit identified by its hash.
     pub async fn has_commit(&self, commit: &str) -> Result<bool, Error> {
         let output = run_git(&[
             OsStr::new("-C"),
@@ -84,6 +91,9 @@ impl Repository {
         Ok(output.stderr.is_empty())
     }
 
+    /// Equivalent to `git fetch`.
+    /// A callback is fired repeatedly to track the fetching
+    /// process in real time.
     pub async fn fetch_progress<F>(&self, callback: F) -> Result<(), Error>
     where
         F: Fn(FetchProgress),
@@ -101,6 +111,9 @@ impl Repository {
         Ok(())
     }
 
+    /// Add a new Git worktree at `path`.
+    /// The worktree is checked out at the provided commit hash.
+    /// If a worktree already exists at `path`, is it overwritten.
     pub async fn add_worktree(&self, path: &Path, commit: &str) -> Result<Worktree, Error> {
         let path = path::absolute(path)?;
 
@@ -126,12 +139,17 @@ impl Repository {
     }
 }
 
+/// A Git worktree.
 pub struct Worktree {
     repo: PathBuf,
     worktree: PathBuf,
 }
 
 impl Worktree {
+    /// Removes the worktree.
+    /// This means removing the actual directory
+    /// containing the worktree, and untracking
+    /// the worktree from the Git repository.
     pub async fn remove(&self) -> Result<(), Error> {
         run_git(&[
             OsStr::new("-C"),
@@ -145,8 +163,10 @@ impl Worktree {
     }
 }
 
+/// Possible errors returned in this module.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
+    /// A generic I/O error occured.
     #[error("{0}")]
     Io(#[from] io::Error),
     #[error(
@@ -164,19 +184,24 @@ pub enum Error {
                      "".to_owned()
             }
     )]
+    /// The `git` executable returned with an error.
+    /// A dump of the stderr may be provided.
     Run(Option<i32>, Option<String>),
     #[error("this repository is not bare")]
+    /// The repository is valid, but it is not bare.
     NotBare,
 }
 
+/// The argument of callbacks when they are invoked
+/// for reporting a Git operation's progress.
 pub struct FetchProgress {
+    /// Isn't this self-explanatory?
     pub percent: u8,
     /// Download speed in bytes per second.
     pub speed: u64,
 }
 
 /// Runs git and waits for it to terminate.
-/// When no error occured, a dump of stderr is returned.
 async fn run_git<I, S>(args: I) -> Result<std::process::Output, Error>
 where
     I: IntoIterator<Item = S>,
