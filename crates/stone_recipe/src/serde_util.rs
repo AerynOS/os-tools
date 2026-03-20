@@ -17,10 +17,10 @@ where
 
     match Inner::deserialize(deserializer)? {
         Inner::Bool(bool) => Ok(bool),
-        // Really yaml...
+        // allow only true and false per yaml 1.2
         Inner::String(s) => match s.as_str() {
-            "y" | "Y" | "yes" | "Yes" | "YES" | "true" | "True" | "TRUE" | "on" | "On" | "ON" => Ok(true),
-            "n" | "N" | "no" | "No" | "NO" | "false" | "False" | "FALSE" | "off" | "Off" | "OFF" => Ok(false),
+            "true" => Ok(true),
+            "false" => Ok(false),
             _ => Err(serde::de::Error::custom("invalid boolean: expected true or false")),
         },
     }
