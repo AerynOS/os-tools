@@ -42,6 +42,19 @@ pub fn command() -> Command {
                 .num_args(0..=1)
                 .require_equals(true)
                 .default_missing_value("binaries")
+                .value_parser([
+                    "binaries",
+                    "library",
+                    "name",
+                    "soname",
+                    "pkgconfig",
+                    "interpreter",
+                    "cmake",
+                    "python",
+                    "binary",
+                    "sysbinary",
+                    "pkgconfig32",
+                ])
                 .help("Search for packages providing a binary"),
         )
 }
