@@ -3,14 +3,13 @@
 //!
 //! For any operation, `git` is called under the hood:
 //! make sure it is available in your `$PATH`, otherwise
-//! [Error::Io] will be returned.
+//! [Error] will be returned.
 //!
 //! Even though we are aware that calling executables is brittle API,
 //! neither libgit2 nor gitoxide had all operations available in this
 //! module implemented.
 
 use std::ffi::OsStr;
-use std::fmt::Debug;
 use std::path::{self, Path, PathBuf};
 use std::process::Stdio;
 use tokio::{
@@ -18,6 +17,9 @@ use tokio::{
     process::{self},
 };
 use url::Url;
+
+pub mod error;
+pub use error::*;
 
 /// A Git repository.
 pub struct Repository {
@@ -28,7 +30,7 @@ impl Repository {
     /// Opens a local bare Git repository.
     /// [Error::NotBare] is returned if it is not a bare repository.
     pub async fn open_bare(path: &Path) -> Result<Self, Error> {
-        let path = path::absolute(path)?;
+        let path = path::absolute(path).map_err(InnerError::from)?;
         let output = run_git(&[
             OsStr::new("-C"),
             path.as_os_str(),
@@ -38,14 +40,14 @@ impl Repository {
         ])
         .await?;
         if !output.stdout.starts_with(b"layout.bare=true") {
-            return Err(Error::NotBare);
+            return Err(InnerError::Constraint(Constraint::NotBare))?;
         }
         Ok(Self { path })
     }
 
     /// Clones a local or remote Git repository as bare into `path`.
     pub async fn clone_bare(path: &Path, url: &Url) -> Result<Self, Error> {
-        let path = path::absolute(path)?;
+        let path = path::absolute(path).map_err(InnerError::from)?;
         run_git(&[
             OsStr::new("clone"),
             OsStr::new("--mirror"),
@@ -63,7 +65,7 @@ impl Repository {
     where
         F: Fn(FetchProgress),
     {
-        let path = path::absolute(path)?;
+        let path = path::absolute(path).map_err(InnerError::from)?;
         run_git_progress(
             &[
                 OsStr::new("clone"),
@@ -112,10 +114,36 @@ impl Repository {
     }
 
     /// Add a new Git worktree at `path`.
-    /// The worktree is checked out at the provided commit hash.
+    ///
+    /// The worktree is checked out at the provided commit.
     /// If a worktree already exists at `path`, is it overwritten.
+    ///
+    /// This function expects a "peeled" commit hash. If a reference
+    /// (e.g. a tag) is passed, an error containing [Constraint::NotPeeled] is returned.
+    /// This ensures the worktree is created with predictable content,
+    /// since a reference may change the commit it points to over time.
     pub async fn add_worktree(&self, path: &Path, commit: &str) -> Result<Worktree, Error> {
-        let path = path::absolute(path)?;
+        if commit.starts_with("HEAD") {
+            return Err(InnerError::Constraint(Constraint::NotPeeled {
+                commit: commit.to_owned(),
+            }))?;
+        }
+
+        let path = path::absolute(path).map_err(InnerError::from)?;
+
+        let output = run_git(&[
+            OsStr::new("-C"),
+            self.path.as_os_str(),
+            OsStr::new("cat-file"),
+            OsStr::new("-t"),
+            OsStr::new(commit),
+        ])
+        .await?;
+        if !output.stdout.starts_with(b"commit") {
+            return Err(InnerError::Constraint(Constraint::NotPeeled {
+                commit: commit.to_owned(),
+            }))?;
+        }
 
         run_git(&[
             OsStr::new("-C"),
@@ -163,35 +191,6 @@ impl Worktree {
     }
 }
 
-/// Possible errors returned in this module.
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    /// A generic I/O error occured.
-    #[error("{0}")]
-    Io(#[from] io::Error),
-    #[error(
-        "`git` exited {reason}{msg}",
-        reason=
-            if let Some(code) = _0 {
-                format!("with code {code}")
-            } else {
-                "unexpectedly".to_owned()
-            },
-        msg=
-            if let Some(msg) = _1 {
-                 format!(". Diagnostic output below:\n{msg}")
-                } else {
-                     "".to_owned()
-            }
-    )]
-    /// The `git` executable returned with an error.
-    /// A dump of the stderr may be provided.
-    Run(Option<i32>, Option<String>),
-    #[error("this repository is not bare")]
-    /// The repository is valid, but it is not bare.
-    NotBare,
-}
-
 /// The argument of callbacks when they are invoked
 /// for reporting a Git operation's progress.
 pub struct FetchProgress {
@@ -211,14 +210,15 @@ where
         .args(args)
         .stdin(Stdio::null())
         .output()
-        .await?;
+        .await
+        .map_err(InnerError::from)?;
     if output.status.success() {
         Ok(output)
     } else {
-        Err(Error::Run(
-            output.status.code(),
-            Some(String::from_utf8(output.stderr).unwrap()),
-        ))
+        Err(InnerError::Run {
+            code: output.status.code(),
+            stderr: Some(String::from_utf8(output.stderr).unwrap()),
+        })?
     }
 }
 
@@ -236,11 +236,14 @@ where
     };
 
     let (_, result) = tokio::join!(parser, git.wait());
-    let result = result?;
+    let result = result.map_err(InnerError::from)?;
     if result.success() {
         Ok(())
     } else {
-        Err(Error::Run(result.code(), None))
+        Err(InnerError::Run {
+            code: result.code(),
+            stderr: None,
+        })?
     }
 }
 
@@ -254,7 +257,8 @@ where
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
-        .spawn()?;
+        .spawn()
+        .map_err(InnerError::from)?;
     let stderr = child.stderr.take().unwrap();
     Ok((child, stderr))
 }
@@ -282,7 +286,7 @@ impl<R: io::AsyncRead + Unpin> ProgressParser<R> {
         use tokio::io::AsyncBufReadExt;
 
         let mut lines = self.reader.split(Self::TERMINATOR);
-        while let Some(line) = lines.next_segment().await? {
+        while let Some(line) = lines.next_segment().await.map_err(InnerError::from)? {
             if !line.starts_with(Self::PREFIX) {
                 continue;
             }
