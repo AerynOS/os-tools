@@ -2,6 +2,8 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
+use std::collections::BTreeMap;
+
 use clap::builder::NonEmptyStringValueParser;
 use clap::{Arg, ArgMatches, Command};
 
@@ -9,6 +11,7 @@ use moss::client;
 use moss::dependency;
 use moss::package::{self, Name};
 use moss::{Client, Installation, Provider, environment};
+use strum::Display;
 use tui::Styled;
 use tui::pretty::{ColumnDisplay, print_columns};
 
@@ -59,10 +62,16 @@ pub fn command() -> Command {
         )
 }
 
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Display)]
+#[strum(serialize_all = "lowercase")]
+enum MatchKind {
+    Name,
+    Summary,
+}
+
 pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
     let keyword = args.get_one::<String>(ARG_KEYWORD).unwrap();
     let only_installed = args.get_flag(FLAG_INSTALLED);
-    // let provides = args.get_flag(FLAG_PROVIDES);
     let provides = args.get_one::<String>(FLAG_PROVIDES).map(|s| s.as_str());
 
     let client = Client::new(environment::NAME, installation)?;
@@ -72,7 +81,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         package::Flags::new().with_available()
     };
 
-    let output = if let Some(provider) = provides {
+    let mut output = if let Some(provider) = provides {
         provides_package(&client, flags, provider, keyword)
     } else {
         search_packages(&client, flags, keyword)
@@ -82,28 +91,47 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         return Ok(());
     }
 
-    print_columns(&output, 1);
+    for (match_kind, value) in output.iter_mut() {
+        println!("Matched field: {match_kind}");
+        value.sort();
+        print_columns(value, 1);
+    }
 
     Ok(())
 }
 
-fn search_packages(client: &Client, flags: package::Flags, keyword: &str) -> Vec<Output> {
+fn search_packages(client: &Client, flags: package::Flags, keyword: &str) -> BTreeMap<MatchKind, Vec<Output>> {
     let provider = Provider::from_name(keyword).expect("Invalid format");
 
+    let mut output_kind: BTreeMap<MatchKind, Vec<Output>> = BTreeMap::new();
+
     match provider.kind {
-        dependency::Kind::PackageName => client
-            .search_packages(&provider.name, flags)
-            .map(|pkg| Output {
-                name: pkg.meta.name,
-                summary: pkg.meta.summary,
-                search_match: Some(keyword.to_owned()),
-            })
-            .collect(),
-        _ => client
-            .lookup_packages_by_provider(&provider, flags)
-            .into_iter()
-            .map(Output::from)
-            .collect(),
+        dependency::Kind::PackageName => {
+            for pkg in client.search_packages(&provider.name, flags) {
+                let match_kind = if pkg.meta.name.contains(keyword) {
+                    MatchKind::Name
+                } else {
+                    MatchKind::Summary
+                };
+                output_kind.entry(match_kind).or_default().push(Output {
+                    name: pkg.meta.name,
+                    summary: pkg.meta.summary,
+                    search_match: Some(keyword.to_owned()),
+                });
+            }
+            output_kind
+        }
+        _ => {
+            output_kind.insert(
+                MatchKind::Name,
+                client
+                    .lookup_packages_by_provider(&provider, flags)
+                    .into_iter()
+                    .map(Output::from)
+                    .collect(),
+            );
+            output_kind
+        }
     }
 }
 
@@ -120,7 +148,13 @@ fn provides_package_by_kind(
     client.lookup_packages_by_provider(&provider, flags)
 }
 
-fn provides_package(client: &Client, flags: package::Flags, provider: &str, name: &str) -> Vec<Output> {
+fn provides_package(
+    client: &Client,
+    flags: package::Flags,
+    provider: &str,
+    name: &str,
+) -> BTreeMap<MatchKind, Vec<Output>> {
+    let mut result: BTreeMap<MatchKind, Vec<Output>> = BTreeMap::new();
     let packages = match provider.parse::<dependency::Kind>() {
         Ok(kind) => provides_package_by_kind(client, flags, name, kind),
         Err(_) => match provider {
@@ -136,7 +170,11 @@ fn provides_package(client: &Client, flags: package::Flags, provider: &str, name
             }
         },
     };
-    packages.into_iter().map(Output::from).collect()
+    result.insert(
+        MatchKind::Name,
+        packages.into_iter().map(Output::from).collect::<Vec<Output>>(),
+    );
+    result
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -145,7 +183,7 @@ pub enum Error {
     Client(#[from] client::Error),
 }
 
-#[cfg_attr(test, derive(Debug, PartialEq))] // Only derive these traits in test suite
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct Output {
     name: Name,
     summary: String,
@@ -153,7 +191,10 @@ struct Output {
 }
 
 fn highlight_string(content: &str, expression: &str) -> (String, String, String) {
-    if let Some(index) = content.find(expression) {
+    if let Some(index) = content
+        .to_ascii_lowercase()
+        .find(expression.to_ascii_lowercase().as_str())
+    {
         let (prefix, body) = content.split_at(index);
         let (matched, suffix) = body.split_at(expression.len());
         (prefix.to_owned(), matched.to_owned(), suffix.to_owned())
