@@ -90,22 +90,19 @@ location of the boulder data files (which live in ${HOME}/.local/share/boulder i
 alias boulder="${HOME}/.local/bin/boulder --data-dir=${HOME}/.local/share/boulder/ --config-dir=${HOME}/.config/boulder/ --moss-root=${HOME}/.cache/boulder/"
 ```
 
-
 ## 📚 Documentation
 
 See [aerynos.dev](https://aerynos.dev/).
-
 
 ## 🧪 Experiment
 
 **NB:** Remember to use the `-D aosroot/` argument to specify a root directory, otherwise moss will happily
 eat your current operating system.
 
-
 ```bash
 just get-started
 
-# create the sosroot/ directory
+# create the aosroot/ directory
 mkdir -pv aosroot/
 
 # Add the unstable repo
