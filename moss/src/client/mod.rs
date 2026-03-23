@@ -247,6 +247,18 @@ impl Client {
         .map_err(Error::Prune)
     }
 
+    /// Resolves the provided name against the underlying registry, returning the first matching [`Package`]
+    pub fn resolve_package_by_name(
+        &self,
+        package_name: &package::Name,
+        flags: package::Flags,
+    ) -> Result<Package, Error> {
+        self.registry
+            .by_name(package_name, flags)
+            .next()
+            .ok_or(Error::FailedToResolvePackageName(package_name.clone()))
+    }
+
     /// Resolves the provided id with the underlying registry, returning the first matching [`Package`]
     pub fn resolve_package_by_id(&self, package: &package::Id) -> Result<Package, Error> {
         self.registry
@@ -1382,6 +1394,8 @@ pub enum Error {
     StateAlreadyActive(state::Id),
     #[error("state {0} doesn't exist")]
     StateDoesntExist(state::Id),
+    #[error("Failed to resolve any package matching: {0}")]
+    FailedToResolvePackageName(package::Name),
     #[error("No metadata found for package {0:?}")]
     MissingMetadata(package::Id),
     #[error("Ephemeral client not allowed on installation root")]
