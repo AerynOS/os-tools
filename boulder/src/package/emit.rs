@@ -104,6 +104,7 @@ impl<'a> Package<'a> {
             uri: None,
             hash: None,
             download_size: None,
+            origin: None,
         }
     }
 }

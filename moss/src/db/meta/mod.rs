@@ -94,6 +94,7 @@ impl Database {
                 uri: meta.uri,
                 hash: meta.hash,
                 download_size: meta.download_size.map(|size| size as u64),
+                origin: Default::default(),
             })
         })
     }
@@ -137,6 +138,7 @@ impl Database {
                         uri: meta.uri,
                         hash: meta.hash,
                         download_size: meta.download_size.map(|size| size as u64),
+                        origin: Default::default(),
                     },
                 ))
             };

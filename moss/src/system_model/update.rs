@@ -191,6 +191,7 @@ packages {
                 uri: None,
                 hash: None,
                 download_size: None,
+                origin: None,
             },
             flags: package::Flags::default(),
         }

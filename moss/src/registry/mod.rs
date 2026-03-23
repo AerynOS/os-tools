@@ -123,6 +123,7 @@ mod test {
                 uri: Default::default(),
                 hash: Default::default(),
                 download_size: Default::default(),
+                origin: Default::default(),
             },
             flags: package::Flags::default(),
         };
@@ -178,6 +179,7 @@ mod test {
                 uri: Default::default(),
                 hash: Default::default(),
                 download_size: Default::default(),
+                origin: Default::default(),
             },
             flags,
         };
