@@ -248,7 +248,7 @@ impl Client {
     }
 
     /// Resolves the provided id with the underlying registry, returning the first matching [`Package`]
-    pub fn resolve_package(&self, package: &package::Id) -> Result<Package, Error> {
+    pub fn resolve_package_by_id(&self, package: &package::Id) -> Result<Package, Error> {
         self.registry
             .by_id(package)
             .next()

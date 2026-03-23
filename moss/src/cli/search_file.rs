@@ -49,7 +49,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         | StonePayloadLayoutFile::Symlink(_, file)
         | StonePayloadLayoutFile::Directory(file) => {
             if file.contains(&keyword)
-                && let Ok(pkg) = client.resolve_package(&id)
+                && let Ok(pkg) = client.resolve_package_by_id(&id)
             {
                 let name = pkg.meta.name;
                 println!("{prefix}{file} from {}", name.as_str().bold());
