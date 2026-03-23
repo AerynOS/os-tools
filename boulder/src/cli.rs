@@ -24,7 +24,7 @@ pub struct Command {
     #[command(flatten)]
     pub global: Global,
     #[command(subcommand)]
-    pub subcommand: Subcommand,
+    pub subcommand: Option<Subcommand>,
 }
 
 #[derive(Debug, Args)]
@@ -110,7 +110,7 @@ pub fn process() -> Result<(), Error> {
 
     if global.verbose {
         match subcommand {
-            Subcommand::Version(_) => (),
+            Some(Subcommand::Version(_)) => (),
             _ => version::print(),
         }
         println!("{:?}", env.config);
@@ -120,11 +120,14 @@ pub fn process() -> Result<(), Error> {
     }
 
     match subcommand {
-        Subcommand::Build(command) => build::handle(command, env)?,
-        Subcommand::Chroot(command) => chroot::handle(command, env)?,
-        Subcommand::Profile(command) => profile::handle(command, env)?,
-        Subcommand::Recipe(command) => recipe::handle(command, env)?,
-        Subcommand::Version(command) => version::handle(command),
+        Some(Subcommand::Build(command)) => build::handle(command, env)?,
+        Some(Subcommand::Chroot(command)) => chroot::handle(command, env)?,
+        Some(Subcommand::Profile(command)) => profile::handle(command, env)?,
+        Some(Subcommand::Recipe(command)) => recipe::handle(command, env)?,
+        Some(Subcommand::Version(command)) => version::handle(command),
+        None => {
+            println!("Pass --help to view usage.");
+        }
     }
 
     Ok(())
