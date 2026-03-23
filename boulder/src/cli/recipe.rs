@@ -12,18 +12,31 @@ use crate::{
     macros, recipe,
 };
 use clap::Parser;
+use ent_core::{data::updates::get_latest_version, recipes::ParserRegistration};
 use fs_err::{self as fs};
 use itertools::Itertools;
 use moss::{request, runtime, util};
+use similar::TextDiff;
 use stone_recipe::upstream;
 use tempfile::NamedTempFile;
 use thiserror::Error;
 use tui::{
     MultiProgress, ProgressBar, ProgressStyle, Styled,
+    dialoguer::{Confirm, theme::ColorfulTheme},
     pretty::{self, ColumnDisplay},
 };
 use url::Url;
 use version_parse::VersionExtractor;
+
+const LONG_UPDATE_ABOUT: &str = concat!(
+    "Update a recipe file\n\n",
+    "If no version or upstreams are provided then the recipe will attempt to be autoupdated\n",
+    "using the release information supplied in the monitoring.yaml file.\n\n",
+    "If a version is passed but no upstream, boulder will attempt to guess the new url from\n",
+    "the existing url.\n\n",
+    "If an upstream is passed but no version is passed, boulder will parse the new version\n",
+    "from the new upstream."
+);
 
 #[derive(Debug, Parser)]
 #[command(about = "Utilities to create and manipulate stone recipe files")]
@@ -58,14 +71,14 @@ pub enum Subcommand {
         #[arg(required = true, value_name = "URI", help = "Source archive URIs")]
         upstreams: Vec<Url>,
     },
-    #[command(about = "Update a recipe file")]
+    #[command(about = LONG_UPDATE_ABOUT)]
     Update {
         #[arg(id = "recipe_version", long = "ver", required = false, help = "Update version")]
         version: Option<String>,
         #[arg(
             short = 'u',
             long = "upstream",
-            required = true,
+            required = false,
             value_parser = parse_updated_source,
             help = concat!(
                 "Update upstream source, can be passed multiple times.\n",
@@ -111,7 +124,7 @@ fn parse_updated_source(s: &str) -> Result<UpdatedSource, String> {
     }
 }
 
-pub fn handle(command: Command, env: Env) -> Result<(), Error> {
+pub fn handle(command: Command, env: Env, yes: bool) -> Result<(), Error> {
     match command.subcommand {
         Subcommand::Bump { recipe, release } => bump(recipe, release),
         Subcommand::New { output, upstreams } => new(env, output, upstreams),
@@ -121,9 +134,135 @@ pub fn handle(command: Command, env: Env) -> Result<(), Error> {
             version,
             upstreams,
             no_bump,
-        } => update(env, recipe, overwrite, version, upstreams, no_bump),
+        } => update(env, recipe, overwrite, version, upstreams, no_bump, yes),
         Subcommand::Macros { _macro } => macros(_macro, env),
     }
+}
+
+fn autoupdate(env: Env, recipe: PathBuf, yes: bool) -> Result<(), Error> {
+    // TODO: We neednessly reparse here when coming from update()
+    //       but, we need the path regardless to parse with ent.
+    let path = recipe::resolve_path(&recipe).map_err(Error::ResolvePath)?;
+    let input = fs::read_to_string(path).map_err(Error::Read)?;
+
+    let parsed_recipe: recipe::Parsed = serde_yaml::from_str(&input)?;
+
+    // Setup ent parser
+    // TODO: Can we avoid the inventory dep and parse the stone directly?
+    let registration = inventory::iter::<ParserRegistration>
+        .into_iter()
+        .find(|p| p.name == "stone_recipe")
+        .expect("Stone parser registration missing");
+    let ent_parser = (registration.parser)();
+
+    // Parse our recipe with ent
+    let ent_parsed = ent_parser.parse(recipe.as_path())?;
+
+    if let Some(m) = ent_parsed.monitoring {
+        // Call the release-monitoring.org API using the ID found in monitoring.yaml
+        let response = runtime::block_on(get_latest_version(m.project_id))?;
+
+        let current_version = parsed_recipe.source.version;
+
+        let newest = response
+            .stable_versions
+            .first()
+            .cloned()
+            .unwrap_or_else(|| response.latest_version.unwrap_or_default());
+
+        println!("Newest version found: {newest}, current version: {current_version}");
+
+        if newest == current_version {
+            println!("Already up-to-date!");
+            return Ok(());
+        }
+
+        // Only parse the first upstream source for now...
+        let (first_upstream, _) = parsed_recipe
+            .upstreams
+            .split_first()
+            .expect("upstreams must not be empty");
+
+        let new_url = guess_new_url(newest.as_str(), first_upstream.url.as_str())?;
+
+        let updated_source = parse_updated_source(new_url.as_str()).unwrap();
+
+        update(
+            env,
+            Some(recipe.clone()),
+            true,
+            Some(newest),
+            vec![updated_source],
+            false,
+            true,
+        )?;
+
+        let autoupdated_recipe = fs::read_to_string(&recipe).map_err(Error::Read)?;
+
+        let diff = TextDiff::from_lines(&input, autoupdated_recipe);
+
+        println!("{}", diff.unified_diff());
+
+        let write_updated_recipe = if yes {
+            true
+        } else {
+            Confirm::with_theme(&ColorfulTheme::default())
+                .with_prompt(" Do you wish to continue? ")
+                .default(false)
+                .interact()?
+        };
+
+        // User rejected the auto-update, write back the original
+        if !write_updated_recipe {
+            fs::write(&recipe, input)?;
+        }
+    };
+
+    Ok(())
+}
+
+fn guess_new_url(new_version: &str, current_url: &str) -> Result<String, Error> {
+    let upstreams_parser = VersionExtractor::new();
+    let parsed_upstream = upstreams_parser.extract(current_url)?;
+    println!(
+        "Parsed URI: name = {}, version = {}, series-version = {:?}",
+        parsed_upstream.name, parsed_upstream.version, parsed_upstream.series_version
+    );
+
+    let current_version = &parsed_upstream.version;
+
+    let new_series_version = parsed_upstream
+        .series_version
+        .as_deref()
+        .map(|sv| (sv, derive_series_version(sv, new_version)));
+
+    Ok(current_url
+        .split('/')
+        .map(|segment| {
+            if let Some((old_sv, ref new_sv)) = new_series_version {
+                let segment_stripped = segment.trim_start_matches('v');
+                if segment_stripped == old_sv {
+                    // Preserve the v prefix if the segment had one
+                    return if segment.starts_with('v') {
+                        format!("v{new_sv}")
+                    } else {
+                        new_sv.clone()
+                    };
+                }
+            }
+            if segment.contains(current_version.as_str()) {
+                segment.replace(current_version.as_str(), new_version)
+            } else {
+                segment.to_owned()
+            }
+        })
+        .join("/"))
+}
+
+fn derive_series_version(old_series_version: &str, new_version: &str) -> String {
+    let segment_count = old_series_version.split('.').count();
+
+    new_version.split('.').take(segment_count).join(".")
 }
 
 fn bump(recipe: PathBuf, release: Option<u64>) -> Result<(), Error> {
@@ -178,13 +317,22 @@ fn update(
     version: Option<String>,
     sources: Vec<UpdatedSource>,
     no_bump: bool,
+    yes: bool,
 ) -> Result<(), Error> {
     if overwrite && recipe.is_none() {
         return Err(Error::OverwriteRecipeRequired);
     }
 
+    if !overwrite && (version.is_none() && sources.is_empty()) {
+        return Err(Error::OverwriteNotEnabled);
+    }
+
     let input = if let Some(recipe_path) = &recipe {
         let path = recipe::resolve_path(recipe_path).map_err(Error::ResolvePath)?;
+
+        if version.is_none() && sources.is_empty() {
+            return autoupdate(env, path, yes);
+        }
 
         fs::read_to_string(path).map_err(Error::Read)?
     } else {
@@ -439,6 +587,8 @@ impl ColumnDisplay for PrintMacro<'_> {
 pub enum Error {
     #[error("Recipe file must be provided to use -w/--overwrite")]
     OverwriteRecipeRequired,
+    #[error("Overwrite must be enabled if auto-updating recipe")]
+    OverwriteNotEnabled,
     #[error("Mismatch for upstream[{0}], expected {1} got {2}")]
     UpstreamMismatch(usize, &'static str, &'static str),
     #[error("load macros")]
@@ -465,8 +615,60 @@ pub enum Error {
     Utf8(#[from] std::string::FromUtf8Error),
     #[error("draft")]
     Draft(#[from] draft::Error),
-    #[error("upstreams-rs")]
+    #[error("statuscode")]
+    StatusCode(#[from] reqwest::Error),
+    #[error("version parse")]
     Upstreams(#[from] version_parse::VersionError),
     #[error("Must provide version if first upstream provided is of type git")]
     GitUpstreamMustProvideVersion,
+    #[error("ent recipe parse failure")]
+    Ent(#[from] ent_core::recipes::RecipeError),
+    #[error("string processing")]
+    Dialog(#[from] tui::dialoguer::Error),
+    #[error("io")]
+    Io(#[from] io::Error),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_guess_new_url() {
+        let new_url = guess_new_url(
+            "1.52.7",
+            "https://download.gnome.org/sources/NetworkManager/1.50/NetworkManager-1.50.0.tar.xz",
+        )
+        .unwrap();
+        assert_eq!(
+            new_url,
+            "https://download.gnome.org/sources/NetworkManager/1.52/NetworkManager-1.52.7.tar.xz"
+        );
+
+        let new_url = guess_new_url("9.0.1", "https://www.nano-editor.org/dist/v8/nano-8.7.1.tar.xz").unwrap();
+        assert_eq!(new_url, "https://www.nano-editor.org/dist/v9/nano-9.0.1.tar.xz");
+
+        let new_url = guess_new_url("50.0", "https://download.gnome.org/sources/ghex/48/ghex-48.3.tar.xz").unwrap();
+        assert_eq!(new_url, "https://download.gnome.org/sources/ghex/50/ghex-50.0.tar.xz");
+
+        let new_url = guess_new_url(
+            "1.91.2",
+            "https://gitlab.freedesktop.org/upower/upower/-/archive/v1.90.10/upower-v1.90.10.tar.gz",
+        )
+        .unwrap();
+        assert_eq!(
+            new_url,
+            "https://gitlab.freedesktop.org/upower/upower/-/archive/v1.91.2/upower-v1.91.2.tar.gz"
+        );
+
+        let new_url = guess_new_url(
+            "260.1",
+            "https://github.com/systemd/systemd/archive/refs/tags/v257.13.tar.gz",
+        )
+        .unwrap();
+        assert_eq!(
+            new_url,
+            "https://github.com/systemd/systemd/archive/refs/tags/v260.1.tar.gz"
+        );
+    }
 }

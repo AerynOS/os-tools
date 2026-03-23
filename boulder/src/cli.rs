@@ -40,6 +40,8 @@ pub struct Global {
     #[arg(short = 'V', long, default_value = "false", global = true)]
     pub version: bool,
     #[arg(long, global = true)]
+    pub yes: bool,
+    #[arg(long, global = true)]
     pub cache_dir: Option<PathBuf>,
     #[arg(long, global = true)]
     pub config_dir: Option<PathBuf>,
@@ -125,7 +127,7 @@ pub fn process() -> Result<(), Error> {
         Some(Subcommand::Cache(command)) => cache::handle(command, env)?,
         Some(Subcommand::Chroot(command)) => chroot::handle(command, env)?,
         Some(Subcommand::Profile(command)) => profile::handle(command, env)?,
-        Some(Subcommand::Recipe(command)) => recipe::handle(command, env)?,
+        Some(Subcommand::Recipe(command)) => recipe::handle(command, env, global.yes)?,
         Some(Subcommand::Version(command)) => version::handle(command),
         None => {
             println!("Pass --help to view usage.");
