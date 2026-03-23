@@ -72,7 +72,7 @@ pub struct Client {
     /// Root that we operate on
     installation: Installation,
     /// Combined set of data sources for current state and potential packages
-    registry: Registry,
+    pub registry: Registry,
     /// All installed packages across all states
     install_db: db::meta::Database,
     /// All States
