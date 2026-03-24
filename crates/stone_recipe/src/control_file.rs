@@ -1,6 +1,8 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, mem};
 
-use crate::KeyValue;
+use thiserror::Error;
+
+use crate::{Build, KeyValue, Package, Recipe};
 
 /// Control file to make modifications to a [`Recipe`]
 #[derive(Debug, PartialEq, Eq, Default)]
@@ -75,4 +77,107 @@ pub struct PackageModification {
     pub run_deps_exclude: Option<Vec<String>>,
     /// Modifies the conflicts array
     pub conflicts: Option<Vec<String>>,
+}
+
+#[derive(Debug, Error)]
+pub enum ModificationError {
+    #[error("profile {0} in {1} block does not exist in recipe")]
+    MissingRecipeProfile(String, Modification),
+    #[error("sub-package {0} in {1} block does not exist in recipe")]
+    MissingRecipeSubPackage(String, Modification),
+}
+
+impl ControlFile {
+    pub fn apply_to_recipe(self, recipe: &mut Recipe) -> Result<(), ModificationError> {
+        self.modifications
+            .into_iter()
+            .try_for_each(|(kind, modification)| modification.apply_to_recipe(kind, recipe))
+    }
+}
+
+impl RecipeModification {
+    pub fn apply_to_recipe(self, modification: Modification, recipe: &mut Recipe) -> Result<(), ModificationError> {
+        self.build.apply_to_build(modification, &mut recipe.build);
+        self.package.apply_to_build(modification, &mut recipe.package);
+
+        for kv in self.profiles {
+            let Some(existing_profile) = recipe
+                .profiles
+                .iter_mut()
+                .find_map(|b| (b.key == kv.key).then_some(&mut b.value))
+            else {
+                return Err(ModificationError::MissingRecipeProfile(kv.key, modification));
+            };
+
+            kv.value.apply_to_build(modification, existing_profile);
+        }
+
+        for kv in self.sub_packages {
+            let Some(existing_package) = recipe
+                .sub_packages
+                .iter_mut()
+                .find_map(|b| (b.key == kv.key).then_some(&mut b.value))
+            else {
+                return Err(ModificationError::MissingRecipeSubPackage(kv.key, modification));
+            };
+
+            kv.value.apply_to_build(modification, existing_package);
+        }
+
+        Ok(())
+    }
+}
+
+impl BuildModification {
+    pub fn apply_to_build(self, modification: Modification, build: &mut Build) {
+        modification.update_string(&mut build.setup, self.setup);
+        modification.update_string(&mut build.build, self.build);
+        modification.update_string(&mut build.install, self.install);
+        modification.update_string(&mut build.check, self.check);
+        modification.update_string(&mut build.workload, self.workload);
+        modification.update_string(&mut build.environment, self.environment);
+        modification.update_string_array(&mut build.build_deps, self.build_deps);
+        modification.update_string_array(&mut build.check_deps, self.check_deps);
+    }
+}
+
+impl PackageModification {
+    pub fn apply_to_build(self, modification: Modification, package: &mut Package) {
+        modification.update_string_array(&mut package.run_deps, self.run_deps);
+        modification.update_string_array(&mut package.run_deps_exclude, self.run_deps_exclude);
+        modification.update_string_array(&mut package.conflicts, self.conflicts);
+    }
+}
+
+impl Modification {
+    pub fn update_string(self, source: &mut Option<String>, update: Option<String>) {
+        if let Some(update) = update {
+            let source_str = source.as_deref().unwrap_or_default();
+
+            let new = match self {
+                Modification::Prepend => format!("{update}\n{source_str}"),
+                Modification::Append => format!("{source_str}\n{update}"),
+                Modification::Override => update,
+            };
+
+            *source = Some(new);
+        }
+    }
+
+    pub fn update_string_array(self, source: &mut Vec<String>, update: Option<Vec<String>>) {
+        if let Some(mut update) = update {
+            match self {
+                Modification::Prepend => {
+                    update.extend(mem::take(source));
+                    *source = update;
+                }
+                Modification::Append => {
+                    source.extend(update);
+                }
+                Modification::Override => {
+                    *source = update;
+                }
+            }
+        }
+    }
 }
