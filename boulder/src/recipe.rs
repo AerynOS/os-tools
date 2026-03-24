@@ -10,7 +10,9 @@ use std::{
 
 use chrono::{DateTime, Utc};
 use fs_err as fs;
+use stone_recipe::control_file;
 use thiserror::Error;
+use tui::Styled;
 
 use crate::architecture::{self, BuildTarget};
 
@@ -28,8 +30,27 @@ impl Recipe {
     /// Desired recipe value invariants are checked here
     pub fn load(path: impl AsRef<Path>) -> Result<Self, Error> {
         let path = resolve_path(path)?;
-        let source = fs::read_to_string(&path)?;
-        let parsed = stone_recipe::from_str(&source)?;
+        let control_file_path = path.with_file_name("control.kdl");
+
+        let source = fs::read_to_string(&path).map_err(Error::LoadRecipe)?;
+        let mut parsed = stone_recipe::from_str(&source)?;
+
+        // Apply control file if it exists
+        if control_file_path.exists() {
+            let content = fs::read_to_string(&control_file_path).map_err(Error::LoadControlFile)?;
+            let control_file = control_file::decode(&content)
+                .map_err(|err| Error::DecodeControlFile(err, control_file_path.clone()))?;
+
+            control_file
+                .apply_to_recipe(&mut parsed)
+                .map_err(|err| Error::ApplyControlFile(err, control_file_path.clone()))?;
+
+            println!(
+                "{} | Applied modifications from {control_file_path:?}",
+                "Control File".green()
+            );
+        }
+
         let build_time = resolve_build_time(&path);
 
         // Invariant checks
@@ -158,9 +179,15 @@ pub enum Error {
     #[error("recipe file does not exist: {0:?}")]
     MissingRecipe(PathBuf),
     #[error("load recipe")]
-    Load(#[from] io::Error),
+    LoadRecipe(#[source] io::Error),
+    #[error("load control file")]
+    LoadControlFile(#[source] io::Error),
     #[error("decode recipe")]
     Decode(#[from] stone_recipe::Error),
     #[error("value: {0}")]
     Value(String),
+    #[error("failed to decode control file {1:?}")]
+    DecodeControlFile(#[source] control_file::decode::Error, PathBuf),
+    #[error("failed to modify recipe with control file {1:?}")]
+    ApplyControlFile(#[source] control_file::ModificationError, PathBuf),
 }
