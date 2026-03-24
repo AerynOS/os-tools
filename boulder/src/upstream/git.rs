@@ -57,12 +57,16 @@ impl Git {
                 }
                 repo
             }
-            Err(gitwrap::Error::Run(_, _)) => {
-                cached = false;
-                clone(&self.url, &dir, pb).await?
+            Err(e) => {
+                if e.run_failed() {
+                    cached = false;
+                    clone(&self.url, &dir, pb).await?
+                } else {
+                    return Err(Error::from(e));
+                }
             }
-            Err(gitwrap::Error::Io(e)) => return Err(Error::from(e)),
         };
+
         Ok(StoredGit {
             name: self.name().to_owned(),
             was_cached: cached,
