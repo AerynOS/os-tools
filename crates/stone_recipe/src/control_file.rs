@@ -4,6 +4,8 @@ use thiserror::Error;
 
 use crate::{Build, KeyValue, Package, Recipe};
 
+pub use self::decode::decode;
+
 /// Control file to make modifications to a [`Recipe`]
 #[derive(Debug, PartialEq, Eq, Default)]
 pub struct ControlFile {
@@ -178,6 +180,246 @@ impl Modification {
                     *source = update;
                 }
             }
+        }
+    }
+}
+
+pub mod decode {
+    use kdl::{KdlDocument, KdlNode, KdlValue};
+    use thiserror::Error;
+
+    use crate::KeyValue;
+
+    use super::{BuildModification, ControlFile, Modification, PackageModification, RecipeModification};
+
+    #[derive(Debug, Error)]
+    pub enum Error {
+        #[error("parse as kdl document")]
+        ParseKdlDocument(#[source] kdl::KdlError),
+        #[error("invalid value for {0}.{1}, expected {2} got {3}")]
+        InvalidNodeValue(Modification, &'static str, &'static str, String),
+    }
+
+    pub fn decode(content: &str) -> Result<ControlFile, Error> {
+        let document: KdlDocument = content.parse().map_err(Error::ParseKdlDocument)?;
+
+        let modifications = [Modification::Prepend, Modification::Append, Modification::Override]
+            .into_iter()
+            .flat_map(
+                |modification| match decode_recipe_modification(modification, &document) {
+                    Ok(Some(v)) => Some(Ok((modification, v))),
+                    Ok(None) => None,
+                    Err(err) => Some(Err(err)),
+                },
+            )
+            .collect::<Result<_, Error>>()?;
+
+        Ok(ControlFile { modifications })
+    }
+
+    fn decode_recipe_modification(
+        modification: Modification,
+        document: &KdlDocument,
+    ) -> Result<Option<RecipeModification>, Error> {
+        let key = modification.to_string();
+
+        let Some(node) = document.get(&key) else {
+            return Ok(None);
+        };
+
+        let build = decode_build_modification(modification, node)?;
+        let package = decode_package_modification(node)?;
+
+        let profiles = get_child_node(node, "profiles")
+            .map(|node| {
+                node.iter_children()
+                    .map(|child| {
+                        let key = child.name().to_string();
+                        let value = decode_build_modification(modification, child)?;
+
+                        Ok(KeyValue { key, value })
+                    })
+                    .collect()
+            })
+            .transpose()?
+            .unwrap_or_default();
+
+        let sub_packages = get_child_node(node, "packages")
+            .map(|node| {
+                node.iter_children()
+                    .map(|child| {
+                        let key = child.name().to_string();
+                        let value = decode_package_modification(child)?;
+
+                        Ok(KeyValue { key, value })
+                    })
+                    .collect()
+            })
+            .transpose()?
+            .unwrap_or_default();
+
+        Ok(Some(RecipeModification {
+            build,
+            package,
+            profiles,
+            sub_packages,
+        }))
+    }
+
+    fn decode_build_modification(modification: Modification, node: &KdlNode) -> Result<BuildModification, Error> {
+        let setup = get_string(modification, node, "setup")?;
+        let build = get_string(modification, node, "build")?;
+        let install = get_string(modification, node, "install")?;
+        let check = get_string(modification, node, "check")?;
+        let workload = get_string(modification, node, "workload")?;
+        let environment = get_string(modification, node, "environment")?;
+        let build_deps = get_string_array(node, "builddeps");
+        let check_deps = get_string_array(node, "checkdeps");
+
+        Ok(BuildModification {
+            setup,
+            build,
+            install,
+            check,
+            workload,
+            environment,
+            build_deps,
+            check_deps,
+        })
+    }
+
+    fn decode_package_modification(node: &KdlNode) -> Result<PackageModification, Error> {
+        let run_deps = get_string_array(node, "rundeps");
+        let run_deps_exclude = get_string_array(node, "rundeps-exclude");
+        let conflicts = get_string_array(node, "conflicts");
+
+        Ok(PackageModification {
+            run_deps,
+            run_deps_exclude,
+            conflicts,
+        })
+    }
+
+    fn get_string(modification: Modification, node: &KdlNode, name: &'static str) -> Result<Option<String>, Error> {
+        get_child_value(node, name)
+            .map(|value| {
+                value
+                    .as_string()
+                    .map(ToOwned::to_owned)
+                    .ok_or_else(|| Error::InvalidNodeValue(modification, name, "string", value.to_string()))
+            })
+            .transpose()
+    }
+
+    fn get_string_array(node: &KdlNode, name: &'static str) -> Option<Vec<String>> {
+        get_child_node(node, name).map(|node| {
+            node.iter_children()
+                .map(|child| child.name().value().to_owned())
+                .collect()
+        })
+    }
+
+    fn get_child_value<'a>(node: &'a KdlNode, name: &str) -> Option<&'a KdlValue> {
+        node.children()
+            .and_then(|child| child.get(name))
+            .and_then(|node| node.get(0))
+    }
+
+    fn get_child_node<'a>(node: &'a KdlNode, name: &str) -> Option<&'a KdlNode> {
+        node.children().and_then(|child| child.get(name))
+    }
+
+    #[cfg(test)]
+    mod test {
+        use std::collections::BTreeMap;
+
+        use super::*;
+
+        #[test]
+        fn basic_parse() {
+            let kdl = r#"
+                append {
+                  builddeps {
+                      foo
+                  }
+                  rundeps {
+                      bar
+                  }
+                  setup """
+                    baz
+                    thing
+                    """
+                }
+                prepend {
+                  profiles {
+                      emul32 {
+                          environment "test"
+                      }
+                  }
+                }
+                unknown
+                override {
+                    unknown
+                    packages {
+                        foo {
+                            rundeps {
+                                "binary(nano)"
+                            }
+                        }
+                    }
+                }
+            "#;
+
+            let control = decode(kdl).expect("valid kdl");
+
+            assert_eq!(
+                control,
+                ControlFile {
+                    modifications: BTreeMap::from_iter([
+                        (
+                            Modification::Append,
+                            RecipeModification {
+                                build: BuildModification {
+                                    build_deps: Some(vec!["foo".to_owned()]),
+                                    setup: Some("baz\nthing".to_owned()),
+                                    ..Default::default()
+                                },
+                                package: PackageModification {
+                                    run_deps: Some(vec!["bar".to_owned()]),
+                                    ..Default::default()
+                                },
+                                ..Default::default()
+                            }
+                        ),
+                        (
+                            Modification::Prepend,
+                            RecipeModification {
+                                profiles: vec![KeyValue {
+                                    key: "emul32".to_owned(),
+                                    value: BuildModification {
+                                        environment: Some("test".to_owned()),
+                                        ..Default::default()
+                                    }
+                                }],
+                                ..Default::default()
+                            }
+                        ),
+                        (
+                            Modification::Override,
+                            RecipeModification {
+                                sub_packages: vec![KeyValue {
+                                    key: "foo".to_owned(),
+                                    value: PackageModification {
+                                        run_deps: Some(vec!["binary(nano)".to_owned()]),
+                                        ..Default::default()
+                                    }
+                                }],
+                                ..Default::default()
+                            }
+                        )
+                    ])
+                }
+            );
         }
     }
 }
