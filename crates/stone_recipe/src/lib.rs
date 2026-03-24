@@ -8,12 +8,14 @@ use serde::Deserialize;
 pub use serde_yaml::Error;
 
 use crate::serde_util::{default_true, stringy_bool};
-use crate::upstream::Upstream;
 
+pub use self::control_file::ControlFile;
 pub use self::macros::Macros;
 pub use self::script::Script;
 pub use self::tuning::Tuning;
+pub use self::upstream::Upstream;
 
+pub mod control_file;
 pub mod macros;
 pub mod script;
 pub mod tuning;
@@ -55,7 +57,7 @@ pub struct Recipe {
     pub mold: bool,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct KeyValue<T> {
     pub key: String,
     pub value: T,
