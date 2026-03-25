@@ -81,27 +81,42 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         package::Flags::new().with_available()
     };
 
-    let mut output = if let Some(provider) = provides {
+    let result = if let Some(provider) = provides {
         provides_package(&client, flags, provider, keyword)
     } else {
         search_packages(&client, flags, keyword)
     };
 
-    if output.is_empty() {
-        return Ok(());
-    }
+    match result {
+        Ok(mut output) => {
+            if output.is_empty() {
+                return Ok(());
+            }
 
-    for (match_kind, value) in output.iter_mut() {
-        println!("Matched field: {match_kind}");
-        value.sort();
-        print_columns(value, 1);
+            for (match_kind, value) in output.iter_mut() {
+                println!("Matched field: {match_kind}");
+                value.sort();
+                print_columns(value, 1);
+            }
+        }
+        Err(_) => todo!(),
     }
 
     Ok(())
 }
 
-fn search_packages(client: &Client, flags: package::Flags, keyword: &str) -> BTreeMap<MatchKind, Vec<Output>> {
-    let provider = Provider::from_name(keyword).expect("Invalid format");
+fn search_packages(
+    client: &Client,
+    flags: package::Flags,
+    keyword: &str,
+) -> Result<BTreeMap<MatchKind, Vec<Output>>, Error> {
+    let provider = match Provider::from_name(keyword) {
+        Ok(provider) => provider,
+        Err(_) => {
+            eprintln!("Provider not recognized: {keyword}");
+            return Err(Error::Provider);
+        }
+    };
 
     let mut output_kind: BTreeMap<MatchKind, Vec<Output>> = BTreeMap::new();
 
@@ -119,7 +134,7 @@ fn search_packages(client: &Client, flags: package::Flags, keyword: &str) -> BTr
                     search_match: Some(keyword.to_owned()),
                 });
             }
-            output_kind
+            Ok(output_kind)
         }
         _ => {
             output_kind.insert(
@@ -130,7 +145,7 @@ fn search_packages(client: &Client, flags: package::Flags, keyword: &str) -> BTr
                     .map(Output::from)
                     .collect(),
             );
-            output_kind
+            Ok(output_kind)
         }
     }
 }
@@ -153,7 +168,7 @@ fn provides_package(
     flags: package::Flags,
     provider: &str,
     name: &str,
-) -> BTreeMap<MatchKind, Vec<Output>> {
+) -> Result<BTreeMap<MatchKind, Vec<Output>>, Error> {
     let mut result: BTreeMap<MatchKind, Vec<Output>> = BTreeMap::new();
     let packages = match provider.parse::<dependency::Kind>() {
         Ok(kind) => provides_package_by_kind(client, flags, name, kind),
@@ -165,8 +180,8 @@ fn provides_package(
                 .collect(),
             "library" => provides_package_by_kind(client, flags, name, dependency::Kind::SharedLibrary),
             _ => {
-                println!("Provider not recognized: {provider}");
-                vec![]
+                eprintln!("Provider not recognized: {provider}");
+                return Err(Error::Provider);
             }
         },
     };
@@ -174,13 +189,16 @@ fn provides_package(
         MatchKind::Name,
         packages.into_iter().map(Output::from).collect::<Vec<Output>>(),
     );
-    result
+    Ok(result)
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("client")]
     Client(#[from] client::Error),
+
+    #[error("provider")]
+    Provider,
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -208,9 +226,9 @@ impl ColumnDisplay for Output {
     }
 
     fn display_column(&self, writer: &mut impl std::io::prelude::Write, _col: tui::pretty::Column, width: usize) {
-        if let Some(expression) = self.search_match.clone() {
-            let (name_prefix, name_matched, name_suffix) = highlight_string(self.name.as_str(), &expression);
-            let (summary_prefix, summary_matched, summary_suffix) = highlight_string(&self.summary, &expression);
+        if let Some(expression) = self.search_match.as_deref() {
+            let (name_prefix, name_matched, name_suffix) = highlight_string(self.name.as_str(), expression);
+            let (summary_prefix, summary_matched, summary_suffix) = highlight_string(&self.summary, expression);
             let _ = write!(
                 writer,
                 " {}{}{}{:width$}  {}{}{}",
@@ -271,7 +289,7 @@ mod tests {
         skip_in_ci!();
         let client = &TEST_CLIENT;
         let flags = package::Flags::new().with_available();
-        let output = search_packages(client, flags, "jq");
+        let output = search_packages(client, flags, "jq").unwrap();
         assert!(!output.is_empty(), "expected match for package jq");
     }
 
@@ -282,14 +300,14 @@ mod tests {
         let flags = package::Flags::new().with_available();
         for binary_name in ["telnet", "toast", "zramctl"] {
             // These binary names don't appear when searching by package name
-            let output = search_packages(client, flags, binary_name);
+            let output = search_packages(client, flags, binary_name).unwrap();
             assert!(
                 output.is_empty(),
                 "`search {binary_name}` output is not empty: {output:?}"
             );
 
             // We can find hits for all these binaries with the `--provides` flag
-            let output = provides_package(client, flags, "binaries", binary_name);
+            let output = provides_package(client, flags, "binaries", binary_name).unwrap();
             assert!(
                 !output.is_empty(),
                 "`search --provides {binary_name} should not be empty"
@@ -304,7 +322,7 @@ mod tests {
         let flags = package::Flags::new().with_available();
         for binary_name in ["telnet", "toast"] {
             // These binary names don't appear when searching by package name
-            let output = search_packages(client, flags, binary_name);
+            let output = search_packages(client, flags, binary_name).unwrap();
             assert!(
                 output.is_empty(),
                 "`search {binary_name}` output is not empty: {output:?}"
@@ -312,7 +330,7 @@ mod tests {
 
             // We can find hits for all these binaries with the provider syntax
             let provider_syntax = format!("binary({binary_name})");
-            let output = search_packages(client, flags, &provider_syntax);
+            let output = search_packages(client, flags, &provider_syntax).unwrap();
             assert!(
                 !output.is_empty(),
                 "`search {provider_syntax}` output should not be empty"
@@ -326,9 +344,9 @@ mod tests {
         let client = &TEST_CLIENT;
         let flags = package::Flags::new().with_available();
         for binary_name in ["hx", "telnet", "toast"] {
-            let output_a = provides_package(client, flags, "binaries", binary_name);
+            let output_a = provides_package(client, flags, "binaries", binary_name).unwrap();
             let provider_syntax = format!("binary({binary_name})");
-            let output_b = search_packages(client, flags, &provider_syntax);
+            let output_b = search_packages(client, flags, &provider_syntax).unwrap();
             assert_eq!(output_a, output_b);
         }
     }
