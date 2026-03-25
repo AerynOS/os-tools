@@ -118,6 +118,13 @@ impl AsRef<Path> for AStr {
     }
 }
 
+impl AsRef<[u8]> for AStr {
+    #[inline]
+    fn as_ref(&self) -> &[u8] {
+        self.as_bytes()
+    }
+}
+
 impl PartialEq for AStr {
     fn eq(&self, other: &Self) -> bool {
         self.as_str() == other.as_str()
