@@ -9,7 +9,7 @@ use itertools::Itertools;
 use thiserror::Error;
 use url::Url;
 
-use boulder::{Env, Profile, profile};
+use crate::{Env, Profile, profile};
 use moss::{Installation, Repository, repository, runtime};
 
 #[derive(Debug, Parser)]

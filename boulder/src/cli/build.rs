@@ -6,9 +6,9 @@ use std::io;
 use std::num::NonZeroU64;
 use std::path::PathBuf;
 
-use boulder::build::{self, Builder};
-use boulder::package::Packager;
-use boulder::{Env, Timing, container, package, profile, timing};
+use crate::build::{self, Builder};
+use crate::package::Packager;
+use crate::{Env, Timing, container, package, profile, timing};
 use chrono::Local;
 use clap::Parser;
 use moss::signal::inhibit;
