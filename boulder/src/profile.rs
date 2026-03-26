@@ -10,7 +10,6 @@ use thiserror::Error;
 
 use config::Config;
 use moss::repository;
-pub use moss::{Repository, repository::Priority};
 
 use crate::Env;
 

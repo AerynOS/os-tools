@@ -2,12 +2,31 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
+mod architecture;
+mod build;
+mod cli;
+mod container;
+mod draft;
+mod env;
+mod macros;
+mod package;
+mod paths;
+mod profile;
+mod recipe;
+mod timing;
+mod upstream;
+
+pub use architecture::Architecture;
+pub use env::Env;
+pub use macros::Macros;
+pub use paths::Paths;
+pub use profile::Profile;
+pub use recipe::Recipe;
+pub use timing::Timing;
+
 use std::error::Error;
 
 use tui::Styled;
-
-mod cli;
-
 fn main() {
     if let Err(error) = cli::process() {
         report_error(error);

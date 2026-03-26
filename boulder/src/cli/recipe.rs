@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use boulder::{
+use crate::{
     Env, Macros, architecture,
     draft::{self, Drafter, upstream::fetched_upstream_cache_path},
     macros, recipe,

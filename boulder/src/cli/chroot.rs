@@ -4,7 +4,7 @@
 
 use std::{io, path::PathBuf, process};
 
-use boulder::{
+use crate::{
     Env, Macros, Paths, Recipe,
     architecture::{self, BuildTarget},
     build, container, macros, recipe,
