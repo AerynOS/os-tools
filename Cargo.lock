@@ -1059,9 +1059,7 @@ dependencies = [
 name = "fnmatch"
 version = "0.26.1"
 dependencies = [
- "regex",
  "serde_core",
- "snafu",
 ]
 
 [[package]]
