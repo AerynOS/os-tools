@@ -321,7 +321,7 @@ pub enum FetchError {
     MissingUrl,
     #[snafu(display("invalid URL `{url}`"))]
     InvalidUrl { source: url::ParseError, url: Box<str> },
-    #[snafu(transparent, context(false))]
+    #[snafu(transparent)]
     Request { source: request::Error },
     #[snafu(context(false), display("io"))]
     Io { source: io::Error },
