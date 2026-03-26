@@ -37,8 +37,9 @@ actions:
             - binary(ninja)
             - cmake(ECM)
 
+    # DEPRECATED
     - qt_user_facing_links:
-        description: Setup user-facing binaries
+        description: Setup user-facing binaries (DEPRECATED)
         example: |
             %qt_user_facing_links
         command: |
@@ -75,7 +76,7 @@ definitions:
         -DINSTALL_LIBDIR=%(libdir) \
         -DINSTALL_LIBEXECDIR=%(libdir)/qt6 \
         -DINSTALL_MKSPECSDIR=%(libdir)/qt6/mkspecs \
-        -DINSTALL_PUBLICBINDIR=usr/bin \
+        -DINSTALL_PUBLICBINDIR=bin \
         -DQT_BUILD_EXAMPLES=ON \
         -DQT_FEATURE_rpath=OFF
 
