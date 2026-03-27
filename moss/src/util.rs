@@ -225,7 +225,7 @@ fn par_remove_dir_all_recursive(path: &Path) -> io::Result<()> {
             if let Err(err) = &result
                 && err.kind() != io::ErrorKind::NotFound
             {
-                return Ok(());
+                Ok(())
             } else {
                 result
             }
@@ -234,11 +234,14 @@ fn par_remove_dir_all_recursive(path: &Path) -> io::Result<()> {
     ignore_notfound(fs::remove_dir(path))
 }
 
-fn ignore_notfound(result: io::Result<()>) -> io::Result<()> {
-    match result {
-        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(()),
-        Ok(_) => Ok(()),
-        Err(err) => Err(err),
+/// Wrapper that ignores io::ErrorKind::NotFound errors
+pub fn ignore_notfound(result: io::Result<()>) -> io::Result<()> {
+    if let Err(err) = result
+        && err.kind() != io::ErrorKind::NotFound
+    {
+        Err(err)
+    } else {
+        Ok(())
     }
 }
 
