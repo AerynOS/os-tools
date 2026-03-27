@@ -112,7 +112,7 @@ pub fn extract(stones: Vec<&PathBuf>, output_dir: &Path) -> Result<(), Error> {
             .collect::<Vec<_>>();
         let vfs = client::vfs(records)?;
 
-        client::blit_root(&installation, &vfs, &extraction_root.canonicalize()?)?;
+        client::blit_root(&installation, &vfs, &extraction_root.canonicalize()?, None)?;
     }
 
     // Clean up transient .moss install
