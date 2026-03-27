@@ -10,7 +10,7 @@ use std::{
 use fs_err::{self as fs, File};
 use moss::{Dependency, Provider, dependency};
 
-use crate::package::collect::PathInfo;
+use crate::{package::collect::PathInfo, util::ResultExt as _};
 
 pub use self::elf::elf;
 pub use self::python::python;
@@ -99,8 +99,9 @@ pub fn pkg_config(bucket: &mut BucketMut<'_>, info: &mut PathInfo) -> Result<Res
                 },
             ),
         ])
-        .output()?;
-    let stdout = String::from_utf8(output.stdout)?;
+        .output()
+        .context("failed to run pkg-config")?;
+    let stdout = String::from_utf8(output.stdout).context("unexpected pkg-config output")?;
     let deps = stdout.lines().filter_map(|line| line.split_whitespace().next());
 
     for dep in deps {
@@ -213,14 +214,15 @@ pub fn compressman(bucket: &mut BucketMut<'_>, info: &mut PathInfo) -> Result<Re
             let _ = bucket.paths.install().guest.join(&compressed_zst_file);
         }
 
-        symlink(&compressed_zst_file, &new_zst_symlink)?;
+        symlink(&compressed_zst_file, &new_zst_symlink).context("creating zstd symlink")?;
 
         /* Restore the original {a,m}times for reproducibility */
         filetime::set_symlink_file_times(
             &new_zst_symlink,
             FileTime::from_system_time(atime),
             FileTime::from_system_time(mtime),
-        )?;
+        )
+        .context("updating symlink file times")?;
 
         generated_path.push(bucket.paths.install().guest.join(new_zst_symlink));
         return Ok(Decision::ReplaceFile {
@@ -239,7 +241,8 @@ pub fn compressman(bucket: &mut BucketMut<'_>, info: &mut PathInfo) -> Result<Re
         &File::open(&compressed_zst_file)?.into_file(),
         Some(FileTime::from_system_time(atime)),
         Some(FileTime::from_system_time(mtime)),
-    )?;
+    )
+    .context("updating zstd archive file times")?;
 
     generated_path.push(bucket.paths.install().guest.join(compressed_zst_file));
 
