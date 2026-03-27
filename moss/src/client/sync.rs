@@ -1,6 +1,7 @@
 use std::{
     collections::BTreeSet,
     path::{Path, PathBuf},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -13,7 +14,12 @@ use tui::{
 };
 
 use crate::{
-    Client, Package, Provider, SystemModel, client, db, package, registry::transaction, runtime, state::Selection,
+    Client, Package, Provider, SystemModel,
+    client::{self, ProgressStage},
+    db, package,
+    registry::transaction,
+    runtime,
+    state::Selection,
     system_model,
 };
 
@@ -22,9 +28,14 @@ pub fn sync(
     import: Option<&Path>,
     yes: bool,
     simulate: bool,
+    progress_callback: Option<Arc<dyn Fn(f32, ProgressStage) + Send + Sync>>,
 ) -> Result<(Vec<Package>, Timing), Error> {
     let mut timing = Timing::default();
     let mut instant = Instant::now();
+
+    if let Some(ref callback) = progress_callback {
+        callback(0.0, ProgressStage::Resolve);
+    }
 
     let system_model = if let Some(path) = import {
         Some(system_model::load(path)?.ok_or(Error::ImportSystemModelDoesntExist(path.to_owned()))?)
@@ -140,7 +151,11 @@ pub fn sync(
         event_type = "progress_start"
     );
 
-    runtime::block_on(client.cache_packages(&synced).in_current_span())?;
+    runtime::block_on(
+        client
+            .cache_packages(&synced, progress_callback.clone())
+            .in_current_span(),
+    )?;
 
     timing.fetch = instant.elapsed();
     info!(
@@ -205,7 +220,7 @@ pub fn sync(
     };
 
     // Perfect, apply state.
-    client.new_state(&new_selections, "Sync")?;
+    client.new_state(&new_selections, "Sync", progress_callback)?;
 
     timing.blit = instant.elapsed();
 

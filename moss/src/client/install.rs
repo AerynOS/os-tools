@@ -4,7 +4,10 @@
 
 //! Installation-specific code for several core moss operations
 
-use std::time::{Duration, Instant};
+use std::{
+    sync::Arc,
+    time::{Duration, Instant},
+};
 
 use thiserror::Error;
 use tracing::{Instrument, debug, info, info_span, instrument};
@@ -15,7 +18,7 @@ use tui::{
 
 use crate::{
     Package, Provider,
-    client::{self, Client},
+    client::{self, Client, ProgressStage},
     package::{self, Flags},
     registry::transaction,
     runtime,
@@ -26,10 +29,20 @@ use crate::{
 ///
 /// If this call is successful a new State is recorded into the [`super::db::state::Database`].
 /// Upon completion the `/usr` tree is "hot swapped" with the staging tree through `renameat2` call.
-#[instrument(skip(client), fields(ephemeral = client.is_ephemeral()))]
-pub fn install(client: &mut Client, pkgs: &[&str], yes: bool, simulate: bool) -> Result<(Vec<Package>, Timing), Error> {
+#[instrument(skip(client, progress_callback), fields(ephemeral = client.is_ephemeral()))]
+pub fn install(
+    client: &mut Client,
+    pkgs: &[&str],
+    yes: bool,
+    simulate: bool,
+    progress_callback: Option<Arc<dyn Fn(f32, ProgressStage) + Send + Sync>>,
+) -> Result<(Vec<Package>, Timing), Error> {
     let mut timing = Timing::default();
     let mut instant = Instant::now();
+
+    if let Some(ref callback) = progress_callback {
+        callback(0.0, ProgressStage::Resolve);
+    }
 
     // Resolve input packages
     let input = resolve_input(pkgs, client)?;
@@ -120,7 +133,11 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool, simulate: bool) ->
     );
 
     // Cache packages
-    runtime::block_on(client.cache_packages(&missing).in_current_span())?;
+    runtime::block_on(
+        client
+            .cache_packages(&missing, progress_callback.clone())
+            .in_current_span(),
+    )?;
 
     timing.fetch = instant.elapsed();
     info!(
@@ -151,7 +168,7 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool, simulate: bool) ->
     };
 
     // Perfect, apply state.
-    client.new_state(&new_state_pkgs, "Install")?;
+    client.new_state(&new_state_pkgs, "Install", progress_callback)?;
 
     timing.blit = instant.elapsed();
 

@@ -223,7 +223,7 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
         println!("Reinstalling packages");
 
         // And re-cache all packages that comprise the corrupt / missing asset
-        runtime::block_on(client.cache_packages(&issue_packages))?;
+        runtime::block_on(client.cache_packages(&issue_packages, None))?;
     }
 
     // Now we must fix any states that referenced these packages
@@ -260,14 +260,14 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
         let is_active = client.installation.active_state == Some(state.id);
 
         // Blits to staging dir
-        let fstree = client.blit_root(state.selections.iter().map(|s| &s.package))?;
+        let fstree = client.blit_root(state.selections.iter().map(|s| &s.package), None)?;
 
         if is_active {
             let system_model =
                 client.load_or_create_system_model(client.installation.root.join("usr/lib/system-model.kdl"), state)?;
 
             // Override install root with the newly blitted active state
-            client.apply_stateful_blit(fstree, state, None, system_model)?;
+            client.apply_stateful_blit(fstree, state, None, system_model, None)?;
             // Remove corrupt (swapped) state from staging directory
             fs::remove_dir_all(client.installation.staging_dir())?;
         } else {
@@ -282,7 +282,7 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
             // Use the staged blit as an ephereral target for the non-active state
             // then archive it to it's archive directory
             client::record_state_id(&client.installation.staging_dir(), state.id)?;
-            client.apply_ephemeral_blit(fstree, &client.installation.staging_dir(), system_model)?;
+            client.apply_ephemeral_blit(fstree, &client.installation.staging_dir(), system_model, None)?;
 
             // Remove the old archive state so the new blit can be archived
             fs::remove_dir_all(client.installation.root_path(state.id.to_string())).or_else(|e| {

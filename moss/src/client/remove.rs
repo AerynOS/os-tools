@@ -1,5 +1,6 @@
 use std::{
     collections::BTreeSet,
+    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -12,13 +13,29 @@ use tui::{
     pretty::autoprint_columns,
 };
 
-use crate::{Client, Package, Provider, client, db, registry::transaction, state::Selection};
+use crate::{
+    Client, Package, Provider,
+    client::{self, ProgressStage},
+    db,
+    registry::transaction,
+    state::Selection,
+};
 
 /// Remove a set of packages.
-#[instrument(skip(client), fields(ephemeral = client.is_ephemeral()))]
-pub fn remove(client: &mut Client, pkgs: &[&str], yes: bool, simulate: bool) -> Result<(Vec<Package>, Timing), Error> {
+#[instrument(skip(client, progress_callback), fields(ephemeral = client.is_ephemeral()))]
+pub fn remove(
+    client: &mut Client,
+    pkgs: &[&str],
+    yes: bool,
+    simulate: bool,
+    progress_callback: Option<Arc<dyn Fn(f32, ProgressStage) + Send + Sync>>,
+) -> Result<(Vec<Package>, Timing), Error> {
     let mut timing = Timing::default();
     let mut instant = Instant::now();
+
+    if let Some(ref callback) = progress_callback {
+        callback(0.0, ProgressStage::Resolve);
+    }
 
     let installed = client.registry.list_installed().collect::<Vec<_>>();
     let installed_ids = installed.iter().map(|p| p.id.clone()).collect::<BTreeSet<_>>();
@@ -157,7 +174,7 @@ pub fn remove(client: &mut Client, pkgs: &[&str], yes: bool, simulate: bool) -> 
     };
 
     // Apply state
-    client.new_state(&new_state_pkgs, "Remove")?;
+    client.new_state(&new_state_pkgs, "Remove", progress_callback)?;
 
     timing.blit = instant.elapsed();
 
@@ -195,7 +212,7 @@ pub enum Error {
 }
 
 /// Simple timing information for Remove
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Timing {
     pub resolve: Duration,
     pub blit: Duration,

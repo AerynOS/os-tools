@@ -147,7 +147,7 @@ pub fn activate(args: &ArgMatches, installation: Installation) -> Result<(), Err
     let skip_boot = args.get_flag("skip-boot");
 
     let client = Client::new(environment::NAME, installation)?;
-    let old_id = client.activate_state(new_id.into(), skip_triggers, skip_boot)?;
+    let old_id = client.activate_state(new_id.into(), skip_triggers, skip_boot, None)?;
 
     println!(
         "State {} activated {}",
