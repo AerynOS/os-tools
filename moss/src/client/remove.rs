@@ -12,11 +12,11 @@ use tui::{
     pretty::autoprint_columns,
 };
 
-use crate::{Client, Provider, client, db, registry::transaction, state::Selection};
+use crate::{Client, Package, Provider, client, db, registry::transaction, state::Selection};
 
 /// Remove a set of packages.
 #[instrument(skip(client), fields(ephemeral = client.is_ephemeral()))]
-pub fn remove(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, Error> {
+pub fn remove(client: &mut Client, pkgs: &[&str], yes: bool, simulate: bool) -> Result<(Vec<Package>, Timing), Error> {
     let mut timing = Timing::default();
     let mut instant = Instant::now();
 
@@ -100,6 +100,10 @@ pub fn remove(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, E
     autoprint_columns(&removed);
     println!();
 
+    if simulate {
+        return Ok((removed, timing));
+    }
+
     let result = if yes {
         true
     } else {
@@ -163,7 +167,7 @@ pub fn remove(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, E
         "Removal completed successfully"
     );
 
-    Ok(timing)
+    Ok((removed, timing))
 }
 
 #[derive(Debug, Error)]

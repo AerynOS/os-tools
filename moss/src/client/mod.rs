@@ -147,8 +147,13 @@ impl Client {
     }
 
     /// Perform package removals
-    pub fn remove(&mut self, packages: &[&str], yes: bool) -> Result<remove::Timing, Error> {
-        remove(self, packages, yes).map_err(|error| Error::Remove(Box::new(error)))
+    pub fn remove(
+        &mut self,
+        packages: &[&str],
+        yes: bool,
+        simulate: bool,
+    ) -> Result<(Vec<Package>, remove::Timing), Error> {
+        remove(self, packages, yes, simulate).map_err(|error| Error::Remove(Box::new(error)))
     }
 
     /// Perform package fetches

@@ -30,7 +30,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
 
     let mut client = Client::new(environment::NAME, installation)?;
 
-    client.remove(&pkgs, yes)?;
+    client.remove(&pkgs, yes, false)?;
 
     Ok(())
 }
