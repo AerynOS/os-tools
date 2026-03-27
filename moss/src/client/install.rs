@@ -27,7 +27,7 @@ use crate::{
 /// If this call is successful a new State is recorded into the [`super::db::state::Database`].
 /// Upon completion the `/usr` tree is "hot swapped" with the staging tree through `renameat2` call.
 #[instrument(skip(client), fields(ephemeral = client.is_ephemeral()))]
-pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, Error> {
+pub fn install(client: &mut Client, pkgs: &[&str], yes: bool, simulate: bool) -> Result<(Vec<Package>, Timing), Error> {
     let mut timing = Timing::default();
     let mut instant = Instant::now();
 
@@ -52,7 +52,8 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
     // Stateful: Not installed
     // Ephemeral: all
     let missing = resolved
-        .iter()
+        .clone()
+        .into_iter()
         .filter(|p| client.is_ephemeral() || !is_installed(p))
         .collect::<Vec<_>>();
 
@@ -69,8 +70,9 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
     // packages already installed
     if missing.is_empty() {
         let installed = resolved
-            .iter()
+            .into_iter()
             .filter(|p| is_installed(p) && input.contains(&p.id))
+            .to_owned()
             .collect::<Vec<_>>();
 
         if !installed.is_empty() {
@@ -79,7 +81,7 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
             autoprint_columns(&installed);
         }
 
-        return Ok(timing);
+        return Ok((vec![], timing));
     }
 
     // Testing panic for hyperfine benchmarking purposes (build flag tuning)
@@ -89,6 +91,10 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
     println!();
     autoprint_columns(&missing);
     println!();
+
+    if simulate {
+        return Ok((missing, timing));
+    }
 
     // Must we prompt?
     let result = if yes {
@@ -155,7 +161,7 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
         "Installation completed successfully"
     );
 
-    Ok(timing)
+    Ok((missing, timing))
 }
 
 /// Resolves the package arguments as valid input packages. Returns an error
