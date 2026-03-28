@@ -57,7 +57,6 @@ pub use self::index::index;
 
 mod boot;
 mod cache;
-mod fetch;
 mod install;
 mod postblit;
 mod remove;
@@ -65,6 +64,7 @@ mod sync;
 mod verify;
 
 pub mod extract;
+pub mod fetch;
 pub mod index;
 pub mod prune;
 
@@ -170,8 +170,9 @@ impl Client {
         packages: &[&str],
         output_dir: &Path,
         verbose: bool,
+        progress_callback: Option<Arc<dyn Fn(fetch::DownloadCallback) + Send + Sync>>,
     ) -> Result<(Vec<PathBuf>, fetch::Timing), Error> {
-        fetch(self, packages, output_dir, verbose).map_err(|error| Error::Fetch(Box::new(error)))
+        fetch(self, packages, output_dir, verbose, progress_callback).map_err(|error| Error::Fetch(Box::new(error)))
     }
 
     /// Perform a sync
