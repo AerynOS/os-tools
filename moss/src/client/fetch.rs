@@ -1,6 +1,6 @@
 use std::{
     io,
-    path::Path,
+    path::{Path, PathBuf},
     time::{Duration, Instant},
 };
 
@@ -21,7 +21,12 @@ use crate::{
 
 /// Fetch a set of packages.
 #[instrument(skip(client), fields(ephemeral = client.is_ephemeral()))]
-pub fn fetch(client: &mut Client, pkgs: &[&str], output_dir: &Path, verbose: bool) -> Result<Timing, Error> {
+pub fn fetch(
+    client: &mut Client,
+    pkgs: &[&str],
+    output_dir: &Path,
+    verbose: bool,
+) -> Result<(Vec<PathBuf>, Timing), Error> {
     let mut timing = Timing::default();
     let mut instant = Instant::now();
 
@@ -68,78 +73,82 @@ pub fn fetch(client: &mut Client, pkgs: &[&str], output_dir: &Path, verbose: boo
     );
     total_progress.tick();
 
-    runtime::block_on(async {
-        let stream = stream::iter(&input).map(|pkg| async {
-            let download_size = pkg.meta.download_size.unwrap_or_default();
+    let package_paths = runtime::block_on(async {
+        let stream = stream::iter(&input).map(|pkg| {
+            let multi_progress = multi_progress.clone();
+            let total_progress = total_progress.clone();
+            let output_dir = output_dir.clone();
+            async move {
+                let download_size = pkg.meta.download_size.unwrap_or_default();
 
-            let progress_bar = multi_progress.insert_before(
-                &total_progress,
-                ProgressBar::new(download_size)
-                    .with_message(format!("{} {}", "Downloading".blue(), pkg.meta.name.as_str().bold(),))
-                    .with_style(
-                        ProgressStyle::with_template(
-                            " {spinner} |{percent:>3}%| {wide_msg} {binary_bytes_per_sec:>.dim} ",
-                        )
-                        .unwrap()
-                        .tick_chars("--=≡■≡=--"),
-                    ),
-            );
-            progress_bar.enable_steady_tick(Duration::from_millis(150));
-
-            let uri = Url::parse(
-                pkg.meta
-                    .uri
-                    .as_deref()
-                    .expect("registry packages must have uri defined"),
-            )?;
-            let file_name = uri
-                .path_segments()
-                .and_then(|mut segments| segments.next_back())
-                .expect("uri path has at least one segment");
-
-            let dest_path = output_dir.join(file_name);
-
-            request::download_with_progress(uri, &dest_path, |progress| {
-                progress_bar.inc(progress.delta);
-                info!(
-                    progress = progress.completed as f32 / download_size as f32,
-                    current = progress.completed as usize,
-                    total = download_size as usize,
-                    event_type = "progress_update",
-                    "Downloading {}",
-                    pkg.meta.name
+                let progress_bar = multi_progress.insert_before(
+                    &total_progress,
+                    ProgressBar::new(download_size)
+                        .with_message(format!("{} {}", "Downloading".blue(), pkg.meta.name.as_str().bold(),))
+                        .with_style(
+                            ProgressStyle::with_template(
+                                " {spinner} |{percent:>3}%| {wide_msg} {binary_bytes_per_sec:>.dim} ",
+                            )
+                            .unwrap()
+                            .tick_chars("--=≡■≡=--"),
+                        ),
                 );
-            })
-            .await
-            .map_err(|err| Error::FetchPackage(err, pkg.meta.name.clone()))?;
+                progress_bar.enable_steady_tick(Duration::from_millis(150));
 
-            progress_bar.finish();
-            multi_progress.remove(&progress_bar);
+                let uri = Url::parse(
+                    pkg.meta
+                        .uri
+                        .as_deref()
+                        .expect("registry packages must have uri defined"),
+                )?;
+                let file_name = uri
+                    .path_segments()
+                    .and_then(|mut segments| segments.next_back())
+                    .expect("uri path has at least one segment");
 
-            multi_progress.suspend(|| {
-                // Print the relative instead of absolute path to user
-                let path_to_print = if let Ok(cwd) = std::env::current_dir() {
-                    dest_path.strip_prefix(cwd).ok().unwrap_or(&dest_path)
-                } else {
-                    &dest_path
-                };
+                let dest_path = output_dir.join(file_name);
 
-                println!(
-                    "{} {} {}",
-                    "Fetched".green(),
-                    pkg.meta.name.to_string().bold(),
-                    path_to_print.display()
-                );
-            });
+                request::download_with_progress(uri, &dest_path, |progress| {
+                    progress_bar.inc(progress.delta);
+                    info!(
+                        progress = progress.completed as f32 / download_size as f32,
+                        current = progress.completed as usize,
+                        total = download_size as usize,
+                        event_type = "progress_update",
+                        "Downloading {}",
+                        pkg.meta.name
+                    );
+                })
+                .await
+                .map_err(|err| Error::FetchPackage(err, pkg.meta.name.clone()))?;
 
-            total_progress.inc(1);
+                progress_bar.finish();
+                multi_progress.remove(&progress_bar);
 
-            Ok(()) as Result<(), Error>
+                multi_progress.suspend(|| {
+                    // Print the relative instead of absolute path to user
+                    let package_path = if let Ok(cwd) = std::env::current_dir() {
+                        dest_path.strip_prefix(cwd).ok().unwrap_or(&dest_path)
+                    } else {
+                        &dest_path
+                    };
+
+                    println!(
+                        "{} {} {}",
+                        "Fetched".green(),
+                        pkg.meta.name.to_string().bold(),
+                        package_path.display()
+                    );
+                });
+                total_progress.inc(1);
+
+                Ok(dest_path) as Result<PathBuf, Error>
+            }
         });
 
         let buffered = stream.buffer_unordered(environment::MAX_NETWORK_CONCURRENCY);
 
-        buffered.try_collect::<()>().await
+        buffered.try_collect::<Vec<PathBuf>>().await
     })?;
 
     timing.fetch = instant.elapsed();
@@ -150,7 +159,7 @@ pub fn fetch(client: &mut Client, pkgs: &[&str], output_dir: &Path, verbose: boo
         event_type = "progress_completed",
     );
 
-    Ok(timing)
+    Ok((package_paths, timing))
 }
 
 /// Resolves the package arguments as valid input packages. Returns an error

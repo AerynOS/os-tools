@@ -162,7 +162,12 @@ impl Client {
     }
 
     /// Perform package fetches
-    pub fn fetch(&mut self, packages: &[&str], output_dir: &Path, verbose: bool) -> Result<fetch::Timing, Error> {
+    pub fn fetch(
+        &mut self,
+        packages: &[&str],
+        output_dir: &Path,
+        verbose: bool,
+    ) -> Result<(Vec<PathBuf>, fetch::Timing), Error> {
         fetch(self, packages, output_dir, verbose).map_err(|error| Error::Fetch(Box::new(error)))
     }
 
