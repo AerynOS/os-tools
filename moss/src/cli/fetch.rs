@@ -41,7 +41,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
 
     let packages = packages.iter().map(String::as_str).collect::<Vec<_>>();
 
-    client.fetch(&packages, &output_dir, verbose)?;
+    client.fetch(&packages, &output_dir, verbose, None)?;
 
     Ok(())
 }

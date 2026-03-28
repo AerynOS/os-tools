@@ -1,6 +1,10 @@
 use std::{
     io,
     path::{Path, PathBuf},
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -19,13 +23,20 @@ use crate::{
     request, runtime, util,
 };
 
+#[derive(Clone, Debug)]
+pub enum DownloadCallback {
+    Overall(f32),
+    Current(String, f32),
+}
+
 /// Fetch a set of packages.
-#[instrument(skip(client), fields(ephemeral = client.is_ephemeral()))]
+#[instrument(skip(client, progress_callback), fields(ephemeral = client.is_ephemeral()))]
 pub fn fetch(
     client: &mut Client,
     pkgs: &[&str],
     output_dir: &Path,
     verbose: bool,
+    progress_callback: Option<Arc<dyn Fn(DownloadCallback) + Send + Sync>>,
 ) -> Result<(Vec<PathBuf>, Timing), Error> {
     let mut timing = Timing::default();
     let mut instant = Instant::now();
@@ -73,11 +84,18 @@ pub fn fetch(
     );
     total_progress.tick();
 
+    let total_bytes = input
+        .iter()
+        .fold(0, |acc, p| acc + p.meta.download_size.unwrap_or_default());
+    let total_completed_bytes = AtomicU64::new(0);
+
     let package_paths = runtime::block_on(async {
         let stream = stream::iter(&input).map(|pkg| {
             let multi_progress = multi_progress.clone();
             let total_progress = total_progress.clone();
             let output_dir = output_dir.clone();
+            let progress_callback = progress_callback.clone();
+            let total_completed_bytes = &total_completed_bytes;
             async move {
                 let download_size = pkg.meta.download_size.unwrap_or_default();
 
@@ -110,6 +128,18 @@ pub fn fetch(
 
                 request::download_with_progress(uri, &dest_path, |progress| {
                     progress_bar.inc(progress.delta);
+
+                    let total_completed =
+                        total_completed_bytes.fetch_add(progress.delta, Ordering::SeqCst) + progress.delta;
+
+                    if let Some(ref callback) = progress_callback {
+                        callback(DownloadCallback::Overall(total_completed as f32 / total_bytes as f32));
+                        callback(DownloadCallback::Current(
+                            pkg.meta.name.to_string(),
+                            progress.completed as f32 / download_size as f32,
+                        ));
+                    }
+
                     info!(
                         progress = progress.completed as f32 / download_size as f32,
                         current = progress.completed as usize,
