@@ -58,7 +58,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         runtime::block_on(client.refresh_repositories())?;
     }
 
-    client.sync(command.import.as_deref(), yes)?;
+    client.sync(command.import.as_deref(), yes, false)?;
 
     Ok(())
 }
