@@ -167,8 +167,13 @@ impl Client {
     }
 
     /// Perform a sync
-    pub fn sync(&mut self, import: Option<&Path>, yes: bool) -> Result<sync::Timing, Error> {
-        sync(self, import, yes).map_err(|error| Error::Sync(Box::new(error)))
+    pub fn sync(
+        &mut self,
+        import: Option<&Path>,
+        yes: bool,
+        simulate: bool,
+    ) -> Result<(Vec<Package>, sync::Timing), Error> {
+        sync(self, import, yes, simulate).map_err(|error| Error::Sync(Box::new(error)))
     }
 
     /// Transition to an ephemeral client that doesn't record state changes
