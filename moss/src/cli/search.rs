@@ -81,25 +81,20 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         package::Flags::new().with_available()
     };
 
-    let result = if let Some(provider) = provides {
+    let mut output = if let Some(provider) = provides {
         provides_package(&client, flags, provider, keyword)
     } else {
         search_packages(&client, flags, keyword)
-    };
+    }?;
 
-    match result {
-        Ok(mut output) => {
-            if output.is_empty() {
-                return Ok(());
-            }
+    if output.is_empty() {
+        return Ok(());
+    }
 
-            for (match_kind, value) in output.iter_mut() {
-                println!("Matched field: {match_kind}");
-                value.sort();
-                print_columns(value, 1);
-            }
-        }
-        Err(_) => todo!(),
+    for (match_kind, value) in output.iter_mut() {
+        println!("Matched field: {match_kind}");
+        value.sort();
+        print_columns(value, 1);
     }
 
     Ok(())
@@ -110,13 +105,7 @@ fn search_packages(
     flags: package::Flags,
     keyword: &str,
 ) -> Result<BTreeMap<MatchKind, Vec<Output>>, Error> {
-    let provider = match Provider::from_name(keyword) {
-        Ok(provider) => provider,
-        Err(_) => {
-            eprintln!("Provider not recognized: {keyword}");
-            return Err(Error::Provider);
-        }
-    };
+    let provider = Provider::from_name(keyword).map_err(|_| Error::ParseError(keyword.to_owned()))?;
 
     let mut output_kind: BTreeMap<MatchKind, Vec<Output>> = BTreeMap::new();
 
@@ -191,8 +180,8 @@ pub enum Error {
     #[error("client")]
     Client(#[from] client::Error),
 
-    #[error("provider")]
-    Provider,
+    #[error("Invalid dependency type: {0}")]
+    ParseError(String),
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
