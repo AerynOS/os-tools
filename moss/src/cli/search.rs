@@ -58,7 +58,7 @@ pub fn command() -> Command {
                     "sysbinary",
                     "pkgconfig32",
                 ])
-                .help("Search for packages providing a binary"),
+                .help("Search for packages by provider"),
         )
 }
 
@@ -179,16 +179,10 @@ fn provides_package(
                 .flat_map(|kind| provides_package_by_kind(client, flags, name, kind))
                 .collect(),
             "library" => provides_package_by_kind(client, flags, name, dependency::Kind::SharedLibrary),
-            _ => {
-                eprintln!("Provider not recognized: {provider}");
-                return Err(Error::Provider);
-            }
+            _ => unreachable!("clap restricts valid arguments"),
         },
     };
-    result.insert(
-        MatchKind::Name,
-        packages.into_iter().map(Output::from).collect::<Vec<Output>>(),
-    );
+    result.insert(MatchKind::Name, packages.into_iter().map(Output::from).collect());
     Ok(result)
 }
 
@@ -209,10 +203,7 @@ struct Output {
 }
 
 fn highlight_string(content: &str, expression: &str) -> (String, String, String) {
-    if let Some(index) = content
-        .to_ascii_lowercase()
-        .find(expression.to_ascii_lowercase().as_str())
-    {
+    if let Some(index) = content.to_ascii_lowercase().find(&expression.to_ascii_lowercase()) {
         let (prefix, body) = content.split_at(index);
         let (matched, suffix) = body.split_at(expression.len());
         (prefix.to_owned(), matched.to_owned(), suffix.to_owned())
@@ -220,6 +211,7 @@ fn highlight_string(content: &str, expression: &str) -> (String, String, String)
         (content.to_owned(), String::default(), String::default())
     }
 }
+
 impl ColumnDisplay for Output {
     fn get_display_width(&self) -> usize {
         self.name.as_str().chars().count()
