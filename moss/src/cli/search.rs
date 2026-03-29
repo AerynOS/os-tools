@@ -112,7 +112,8 @@ fn search_packages(
     match provider.kind {
         dependency::Kind::PackageName => {
             for pkg in client.search_packages(&provider.name, flags) {
-                let match_kind = if pkg.meta.name.contains(keyword) {
+                let pkg_name_lowercase = pkg.meta.name.as_str().to_ascii_lowercase();
+                let match_kind = if pkg_name_lowercase.contains(&keyword.to_ascii_lowercase()) {
                     MatchKind::Name
                 } else {
                     MatchKind::Summary
