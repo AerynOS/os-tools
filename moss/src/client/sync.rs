@@ -28,6 +28,7 @@ pub fn sync(
     import: Option<&Path>,
     yes: bool,
     simulate: bool,
+    only_download: bool,
     progress_callback: Option<Arc<dyn Fn(f32, ProgressStage) + Send + Sync>>,
 ) -> Result<(Vec<Package>, Timing), Error> {
     let mut timing = Timing::default();
@@ -141,30 +142,37 @@ pub fn sync(
         return Err(Error::Cancelled);
     }
 
-    instant = Instant::now();
+    if !simulate {
+        instant = Instant::now();
 
-    let cache_packages_span = info_span!("progress", phase = "cache_packages", event_type = "progress");
-    let _cache_packages_guard = cache_packages_span.enter();
-    info!(
-        total_items = synced.len(),
-        progress = 0.0,
-        event_type = "progress_start"
-    );
+        let cache_packages_span = info_span!("progress", phase = "cache_packages", event_type = "progress");
+        let _cache_packages_guard = cache_packages_span.enter();
+        info!(
+            total_items = synced.len(),
+            progress = 0.0,
+            event_type = "progress_start"
+        );
 
-    runtime::block_on(
-        client
-            .cache_packages(&synced, progress_callback.clone())
-            .in_current_span(),
-    )?;
+        runtime::block_on(
+            client
+                .cache_packages(&synced, progress_callback.clone())
+                .in_current_span(),
+        )?;
 
-    timing.fetch = instant.elapsed();
-    info!(
-        duration_ms = timing.fetch.as_millis(),
-        items_processed = synced.len(),
-        progress = 1.0,
-        event_type = "progress_completed",
-    );
-    drop(_cache_packages_guard);
+        timing.fetch = instant.elapsed();
+        info!(
+            duration_ms = timing.fetch.as_millis(),
+            items_processed = synced.len(),
+            progress = 1.0,
+            event_type = "progress_completed",
+        );
+        drop(_cache_packages_guard);
+    }
+
+    if only_download {
+        return Ok((finalized, timing));
+    }
+
     instant = Instant::now();
 
     let new_selections = if let Some(system_model) = &system_model {

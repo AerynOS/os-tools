@@ -181,9 +181,11 @@ impl Client {
         import: Option<&Path>,
         yes: bool,
         simulate: bool,
+        only_download: bool,
         progress_callback: Option<Arc<dyn Fn(f32, ProgressStage) + Send + Sync>>,
     ) -> Result<(Vec<Package>, sync::Timing), Error> {
-        sync(self, import, yes, simulate, progress_callback).map_err(|error| Error::Sync(Box::new(error)))
+        sync(self, import, yes, simulate, only_download, progress_callback)
+            .map_err(|error| Error::Sync(Box::new(error)))
     }
 
     /// Transition to an ephemeral client that doesn't record state changes
