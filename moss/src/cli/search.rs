@@ -87,7 +87,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         search_packages(&client, flags, keyword)
     }?;
 
-    if output.is_empty() {
+    if output.values().all(|pkgs| pkgs.is_empty()) {
         return Ok(());
     }
 
