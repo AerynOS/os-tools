@@ -251,25 +251,27 @@ mod tests {
 
     use super::*;
 
-    static TEST_CLIENT: LazyLock<Client> = LazyLock::new(|| {
+    static TEST_CLIENT: LazyLock<Option<Client>> = LazyLock::new(|| {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../aosroot");
-        let installation = Installation::open(root, None).expect("Could not find root");
-        Client::new("TEST", installation).expect("Could not set up client")
+        let installation = Installation::open(root, None).ok()?;
+        Client::new("TEST", installation).ok()
     });
 
-    macro_rules! skip_in_ci {
+    macro_rules! test_client {
         () => {
-            if std::env::var("CI").is_ok() {
-                eprintln!("Skipping test in CI");
-                return;
+            match TEST_CLIENT.as_ref() {
+                Some(client) => client,
+                None => {
+                    eprintln!("Test Skipped: aosroot directory unavailable");
+                    return;
+                }
             }
         };
     }
 
     #[test]
     fn test_find_packages() {
-        skip_in_ci!();
-        let client = &TEST_CLIENT;
+        let client = test_client!();
         let flags = package::Flags::new().with_available();
         let output = search_packages(client, flags, "jq").unwrap();
         assert!(!output.is_empty(), "expected match for package jq");
@@ -277,8 +279,7 @@ mod tests {
 
     #[test]
     fn test_find_binaries_with_provides_flag() {
-        skip_in_ci!();
-        let client = &TEST_CLIENT;
+        let client = test_client!();
         let flags = package::Flags::new().with_available();
         for binary_name in ["telnet", "toast", "zramctl"] {
             // These binary names don't appear when searching by package name
@@ -299,8 +300,7 @@ mod tests {
 
     #[test]
     fn test_find_binaries_with_provider_syntax() {
-        skip_in_ci!();
-        let client = &TEST_CLIENT;
+        let client = test_client!();
         let flags = package::Flags::new().with_available();
         for binary_name in ["telnet", "toast"] {
             // These binary names don't appear when searching by package name
@@ -322,8 +322,7 @@ mod tests {
 
     #[test]
     fn test_provider_syntax_produces_same_output_as_provides_flag() {
-        skip_in_ci!();
-        let client = &TEST_CLIENT;
+        let client = test_client!();
         let flags = package::Flags::new().with_available();
         for binary_name in ["hx", "telnet", "toast"] {
             let output_a = provides_package(client, flags, "binaries", binary_name).unwrap();
