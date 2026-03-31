@@ -5,6 +5,7 @@
 use std::path::Path;
 use std::{io, path::PathBuf};
 
+use chrono::{Datelike, Utc};
 use itertools::Itertools;
 use licenses::match_licences;
 use moss::{Dependency, util};
@@ -63,6 +64,8 @@ impl Drafter {
 
         let licences_dir = &self.env.data_dir.join("licenses");
 
+        let year = Utc::now().year();
+
         let licenses = format_licenses(match_licences(extract_root, licences_dir).unwrap_or_default());
 
         // Remove temp extract dir
@@ -86,11 +89,9 @@ impl Drafter {
 
         #[rustfmt::skip]
         let template = format!(
-"#
-# SPDX-FileCopyrightText: © 2025- AerynOS Developers
-#
+"# SPDX-FileCopyrightText: {year} AerynOS Developers
 # SPDX-License-Identifier: MPL-2.0
-#
+
 name        : {}
 version     : \"{}\"
 release     : 1
