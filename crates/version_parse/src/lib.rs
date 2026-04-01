@@ -204,7 +204,7 @@ impl VersionExtractor {
                 return Ok(Extraction {
                     name: name.as_str().to_owned(),
                     version: version.as_str().to_owned(),
-                    series_version: caps.name("series_version").map(|m| m.as_str().to_string()),
+                    series_version: caps.name("series_version").map(|m| m.as_str().to_owned()),
                 });
             }
         }
