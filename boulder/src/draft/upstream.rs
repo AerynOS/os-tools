@@ -113,8 +113,6 @@ pub fn fetched_upstream_cache_path(env: &Env, uri: &Url, hash: &str) -> PathBuf 
 pub enum Error {
     #[error("failed to run `bsdtar`")]
     Bsdtar(#[source] io::Error),
-    #[error("failed to infer file type of `{path}`")]
-    InferFileType { path: PathBuf, source: io::Error },
     #[error("io")]
     Io(#[from] io::Error),
     #[error("request")]
