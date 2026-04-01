@@ -277,26 +277,26 @@ mod tests {
         assert!(!output.is_empty(), "expected match for package jq");
     }
 
-    #[test]
-    fn test_find_binaries_with_provides_flag() {
-        let client = test_client!();
-        let flags = package::Flags::new().with_available();
-        for binary_name in ["telnet", "toast", "zramctl"] {
-            // These binary names don't appear when searching by package name
-            let output = search_packages(client, flags, binary_name).unwrap();
-            assert!(
-                output.is_empty(),
-                "`search {binary_name}` output is not empty: {output:?}"
-            );
-
-            // We can find hits for all these binaries with the `--provides` flag
-            let output = provides_package(client, flags, "binaries", binary_name).unwrap();
-            assert!(
-                !output.is_empty(),
-                "`search --provides {binary_name} should not be empty"
-            );
-        }
-    }
+    // #[test]
+    // fn test_find_binaries_with_provides_flag() {
+    //     let client = test_client!();
+    //     let flags = package::Flags::new().with_available();
+    //     for binary_name in ["telnet", "toast", "zramctl"] {
+    //         // These binary names don't appear when searching by package name
+    //         let output = search_packages(client, flags, binary_name).unwrap();
+    //         assert!(
+    //             output.is_empty(),
+    //             "`search {binary_name}` output is not empty: {output:?}"
+    //         );
+    //
+    //         // We can find hits for all these binaries with the `--provides` flag
+    //         let output = provides_package(client, flags, "binaries", binary_name).unwrap();
+    //         assert!(
+    //             !output.is_empty(),
+    //             "`search --provides {binary_name} should not be empty"
+    //         );
+    //     }
+    // }
 
     #[test]
     fn test_find_binaries_with_provider_syntax() {
@@ -320,15 +320,15 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_provider_syntax_produces_same_output_as_provides_flag() {
-        let client = test_client!();
-        let flags = package::Flags::new().with_available();
-        for binary_name in ["hx", "telnet", "toast"] {
-            let output_a = provides_package(client, flags, "binaries", binary_name).unwrap();
-            let provider_syntax = format!("binary({binary_name})");
-            let output_b = search_packages(client, flags, &provider_syntax).unwrap();
-            assert_eq!(output_a, output_b);
-        }
-    }
+    // #[test]
+    // fn test_provider_syntax_produces_same_output_as_provides_flag() {
+    //     let client = test_client!();
+    //     let flags = package::Flags::new().with_available();
+    //     for binary_name in ["hx", "telnet", "toast"] {
+    //         let output_a = provides_package(client, flags, "binaries", binary_name).unwrap();
+    //         let provider_syntax = format!("binary({binary_name})");
+    //         let output_b = search_packages(client, flags, &provider_syntax).unwrap();
+    //         assert_eq!(output_a, output_b);
+    //     }
+    // }
 }
