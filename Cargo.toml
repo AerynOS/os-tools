@@ -33,7 +33,9 @@ diesel = { version = "2.2.1", features = [
 diesel_migrations = "2.2.0"
 dirs = "6.0.0"
 elf = "0.8.0"
+ent_core = { git = "https://github.com/AerynOS/ent.git", rev = "fdb389a2ee49da8cc753dd32dc5ab8f8e9aebb04" }
 indicatif = "0.18.0"
+inventory = "0.3.22"
 itertools = "0.14.0"
 filetime = "0.2.24"
 fs-err = { version = "3.3.0", features = ["tokio"] }
@@ -61,13 +63,13 @@ path-clean = "1.0.1"
 petgraph = "0.8.2"
 rayon = "1.10.0"
 regex = "1.10.5"
-reqwest = { version = "0.12.5", default-features = false, features = [
+reqwest = { version = "0.13.2", default-features = false, features = [
     "brotli",
     "charset",
     "deflate",
     "gzip",
     "http2",
-    "rustls-tls",
+    "rustls",
     "stream",
     "zstd",
     "blocking",
