@@ -34,6 +34,7 @@ pub enum VersionStyle {
 }
 
 /// Pattern definition for version extraction
+#[derive(Debug)]
 pub struct VersionPattern {
     /// The style of versioning this pattern matches
     pub style: VersionStyle,
@@ -114,7 +115,7 @@ impl VersionExtractor {
                 VersionStyle::Semver,
                 r"(?x)
                     (?:[^\/]+\/)*?
-                    (?:(?P<series_version>\d+(?:\.\d+)*)\/)?
+                    (?:v?(?P<series_version>\d+(?:\.\d+)*)\/)?
                     (?P<name>[^\/\d][^\/]*)
                     [-_]
                     v?(?P<version>(?:\d+[._]\d+[._]\d+
@@ -291,6 +292,14 @@ mod tests {
                     version: "3.24.33".to_string(),
                     name: "gtk+".to_string(),
                     series_version: Some("3.24".to_string()),
+                },
+            ),
+            (
+                "https://www.nano-editor.org/dist/v9/nano-9.3.1.tar.xz",
+                Extraction {
+                    version: "9.3.1".to_string(),
+                    name: "nano".to_string(),
+                    series_version: Some("9".to_string()),
                 },
             ),
             (
