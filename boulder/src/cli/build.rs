@@ -172,6 +172,23 @@ fn verify_versions_match(builder: &Builder) -> Result<(), Error> {
         return Ok(());
     };
 
+    // We won't attempt to parse git upstreams for now
+    match &first_upstream.props {
+        stone_recipe::upstream::Props::Git { git_ref, staging: _ } => {
+            // If we have a git ref, we have a git upstream and version parsing
+            // will not work.
+            if !git_ref.is_empty() {
+                return Ok(());
+            }
+        }
+        stone_recipe::upstream::Props::Plain {
+            hash: _,
+            rename: _,
+            strip_dirs: _,
+            unpack: _,
+        } => {}
+    }
+
     let ver_ext = VersionExtractor::new();
     let parsed_upstream = ver_ext.extract(first_upstream.url.as_str());
     match parsed_upstream {
