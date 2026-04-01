@@ -78,7 +78,16 @@ fn map_aliases(value: &str) -> &str {
 pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
     let keyword = args.get_one::<String>(ARG_KEYWORD).unwrap();
     let only_installed = args.get_flag(FLAG_INSTALLED);
-    let provides = args.get_one::<String>(FLAG_PROVIDES).map(|s| s.as_str());
+    let provider_kind = args
+        .get_one::<String>(FLAG_PROVIDES)
+        .map(|s| map_aliases(s))
+        .map(|s| s.parse::<dependency::Kind>().expect("clap should restrict input"));
+    let provider = Provider::from_name(keyword)
+        .map_err(|_| Error::ParseError(keyword.to_owned()))
+        .map(|provider| Provider {
+            kind: provider_kind.unwrap_or(provider.kind),
+            ..provider
+        })?;
 
     let client = Client::new(environment::NAME, installation)?;
     let flags = if only_installed {
@@ -87,10 +96,15 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         package::Flags::new().with_available()
     };
 
-    let mut output = if let Some(provider) = provides {
-        provides_package(&client, flags, provider, keyword)
-    } else {
-        search_packages(&client, flags, keyword)
+    let mut output = match provider {
+        Provider {
+            kind: dependency::Kind::PackageName,
+            name: _name,
+        } => search_packages(&client, flags, keyword),
+        Provider {
+            kind: _kind,
+            name: ref _name,
+        } => provides_package(&client, flags, provider),
     }?;
 
     if output.values().all(|pkgs| pkgs.is_empty()) {
@@ -111,73 +125,31 @@ fn search_packages(
     flags: package::Flags,
     keyword: &str,
 ) -> Result<BTreeMap<MatchKind, Vec<Output>>, Error> {
-    let provider = Provider::from_name(keyword).map_err(|_| Error::ParseError(keyword.to_owned()))?;
-
     let mut output_kind: BTreeMap<MatchKind, Vec<Output>> = BTreeMap::new();
 
-    match provider.kind {
-        dependency::Kind::PackageName => {
-            for pkg in client.search_packages(&provider.name, flags) {
-                let pkg_name_lowercase = pkg.meta.name.as_str().to_ascii_lowercase();
-                let match_kind = if pkg_name_lowercase.contains(&keyword.to_ascii_lowercase()) {
-                    MatchKind::Name
-                } else {
-                    MatchKind::Summary
-                };
-                output_kind.entry(match_kind).or_default().push(Output {
-                    name: pkg.meta.name,
-                    summary: pkg.meta.summary,
-                    search_match: Some(keyword.to_owned()),
-                });
-            }
-            Ok(output_kind)
-        }
-        _ => {
-            output_kind.insert(
-                MatchKind::Name,
-                client
-                    .lookup_packages_by_provider(&provider, flags)
-                    .into_iter()
-                    .map(Output::from)
-                    .collect(),
-            );
-            Ok(output_kind)
-        }
+    for pkg in client.search_packages(keyword, flags) {
+        let pkg_name_lowercase = pkg.meta.name.as_str().to_ascii_lowercase();
+        let match_kind = if pkg_name_lowercase.contains(&keyword.to_ascii_lowercase()) {
+            MatchKind::Name
+        } else {
+            MatchKind::Summary
+        };
+        output_kind.entry(match_kind).or_default().push(Output {
+            name: pkg.meta.name,
+            summary: pkg.meta.summary,
+            search_match: Some(keyword.to_owned()),
+        });
     }
-}
-
-fn provides_package_by_kind(
-    client: &Client,
-    flags: package::Flags,
-    name: &str,
-    kind: dependency::Kind,
-) -> Vec<package::Package> {
-    let provider = Provider {
-        kind,
-        name: name.to_owned(),
-    };
-    client.lookup_packages_by_provider(&provider, flags)
+    Ok(output_kind)
 }
 
 fn provides_package(
     client: &Client,
     flags: package::Flags,
-    provider: &str,
-    name: &str,
+    provider: Provider,
 ) -> Result<BTreeMap<MatchKind, Vec<Output>>, Error> {
     let mut result: BTreeMap<MatchKind, Vec<Output>> = BTreeMap::new();
-    let packages = match provider.parse::<dependency::Kind>() {
-        Ok(kind) => provides_package_by_kind(client, flags, name, kind),
-        Err(_) => match provider {
-            // Default search with no argument to `--provides`
-            "binaries" => [dependency::Kind::Binary, dependency::Kind::SystemBinary]
-                .into_iter()
-                .flat_map(|kind| provides_package_by_kind(client, flags, name, kind))
-                .collect(),
-            "library" => provides_package_by_kind(client, flags, name, dependency::Kind::SharedLibrary),
-            _ => unreachable!("clap restricts valid arguments"),
-        },
-    };
+    let packages = client.lookup_packages_by_provider(&provider, flags);
     result.insert(MatchKind::Name, packages.into_iter().map(Output::from).collect());
     Ok(result)
 }
