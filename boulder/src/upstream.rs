@@ -46,10 +46,10 @@ impl Upstream {
         }
     }
 
-    pub async fn fetch_new(uri: SourceUri, dest: &Path) -> Result<Self, Error> {
+    pub async fn _fetch_new(uri: SourceUri, dest: &Path) -> Result<Self, Error> {
         Ok(match uri.kind {
-            upstream::Kind::Archive => Self::Plain(Plain::fetch_new(uri.url, dest).await?),
-            upstream::Kind::Git => Self::Git(Git::fetch_new(&uri.url, dest).await?),
+            upstream::Kind::Archive => Self::Plain(Plain::_fetch_new(uri.url, dest).await?),
+            upstream::Kind::Git => Self::Git(Git::_fetch_new(&uri.url, dest).await?),
         })
     }
 
