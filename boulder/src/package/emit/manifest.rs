@@ -164,8 +164,6 @@ pub enum Error {
     ReadStonePayloads(#[source] StoneReadError),
     #[error("manifest missing meta field")]
     ManifestMissingMetaField(#[from] MissingMetaFieldError),
-    #[error("Manifest missing meta payload")]
-    ManifestMissingMetaPayload,
 }
 
 #[derive(Debug, PartialEq, Eq)]
