@@ -25,11 +25,11 @@ pub struct Plain {
 }
 
 impl Plain {
-    pub async fn fetch_new(url: Url, dest_file: &Path) -> Result<Self, Error> {
-        Self::fetch_new_progress(url, dest_file, &ProgressBar::hidden()).await
+    pub async fn _fetch_new(url: Url, dest_file: &Path) -> Result<Self, Error> {
+        Self::_fetch_new_progress(url, dest_file, &ProgressBar::hidden()).await
     }
 
-    pub async fn fetch_new_progress(url: Url, dest_file: &Path, pb: &ProgressBar) -> Result<Self, Error> {
+    pub async fn _fetch_new_progress(url: Url, dest_file: &Path, pb: &ProgressBar) -> Result<Self, Error> {
         let hash = Self::fetch(&url, dest_file, pb).await?;
         Ok(Self {
             url,

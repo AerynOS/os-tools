@@ -24,11 +24,11 @@ pub struct Git {
 }
 
 impl Git {
-    pub async fn fetch_new(url: &Url, dest_dir: &Path) -> Result<Self, Error> {
-        Self::fetch_new_progress(url, dest_dir, &ProgressBar::hidden()).await
+    pub async fn _fetch_new(url: &Url, dest_dir: &Path) -> Result<Self, Error> {
+        Self::_fetch_new_progress(url, dest_dir, &ProgressBar::hidden()).await
     }
 
-    pub async fn fetch_new_progress(_url: &Url, _dest_dir: &Path, _pb: &ProgressBar) -> Result<Self, Error> {
+    pub async fn _fetch_new_progress(_url: &Url, _dest_dir: &Path, _pb: &ProgressBar) -> Result<Self, Error> {
         todo!()
     }
 
