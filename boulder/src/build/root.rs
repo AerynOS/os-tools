@@ -44,7 +44,7 @@ pub fn populate(
     timing.finish(initialize_timer);
 
     // Install packages
-    let install_timing = moss_client.install(&packages, true)?;
+    let install_timing = moss_client.install(&packages, true, false)?;
 
     timing.record(timing::Populate::Resolve, install_timing.resolve);
     timing.record(timing::Populate::Fetch, install_timing.fetch);
