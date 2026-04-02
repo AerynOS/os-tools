@@ -31,6 +31,10 @@ pub struct Command {
     #[arg(value_name = "dir", long = "to")]
     blit_target: Option<PathBuf>,
 
+    /// Simulate the sync (dry-run)
+    #[arg(long)]
+    dry_run: bool,
+
     /// Sync against the provided system-model.kdl
     ///
     /// Only the repositories and packages from the provided file
@@ -44,6 +48,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     let command = Command::from_arg_matches(args).expect("validated by clap");
 
     let yes = *args.get_one::<bool>("yes").unwrap();
+    let simulate = command.dry_run;
     let update = command.update;
 
     let mut client = Client::new(environment::NAME, installation)?;
@@ -58,7 +63,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         runtime::block_on(client.refresh_repositories())?;
     }
 
-    client.sync(command.import.as_deref(), yes)?;
+    client.sync(command.import.as_deref(), yes, simulate)?;
 
     Ok(())
 }

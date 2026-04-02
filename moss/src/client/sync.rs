@@ -17,7 +17,7 @@ use crate::{
     system_model,
 };
 
-pub fn sync(client: &Client, import: Option<&Path>, yes: bool) -> Result<Timing, Error> {
+pub fn sync(client: &Client, import: Option<&Path>, yes: bool, simulate: bool) -> Result<Timing, Error> {
     let mut timing = Timing::default();
     let mut instant = Instant::now();
 
@@ -108,6 +108,10 @@ pub fn sync(client: &Client, import: Option<&Path>, yes: bool) -> Result<Timing,
         println!();
     }
 
+    if simulate {
+        return Ok(timing);
+    }
+
     // Must we prompt?
     let result = if yes {
         true
@@ -147,12 +151,12 @@ pub fn sync(client: &Client, import: Option<&Path>, yes: bool) -> Result<Timing,
         // For system model, "explicit" is what was defined in the system model file
 
         finalized
-            .into_iter()
+            .iter()
             .map(|p| {
                 let is_explicit = system_model.packages.intersection(&p.meta.providers).next().is_some();
 
                 Selection {
-                    package: p.id,
+                    package: p.id.clone(),
                     explicit: is_explicit,
                     // TODO: We can map the "why" of system-model packages to this? Or
                     // can we remove "reason" entirely, we haven't used it to-date
@@ -168,7 +172,7 @@ pub fn sync(client: &Client, import: Option<&Path>, yes: bool) -> Result<Timing,
         };
 
         finalized
-            .into_iter()
+            .iter()
             .map(|p| {
                 // Use old version id to lookup previous selection
                 let lookup_id = installed
@@ -187,7 +191,7 @@ pub fn sync(client: &Client, import: Option<&Path>, yes: bool) -> Result<Timing,
                     })
                     // Must be transitive
                     .unwrap_or(Selection {
-                        package: p.id,
+                        package: p.id.clone(),
                         explicit: false,
                         reason: None,
                     })

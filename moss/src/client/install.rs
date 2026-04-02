@@ -27,7 +27,7 @@ use crate::{
 /// If this call is successful a new State is recorded into the [`super::db::state::Database`].
 /// Upon completion the `/usr` tree is "hot swapped" with the staging tree through `renameat2` call.
 #[instrument(skip(client), fields(ephemeral = client.is_ephemeral()))]
-pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, Error> {
+pub fn install(client: &mut Client, pkgs: &[&str], yes: bool, simulate: bool) -> Result<Timing, Error> {
     let mut timing = Timing::default();
     let mut instant = Instant::now();
 
@@ -89,6 +89,10 @@ pub fn install(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, 
     println!();
     autoprint_columns(&missing);
     println!();
+
+    if simulate {
+        return Ok(timing);
+    }
 
     // Must we prompt?
     let result = if yes {
