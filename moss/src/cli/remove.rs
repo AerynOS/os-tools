@@ -23,6 +23,10 @@ pub fn command() -> clap::Command {
 pub struct Command {
     /// Packages to remove
     packages: Vec<String>,
+
+    /// Simulate the operation (dry-run)
+    #[arg(long)]
+    dry_run: bool,
 }
 
 /// Handle execution of `moss remove`
@@ -32,10 +36,11 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
 
     let pkgs = command.packages.iter().map(String::as_str).collect::<Vec<_>>();
     let yes = *args.get_one::<bool>("yes").unwrap();
+    let simulate = command.dry_run;
 
     let mut client = Client::new(environment::NAME, installation)?;
 
-    client.remove(&pkgs, yes)?;
+    client.remove(&pkgs, yes, simulate)?;
 
     Ok(())
 }

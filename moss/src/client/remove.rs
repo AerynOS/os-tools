@@ -16,7 +16,7 @@ use crate::{Client, Provider, client, db, registry::transaction, state::Selectio
 
 /// Remove a set of packages.
 #[instrument(skip(client), fields(ephemeral = client.is_ephemeral()))]
-pub fn remove(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, Error> {
+pub fn remove(client: &mut Client, pkgs: &[&str], yes: bool, simulate: bool) -> Result<Timing, Error> {
     let mut timing = Timing::default();
     let mut instant = Instant::now();
 
@@ -99,6 +99,10 @@ pub fn remove(client: &mut Client, pkgs: &[&str], yes: bool) -> Result<Timing, E
     println!();
     autoprint_columns(&removed);
     println!();
+
+    if simulate {
+        return Ok(timing);
+    }
 
     let result = if yes {
         true
