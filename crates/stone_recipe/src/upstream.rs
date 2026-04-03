@@ -14,7 +14,6 @@ pub static GIT_PREFIX: &str = "git|";
 #[derive(Debug, Clone)]
 pub struct Upstream {
     pub url: Url,
-    pub unpack_dir: Option<PathBuf>,
     pub props: Props,
 }
 
@@ -24,42 +23,30 @@ impl<'de> Deserialize<'de> for Upstream {
         D: serde::Deserializer<'de>,
     {
         #[derive(Debug, Deserialize)]
-        struct SerdeProps {
-            #[serde(rename = "unpackdir")]
-            unpack_dir: Option<PathBuf>,
-            #[serde(flatten)]
-            specific: Props,
-        }
-
-        #[derive(Debug, Deserialize)]
         #[serde(untagged)]
         enum Fields {
             String(String),
-            Props(SerdeProps),
+            Props(Props),
         }
 
         let (uri, fields) = BTreeMap::<SourceUri, Fields>::deserialize(deserializer)?
             .into_iter()
             .next()
             .ok_or(serde::de::Error::custom("no upstream"))?;
-        let (unpack_dir, props) = match fields {
+        let props = match fields {
             Fields::String(hash) => match &uri.kind {
-                Kind::Archive => (None, Props::default_plain(hash)),
-                Kind::Git => (None, Props::default_git(hash)),
+                Kind::Archive => Props::default_plain(hash),
+                Kind::Git => Props::default_git(hash),
             },
-            Fields::Props(props) => match (&props.specific, &uri.kind) {
+            Fields::Props(props) => match (&props, &uri.kind) {
                 (Props::Git { .. }, Kind::Archive) | (Props::Plain { .. }, Kind::Git) => {
                     return Err(serde::de::Error::custom("mismatched URL type and upstream properties"));
                 }
-                _ => (props.unpack_dir, props.specific),
+                _ => props,
             },
         };
 
-        Ok(Self {
-            url: uri.into(),
-            unpack_dir,
-            props,
-        })
+        Ok(Self { url: uri.into(), props })
     }
 }
 
@@ -151,12 +138,14 @@ pub enum Props {
         strip_dirs: Option<u8>,
         #[serde(default = "default_true", deserialize_with = "stringy_bool")]
         unpack: bool,
+        #[serde(rename = "unpackdir")]
+        unpack_dir: Option<PathBuf>,
     },
     Git {
         #[serde(rename = "ref")]
         git_ref: String,
-        #[serde(default = "default_true", deserialize_with = "stringy_bool")]
-        staging: bool,
+        #[serde(rename = "clonedir")]
+        clone_dir: Option<PathBuf>,
     },
 }
 
@@ -167,11 +156,15 @@ impl Props {
             rename: None,
             strip_dirs: None,
             unpack: true,
+            unpack_dir: None,
         }
     }
 
     fn default_git(git_ref: String) -> Self {
-        Self::Git { git_ref, staging: true }
+        Self::Git {
+            git_ref,
+            clone_dir: None,
+        }
     }
 }
 

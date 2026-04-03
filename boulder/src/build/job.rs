@@ -71,21 +71,19 @@ fn work_dir(build_dir: &Path, upstreams: &[Upstream]) -> PathBuf {
         upstream::Props::Git { .. } => true,
     }) {
         match &upstream.props {
-            upstream::Props::Plain { rename, .. } => {
+            upstream::Props::Plain { rename, unpack_dir, .. } => {
                 let file_name = util::uri_file_name(&upstream.url);
                 let rename = rename.as_deref().unwrap_or(file_name);
-                let unpack_dir = upstream
-                    .unpack_dir
+                let unpack_dir = unpack_dir
                     .as_ref()
                     .map(|dir| dir.display().to_string())
                     .unwrap_or_else(|| rename.to_owned());
 
                 work_dir = build_dir.join(unpack_dir);
             }
-            upstream::Props::Git { .. } => {
+            upstream::Props::Git { clone_dir, .. } => {
                 let source = util::uri_file_name(&upstream.url);
-                let target = upstream
-                    .unpack_dir
+                let target = clone_dir
                     .as_ref()
                     .map(|dir| dir.display().to_string())
                     .unwrap_or_else(|| source.to_owned());
