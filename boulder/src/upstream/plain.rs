@@ -122,7 +122,7 @@ impl Plain {
     /// Returns a relative PathBuf where this source archive
     /// should be stored within the storage directory.
     fn stored_path(&self, storage_dir: &Path) -> PathBuf {
-        storage_dir.join(self.file_path())
+        storage_dir.join("fetched").join(self.file_path())
     }
 
     /// Returns a relative PathBuf based on the hashes of [Self::url]
