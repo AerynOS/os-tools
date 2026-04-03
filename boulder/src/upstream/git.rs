@@ -190,13 +190,13 @@ async fn fetch(repo: &gitwrap::Repository, pb: &ProgressBar) -> Result<(), gitwr
 fn set_progress_bar_style(pb: &ProgressBar) -> impl Fn(gitwrap::FetchProgress) {
     pb.set_length(100);
     pb.set_style(
-        ProgressStyle::with_template("{prefix}\n|{bar:20.cyan/bue}| {percent}% {msg:>.dim}")
+        ProgressStyle::with_template(" {spinner} |{percent:>3}%| {wide_msg} {prefix:>.dim} ")
             .unwrap()
-            .progress_chars("■≡=- "),
+            .tick_chars("--=≡■≡=--"),
     );
 
     |prog| {
         pb.set_position(prog.percent as u64);
-        pb.set_message(prog.speed);
+        pb.set_prefix(prog.speed);
     }
 }

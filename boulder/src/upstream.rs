@@ -162,7 +162,7 @@ pub fn sync(upstreams: &[Upstream], storage_dir: &Path, share_dir: &Path) -> Res
             .map(async |upstream| -> Result<Shared, Error> {
                 let pb = mp.insert_before(
                     &tp,
-                    ProgressBar::new(u64::MAX).with_prefix(format!(
+                    ProgressBar::new(u64::MAX).with_message(format!(
                         "{} {}",
                         "Downloading".blue(),
                         upstream.name().bold(),
