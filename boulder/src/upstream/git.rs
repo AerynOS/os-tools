@@ -73,7 +73,7 @@ impl Git {
     /// of the directory! Resources will be deleted even if they
     /// do not belong to a Git repository.
     pub fn remove(&self, storage_dir: &Path) -> Result<(), Error> {
-        let dir = storage_dir.join(self.directory_name());
+        let dir = self.stored_path(storage_dir);
         util::remove_dir_all(&dir).map_err(Error::from)
     }
 
