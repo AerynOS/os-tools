@@ -134,27 +134,34 @@ pub struct StoredGit {
 
 impl StoredGit {
     /// Shares the Git repository in preparation of a build.
-    ///
-    /// This function tries to be as efficient as possible in terms
-    /// of actual bytes written/copied from the original Git repository.
     pub async fn share(&self, dest_dir: &Path) -> Result<SharedGit, Error> {
         if let Some(parent) = dest_dir.parent() {
             fs::create_dir_all(parent)?;
         }
-        Ok(SharedGit(self.repo.add_worktree(dest_dir, &self.commit).await?))
+
+        // Clone from our mirror to destdir
+        let cloned = self.repo.clone_to(dest_dir).await?;
+
+        // Cloning sets origin to the local mirror, but we want to use
+        // the original remote as submodule resolving may depend on this
+        let source_origin = self.repo.get_remote_url("origin").await?;
+        cloned.set_remote_url("origin", &source_origin).await?;
+
+        // Finally checkout the desired commit
+        cloned.checkout(&self.commit).await?;
+
+        Ok(SharedGit(dest_dir.to_owned()))
     }
 }
 
 /// A shared Git repository is a copy of a stored Git
 /// in a location useful for a build.
-pub struct SharedGit(gitwrap::Worktree);
+pub struct SharedGit(PathBuf);
 
 impl SharedGit {
     /// Removes the shared Git repository.
-    /// Should the shared repository no longer exist,
-    /// this function returns successfully (it is idempotent).
     pub fn remove(&self) -> Result<(), Error> {
-        self.0.remove_sync().map_err(Error::from)
+        fs::remove_dir_all(&self.0).map_err(Error::from)
     }
 }
 

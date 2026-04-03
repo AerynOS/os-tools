@@ -95,6 +95,45 @@ impl Repository {
         Ok(output.stdout.starts_with(b"commit"))
     }
 
+    /// Returns the remote URL for the provided `remote`
+    pub async fn get_remote_url(&self, remote: &str) -> Result<String, Error> {
+        let output = run_git(&[
+            OsStr::new("-C"),
+            self.path.as_os_str(),
+            OsStr::new("remote"),
+            OsStr::new("get-url"),
+            OsStr::new(remote),
+        ])
+        .await?;
+        Ok(str::from_utf8(&output.stdout).unwrap_or("").to_owned())
+    }
+
+    /// Sets the remote URL for the provided `remote` to `url`
+    pub async fn set_remote_url(&self, remote: &str, url: &str) -> Result<(), Error> {
+        run_git(&[
+            OsStr::new("-C"),
+            self.path.as_os_str(),
+            OsStr::new("remote"),
+            OsStr::new("set-url"),
+            OsStr::new(remote),
+            OsStr::new(url),
+        ])
+        .await?;
+        Ok(())
+    }
+
+    /// Checkout the provided `rev` (branch or commit)
+    pub async fn checkout(&self, rev: &str) -> Result<(), Error> {
+        run_git(&[
+            OsStr::new("-C"),
+            self.path.as_os_str(),
+            OsStr::new("checkout"),
+            OsStr::new(rev),
+        ])
+        .await?;
+        Ok(())
+    }
+
     /// Equivalent to `git fetch`.
     /// A callback is fired repeatedly to track the fetching
     /// process in real time.
@@ -115,93 +154,19 @@ impl Repository {
         Ok(())
     }
 
-    /// Add a new Git worktree at `path`.
-    ///
-    /// The worktree is checked out at the provided commit.
-    /// If a worktree already exists at `path`, is it overwritten.
-    ///
-    /// This function expects a "peeled" commit hash. If a reference
-    /// (e.g. a tag) is passed, an error containing [Constraint::NotPeeled] is returned.
-    /// This ensures the worktree is created with predictable content,
-    /// since a reference may change the commit it points to over time.
-    pub async fn add_worktree(&self, path: &Path, commit: &str) -> Result<Worktree, Error> {
-        if commit.starts_with("HEAD") {
-            return Err(InnerError::Constraint(Constraint::NotPeeled {
-                commit: commit.to_owned(),
-            }))?;
-        }
-
+    /// Clone the current [`Repository`] to the provided `path` and return
+    /// the cloned to [`Repository`].
+    pub async fn clone_to(&self, path: &Path) -> Result<Self, Error> {
         let path = path::absolute(path).map_err(InnerError::from)?;
 
-        let output = run_git(&[
-            OsStr::new("-C"),
-            self.path.as_os_str(),
-            OsStr::new("cat-file"),
-            OsStr::new("-t"),
-            OsStr::new(commit),
-        ])
-        .await?;
-        if !output.stdout.starts_with(b"commit") {
-            return Err(InnerError::Constraint(Constraint::NotPeeled {
-                commit: commit.to_owned(),
-            }))?;
-        }
+        // Clone it to `path`
+        run_git(&[OsStr::new("clone"), self.path.as_os_str(), path.as_os_str()]).await?;
 
-        run_git(&[
-            OsStr::new("-C"),
-            self.path.as_os_str(),
-            OsStr::new("worktree"),
-            OsStr::new("add"),
-            OsStr::new("-f"), // Pass double force to overwrite possible locked worktrees.
-            OsStr::new("-f"),
-            path.as_os_str(),
-            OsStr::new(commit),
-        ])
-        .await?;
-        Ok(Worktree {
-            repo: self.path.clone(),
-            worktree: path,
-        })
+        Ok(Self { path: path.to_owned() })
     }
 
     pub fn path(&self) -> &Path {
         &self.path
-    }
-}
-
-/// A Git worktree.
-pub struct Worktree {
-    repo: PathBuf,
-    worktree: PathBuf,
-}
-
-impl Worktree {
-    /// Removes the worktree.
-    /// This means removing the actual directory
-    /// containing the worktree, and untracking
-    /// the worktree from the Git repository.
-    pub async fn remove(&self) -> Result<(), Error> {
-        run_git([
-            OsStr::new("-C"),
-            self.repo.as_os_str(),
-            OsStr::new("worktree"),
-            OsStr::new("remove"),
-            self.worktree.as_os_str(),
-        ])
-        .await
-        .map(|_| ())
-    }
-
-    /// Synchronous version of [Self::remove].
-    pub fn remove_sync(&self) -> Result<(), Error> {
-        run_git_sync([
-            OsStr::new("-C"),
-            self.repo.as_os_str(),
-            OsStr::new("worktree"),
-            OsStr::new("remove"),
-            self.worktree.as_os_str(),
-        ])
-        .map(|_| ())
     }
 }
 
@@ -225,28 +190,6 @@ where
         .stdin(Stdio::null())
         .output()
         .await
-        .map_err(InnerError::from)?;
-    if output.status.success() {
-        Ok(output)
-    } else {
-        Err(InnerError::Run {
-            code: output.status.code(),
-            stderr: Some(String::from_utf8(output.stderr).unwrap()),
-        })?
-    }
-}
-
-/// Runs git and waits for it to terminate.
-/// It's the synchronous version of [run_git].
-fn run_git_sync<I, S>(args: I) -> Result<std::process::Output, Error>
-where
-    I: IntoIterator<Item = S>,
-    S: AsRef<OsStr>,
-{
-    let output = std::process::Command::new("git")
-        .args(args)
-        .stdin(Stdio::null())
-        .output()
         .map_err(InnerError::from)?;
     if output.status.success() {
         Ok(output)
