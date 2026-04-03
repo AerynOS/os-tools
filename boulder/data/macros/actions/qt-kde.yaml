@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2025 AerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
+
 actions:
     - qmake_qt5:
         description: Invokes Qt5 with the correct default values

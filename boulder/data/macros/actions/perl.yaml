@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2024 AerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
+
 actions:
     - perl_setup:
         description: Create a Makefile with ExtUtils::MakeMaker from stdlib to be used with %make and %make_install macros

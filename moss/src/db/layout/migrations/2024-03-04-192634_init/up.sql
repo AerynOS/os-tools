@@ -1,7 +1,10 @@
+-- SPDX-FileCopyrightText: 2024 AerynOS Developers
+-- SPDX-License-Identifier: MPL-2.0
+
 -- Your SQL goes here
 
 CREATE TABLE IF NOT EXISTS layout (
-    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,  
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     package_id TEXT NOT NULL,
     uid INTEGER NOT NULL,
     gid INTEGER NOT NULL,

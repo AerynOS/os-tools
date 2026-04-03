@@ -1,4 +1,6 @@
 #!/bin/sh
+# SPDX-FileCopyrightText: 2025 AerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
 
 type getarg > /dev/null 2>&1 || . /lib/dracut-lib.sh
 command -v moss > /dev/null || exit 1
