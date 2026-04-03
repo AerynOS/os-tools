@@ -188,8 +188,6 @@ async fn fetch(repo: &gitwrap::Repository, pb: &ProgressBar) -> Result<(), gitwr
 }
 
 fn set_progress_bar_style(pb: &ProgressBar) -> impl Fn(gitwrap::FetchProgress) {
-    use tui::HumanBytes;
-
     pb.set_length(100);
     pb.set_style(
         ProgressStyle::with_template("{prefix}\n|{bar:20.cyan/bue}| {percent}% {msg:>.dim}")
@@ -199,6 +197,6 @@ fn set_progress_bar_style(pb: &ProgressBar) -> impl Fn(gitwrap::FetchProgress) {
 
     |prog| {
         pb.set_position(prog.percent as u64);
-        pb.set_message(format!("{}/s", HumanBytes(prog.speed)));
+        pb.set_message(prog.speed);
     }
 }

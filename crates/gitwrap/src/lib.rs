@@ -210,8 +210,8 @@ impl Worktree {
 pub struct FetchProgress {
     /// Completion percentage.
     pub percent: u8,
-    /// Download speed in bytes per second.
-    pub speed: u64,
+    /// Download speed in formatted human units per second
+    pub speed: String,
 }
 
 /// Runs git and waits for it to terminate.
@@ -327,35 +327,27 @@ impl<R: io::AsyncRead + Unpin> ProgressParser<R> {
                 continue;
             }
             let line = &str::from_utf8(&line[Self::PREFIX.len()..]).unwrap_or("");
-            callback(Self::parse_progress(line));
+            if let Some(progress) = Self::parse_progress(line) {
+                callback(progress);
+            }
         }
         Ok(())
     }
 
-    fn parse_progress(line: &str) -> FetchProgress {
+    fn parse_progress(line: &str) -> Option<FetchProgress> {
         let mut tokens = line.split_ascii_whitespace();
 
-        let percent = tokens
-            .by_ref()
-            .next()
-            .map_or("0", |tok| tok.strip_suffix("%").unwrap_or(tok));
-        let speed_unit = tokens
-            .by_ref()
-            .next_back()
-            .map_or("B", |tok| tok.strip_suffix("/s").unwrap_or(tok));
-        let speed = tokens.by_ref().next_back().unwrap_or("0");
+        let percent = tokens.next()?;
+        let unit_per_sec = tokens.next_back()?;
+        let speed = tokens.next_back()?;
 
-        FetchProgress {
-            percent: percent.parse().unwrap_or_default(),
-            speed: speed.parse::<f32>().unwrap_or_default().trunc() as u64
-                * match speed_unit {
-                    "B" => 1,
-                    "KiB" => 1 << 10,
-                    "MiB" => 1 << 20,
-                    "GiB" => 1 << 30,
-                    "TiB" => 1 << 40,
-                    _ => 1,
-                },
+        if !unit_per_sec.ends_with("/s") {
+            return None;
         }
+
+        Some(FetchProgress {
+            percent: percent.strip_suffix('%')?.parse().ok()?,
+            speed: format!("{speed} {unit_per_sec}"),
+        })
     }
 }
