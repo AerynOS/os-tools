@@ -120,7 +120,7 @@ impl Builder {
         timing: &mut Timing,
         initialize_timer: timing::Timer,
         update_repos: bool,
-    ) -> Result<Vec<upstream::Shared>, Error> {
+    ) -> Result<Vec<upstream::Stored>, Error> {
         // Recreate artifacts
         util::recreate_dir(&self.paths.artefacts().host).map_err(Error::RecreateArtefactsDir)?;
 
@@ -133,7 +133,8 @@ impl Builder {
         let timer = timing.begin(timing::Kind::Fetch);
 
         // Sync (fetch & share) upstreams to rootfs
-        let shared = upstream::sync(
+        let stored = upstream::sync(
+            &self.recipe,
             &self.upstreams,
             &self.paths.upstreams().host,
             &self.paths.guest_host_path(&self.paths.upstreams()),
@@ -141,7 +142,7 @@ impl Builder {
 
         timing.finish(timer);
 
-        Ok(shared)
+        Ok(stored)
     }
 
     pub fn cleanup(&self) -> Result<(), Error> {

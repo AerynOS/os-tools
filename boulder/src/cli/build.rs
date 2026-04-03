@@ -105,7 +105,7 @@ pub fn handle(command: Command, env: Env) -> Result<(), Error> {
     );
     println!("boulder {}", tools_buildinfo::get_simple_version());
     println!("└─ building {pkg_name}-{build_release}\n");
-    let shared_upstreams = builder.setup(&mut timing, timer, update)?;
+    builder.setup(&mut timing, timer, update)?;
 
     let paths = &builder.paths;
     let networking = builder.recipe.parsed.options.networking;
@@ -149,9 +149,6 @@ pub fn handle(command: Command, env: Env) -> Result<(), Error> {
     package::sync_artefacts(paths).map_err(Error::SyncArtefacts)?;
 
     if cleanup {
-        for share in shared_upstreams {
-            share.remove().map_err(|e| Error::Cleanup(build::Error::from(e)))?;
-        }
         builder.cleanup().map_err(Error::Cleanup)?;
     }
 

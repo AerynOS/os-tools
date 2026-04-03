@@ -20,6 +20,9 @@ pub mod error;
 pub use self::error::Error;
 use error::{Constraint, InnerError};
 
+/// An uninitialized repository, useful for unit tests.
+pub const NULL_REPOSITORY: Repository = Repository { path: PathBuf::new() };
+
 /// A Git repository.
 pub struct Repository {
     path: PathBuf,
@@ -93,6 +96,20 @@ impl Repository {
         ])
         .await?;
         Ok(output.stdout.starts_with(b"commit"))
+    }
+
+    /// Returns the hash of the commit. If a commit hash is passed,
+    /// the output is equal to `commit`. If a Git reference is passed, the
+    /// reference is resolved into a commit hash.
+    pub async fn peel_commit(&self, commit: &str) -> Result<String, Error> {
+        let output = run_git(&[
+            OsStr::new("-C"),
+            self.path.as_os_str(),
+            OsStr::new("rev-parse"),
+            OsStr::new(commit),
+        ])
+        .await?;
+        Ok(str::from_utf8(output.stdout.trim_ascii_end()).unwrap_or("").to_owned())
     }
 
     /// Returns the remote URL for the provided `remote`

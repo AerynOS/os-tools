@@ -40,8 +40,6 @@ impl Error {
 pub enum Constraint {
     /// The repository is valid, but it is not bare.
     NotBare,
-    /// The commit is not identified by its hash.
-    NotPeeled { commit: String },
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -63,7 +61,6 @@ impl fmt::Display for Constraint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::NotBare => write!(f, "this repository is not bare"),
-            Self::NotPeeled { commit } => write!(f, "commit ID \"{commit}\" is not a commit hash"),
         }
     }
 }

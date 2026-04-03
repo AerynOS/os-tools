@@ -20,6 +20,7 @@ pub struct Git {
     pub url: Url,
     /// Hash of the commit to be considered as source.
     pub commit: String,
+    pub original_index: usize,
 }
 
 impl Git {
@@ -50,17 +51,16 @@ impl Git {
             Err(Error::Io(e)) => return Err(Error::from(e)),
         }
 
-        // When we reach this point, the repository may still
-        // not have the commit ID (e.g. because the ID
-        // was wrongly typed in the first place). This is acceptable
-        // because we managed to store the repository nonetheless.
-        // Users will receive an error when calling StoredGit::share.
+        let resolved_hash = repo.peel_commit(&self.commit).await?;
 
         Ok(StoredGit {
             name: self.name().to_owned(),
             was_cached: cached,
             repo,
-            commit: self.commit.to_owned(),
+            url: self.url.clone(),
+            original_ref: self.commit.to_owned(),
+            resolved_hash,
+            original_index: self.original_index,
         })
     }
 
@@ -85,12 +85,16 @@ impl Git {
     pub async fn stored(&self, storage_dir: &Path) -> Result<(StoredGit, bool), Error> {
         let repo = gitwrap::Repository::open_bare(&self.stored_path(storage_dir)).await?;
         let has_ref = repo.has_commit(&self.commit).await?;
+        let resolved_hash = repo.peel_commit(&self.commit).await?;
         Ok((
             StoredGit {
                 name: self.name().to_owned(),
                 was_cached: has_ref,
                 repo,
-                commit: self.commit.to_owned(),
+                url: self.url.clone(),
+                original_ref: self.commit.to_owned(),
+                resolved_hash,
+                original_index: self.original_index,
             },
             has_ref,
         ))
@@ -128,8 +132,11 @@ pub struct StoredGit {
     /// synchronized with [Git],
     /// that is, it existed and contained [Git::commit].
     pub was_cached: bool,
-    repo: gitwrap::Repository,
-    commit: String,
+    pub url: Url,
+    pub original_ref: String,
+    pub resolved_hash: String,
+    pub original_index: usize,
+    pub repo: gitwrap::Repository,
 }
 
 impl StoredGit {
@@ -148,7 +155,7 @@ impl StoredGit {
         cloned.set_remote_url("origin", &source_origin).await?;
 
         // Finally checkout the desired commit
-        cloned.checkout(&self.commit).await?;
+        cloned.checkout(&self.resolved_hash).await?;
 
         Ok(SharedGit(dest_dir.to_owned()))
     }
