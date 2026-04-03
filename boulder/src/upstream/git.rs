@@ -113,9 +113,9 @@ impl Git {
         let mut name = String::with_capacity(host.unwrap_or("").len() + 1 + path.len());
         if let Some(host) = host {
             name.push_str(host);
-            name.push('.');
+            name.push('_');
         }
-        name.push_str(&path.replace('/', "."));
+        name.push_str(&path.trim_start_matches('/').replace('/', "."));
         name.into()
     }
 }
