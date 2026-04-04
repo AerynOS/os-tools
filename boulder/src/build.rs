@@ -88,7 +88,7 @@ impl Builder {
             })
             .collect::<Result<Vec<_>, job::Error>>()?;
 
-        let upstreams = upstream::parse(&recipe)?;
+        let upstreams = upstream::parse_recipe(&recipe)?;
 
         let profiles = profile::Manager::new(&env);
         let repos = profiles.repositories(&profile)?.clone();
@@ -115,7 +115,12 @@ impl Builder {
         })
     }
 
-    pub fn setup(&self, timing: &mut Timing, initialize_timer: timing::Timer, update_repos: bool) -> Result<(), Error> {
+    pub fn setup(
+        &self,
+        timing: &mut Timing,
+        initialize_timer: timing::Timer,
+        update_repos: bool,
+    ) -> Result<Vec<upstream::Stored>, Error> {
         // Recreate artifacts
         util::recreate_dir(&self.paths.artefacts().host).map_err(Error::RecreateArtefactsDir)?;
 
@@ -128,11 +133,16 @@ impl Builder {
         let timer = timing.begin(timing::Kind::Fetch);
 
         // Sync (fetch & share) upstreams to rootfs
-        upstream::sync(&self.recipe, &self.paths, &self.upstreams)?;
+        let stored = upstream::sync(
+            &self.recipe,
+            &self.upstreams,
+            &self.paths.upstreams().host,
+            &self.paths.guest_host_path(&self.paths.upstreams()),
+        )?;
 
         timing.finish(timer);
 
-        Ok(())
+        Ok(stored)
     }
 
     pub fn cleanup(&self) -> Result<(), Error> {
@@ -150,7 +160,7 @@ impl Builder {
         }
 
         // Remove downloaded upstreams
-        upstream::remove(&self.paths, &self.upstreams)?;
+        upstream::remove(&self.paths.upstreams().host, &self.upstreams)?;
 
         // Prune moss cache, retaining stones from the repos defined
         // by our boulder profile

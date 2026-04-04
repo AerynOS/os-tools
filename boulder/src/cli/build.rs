@@ -174,19 +174,14 @@ fn verify_versions_match(builder: &Builder) -> Result<(), Error> {
 
     // We won't attempt to parse git upstreams for now
     match &first_upstream.props {
-        stone_recipe::upstream::Props::Git { git_ref, staging: _ } => {
+        stone_recipe::upstream::Props::Git { git_ref, .. } => {
             // If we have a git ref, we have a git upstream and version parsing
             // will not work.
             if !git_ref.is_empty() {
                 return Ok(());
             }
         }
-        stone_recipe::upstream::Props::Plain {
-            hash: _,
-            rename: _,
-            strip_dirs: _,
-            unpack: _,
-        } => {}
+        stone_recipe::upstream::Props::Plain { .. } => {}
     }
 
     let ver_ext = VersionExtractor::new();

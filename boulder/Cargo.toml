@@ -9,6 +9,7 @@ rust-version.workspace = true
 [dependencies]
 config = { path = "../crates/config" }
 container = { path = "../crates/container" }
+gitwrap = { path = "../crates/gitwrap" }
 moss = { path = "../moss" }
 tools_buildinfo = { path = "../crates/tools_buildinfo" }
 stone = { path = "../crates/stone" }

@@ -5,554 +5,212 @@
 use std::{
     io,
     path::{Path, PathBuf},
-    process, string,
 };
 
-use moss::{runtime, util};
+use fs_err as fs;
+use moss::util;
 use thiserror::Error;
-use tui::{ProgressBar, ProgressStyle, Styled};
+use tui::{ProgressBar, ProgressStyle};
 use url::Url;
 
-use crate::{Paths, upstream::Stored};
-
+/// Upstream based on a Git repository.
 #[derive(Clone, Debug)]
 pub struct Git {
-    pub uri: Url,
-    pub ref_id: String,
-    pub staging: bool,
+    /// URL of origin.
+    pub url: Url,
+    /// Hash of the commit to be considered as source.
+    pub commit: String,
     pub original_index: usize,
 }
 
 impl Git {
-    pub async fn _fetch_new(url: &Url, dest_dir: &Path) -> Result<Self, Error> {
-        Self::_fetch_new_progress(url, dest_dir, &ProgressBar::hidden()).await
-    }
-
-    pub async fn _fetch_new_progress(_url: &Url, _dest_dir: &Path, _pb: &ProgressBar) -> Result<Self, Error> {
-        todo!()
-    }
-
+    /// Returns the name of the upstream. It is implied from the URL.
     pub fn name(&self) -> &str {
-        util::uri_file_name(&self.uri)
+        util::uri_file_name(&self.url)
     }
 
-    fn final_path(&self, paths: &Paths) -> PathBuf {
-        paths
-            .upstreams()
-            .host
-            .join("git")
-            .join(util::uri_relative_path(&self.uri))
-    }
-
-    fn staging_path(&self, paths: &Paths) -> PathBuf {
-        paths
-            .upstreams()
-            .host
-            .join("staging")
-            .join("git")
-            .join(util::uri_relative_path(&self.uri))
-    }
-
-    pub async fn store(&self, paths: &Paths, pb: &ProgressBar) -> Result<StoredGit, Error> {
-        use fs_err::tokio as fs;
-
-        pb.set_style(
-            ProgressStyle::with_template(" {spinner} {wide_msg} ")
-                .unwrap()
-                .tick_chars("--=≡■≡=--"),
-        );
-
-        let clone_path = if self.staging {
-            self.staging_path(paths)
-        } else {
-            self.final_path(paths)
-        };
-        let clone_path_string = clone_path.display().to_string();
-
-        let final_path = self.final_path(paths);
-        let final_path_string = final_path.display().to_string();
-
-        if let Some(parent) = clone_path.parent().map(Path::to_path_buf) {
-            runtime::unblock(move || util::ensure_dir_exists(&parent)).await?;
-        }
-        if let Some(parent) = final_path.parent().map(Path::to_path_buf) {
-            runtime::unblock(move || util::ensure_dir_exists(&parent)).await?;
+    /// Stores the upstream into the storage directory.
+    /// If the upstream was already stored but does not include [Self::commit],
+    /// it is updated contextually. If it does not exist, the Git repository is cloned.
+    pub async fn store(&self, storage_dir: &Path, pb: &ProgressBar) -> Result<StoredGit, Error> {
+        let repo: gitwrap::Repository;
+        let mut cached = true;
+        match self.stored(storage_dir).await {
+            Ok((stored, has_commit)) => {
+                repo = stored.repo;
+                if !has_commit {
+                    cached = false;
+                    fetch(&repo, pb).await?;
+                }
+            }
+            Err(Error::Git(_)) => {
+                cached = false;
+                self.remove(storage_dir)?;
+                repo = clone(&self.url, &self.stored_path(storage_dir), pb).await?;
+            }
+            Err(Error::Io(e)) => return Err(Error::from(e)),
         }
 
-        if self.ref_exists(&final_path).await? {
-            self.reset_to_ref(&final_path).await?;
-            let resolved_hash = runtime::unblock({
-                let final_path = final_path.clone();
-                let ref_id = self.ref_id.clone();
-                let uri = self.uri.clone();
-                move || resolve_git_ref(&final_path, &ref_id, &uri)
-            })
-            .await?;
-            return Ok(StoredGit {
-                name: self.name().to_owned(),
-                path: final_path,
-                was_cached: true,
-                uri: self.uri.clone(),
-                original_ref: self.ref_id.clone(),
-                resolved_hash,
-                original_index: self.original_index,
-            });
-        }
-
-        // clean up the dirs we are about to create if they already exist
-        let _ = fs::remove_dir_all(&clone_path).await;
-        if self.staging {
-            let _ = fs::remove_dir_all(&final_path).await;
-        }
-
-        let mut args = vec!["clone"];
-        if self.staging {
-            args.push("--mirror");
-        }
-        args.extend(["--", self.uri.as_str(), &clone_path_string]);
-
-        self.run(&args, None).await?;
-
-        if self.staging {
-            self.run(&["clone", "--", &clone_path_string, &final_path_string], None)
-                .await?;
-        }
-
-        self.reset_to_ref(&final_path).await?;
-
-        let resolved_hash = runtime::unblock({
-            let final_path = final_path.clone();
-            let ref_id = self.ref_id.clone();
-            let uri = self.uri.clone();
-            move || resolve_git_ref(&final_path, &ref_id, &uri)
-        })
-        .await?;
+        let resolved_hash = repo.peel_commit(&self.commit).await?;
 
         Ok(StoredGit {
             name: self.name().to_owned(),
-            path: final_path,
-            was_cached: false,
-            uri: self.uri.clone(),
-            original_ref: self.ref_id.clone(),
+            was_cached: cached,
+            repo,
+            url: self.url.clone(),
+            original_ref: self.commit.to_owned(),
             resolved_hash,
             original_index: self.original_index,
         })
     }
 
-    async fn ref_exists(&self, path: &Path) -> Result<bool, Error> {
-        if !path.exists() {
-            return Ok(false);
-        }
-
-        self.run(&["fetch"], Some(path)).await?;
-
-        let result = self.run(&["cat-file", "-e", &self.ref_id], Some(path)).await;
-
-        Ok(result.is_ok())
+    /// Unconditionally removes the directory, within the storage
+    /// directory, that would store the Git repository.
+    /// If the directory does not exist, this function returns
+    /// successfully (it is idempotent).
+    ///
+    /// Careful: this function does not validate the content
+    /// of the directory! Resources will be deleted even if they
+    /// do not belong to a Git repository.
+    pub fn remove(&self, storage_dir: &Path) -> Result<(), Error> {
+        let dir = self.stored_path(storage_dir);
+        util::remove_dir_all(&dir).map_err(Error::from)
     }
 
-    async fn reset_to_ref(&self, path: &Path) -> Result<(), Error> {
-        self.run(&["reset", "--hard", &self.ref_id], Some(path)).await?;
-
-        self.run(
-            &[
-                "submodule",
-                "update",
-                "--init",
-                "--recursive",
-                "--depth",
-                "1",
-                "--jobs",
-                "4",
-            ],
-            Some(path),
-        )
-        .await?;
-
-        Ok(())
+    /// Returns the stored upstream if it exists.
+    ///
+    /// If successful, a tuple is returned containing the
+    /// stored upstream and a boolean flag, indicating whether
+    /// the stored Git repository contains [Self::commit].
+    pub async fn stored(&self, storage_dir: &Path) -> Result<(StoredGit, bool), Error> {
+        let repo = gitwrap::Repository::open_bare(&self.stored_path(storage_dir)).await?;
+        let has_ref = repo.has_commit(&self.commit).await?;
+        let resolved_hash = repo.peel_commit(&self.commit).await?;
+        Ok((
+            StoredGit {
+                name: self.name().to_owned(),
+                was_cached: has_ref,
+                repo,
+                url: self.url.clone(),
+                original_ref: self.commit.to_owned(),
+                resolved_hash,
+                original_index: self.original_index,
+            },
+            has_ref,
+        ))
     }
 
-    async fn run(&self, args: &[&str], cwd: Option<&Path>) -> Result<(), Error> {
-        use tokio::process;
-
-        let mut command = process::Command::new("git");
-
-        if let Some(dir) = cwd {
-            command.current_dir(dir);
-        }
-
-        let output = command.args(args).output().await?;
-
-        if !output.status.success() {
-            eprint!("{}", String::from_utf8_lossy(&output.stderr));
-            return Err(Error::GitFailed(self.uri.clone()));
-        }
-
-        Ok(())
+    /// Returns a relative PathBuf where this Git repository
+    /// should be stored within the storage directory.
+    fn stored_path(&self, storage_dir: &Path) -> PathBuf {
+        storage_dir.join("git").join(self.directory_name())
     }
 
-    /// Remove paths while squashing ErrorKind::NotFound errors.
-    pub fn remove(&self, paths: &Paths) -> Result<(), Error> {
-        for path in [self.staging_path(paths), self.final_path(paths)] {
-            util::remove_dir_all(&path)?;
-            if let Some(parent) = path.parent() {
-                util::remove_empty_dirs(parent, &paths.upstreams().host)?;
-            }
+    /// Returns the name of the directory that should contain
+    /// the Git repository.
+    /// It is a composition of the hostname and the repository name
+    /// so that it's unique.
+    fn directory_name(&self) -> PathBuf {
+        let host = self.url.host_str();
+        let path = self.url.path();
+
+        let mut name = String::with_capacity(host.unwrap_or("").len() + 1 + path.len());
+        if let Some(host) = host {
+            name.push_str(host);
+            name.push('_');
         }
-        Ok(())
+        name.push_str(&path.trim_start_matches('/').replace('/', "."));
+        name.into()
     }
 }
 
-#[derive(Clone)]
+/// Information available after [Git] is stored on disk.
 pub struct StoredGit {
+    /// Name of the upstream, as returned by [Git::name].
     pub name: String,
-    pub path: PathBuf,
+    /// Whether the stored Git repository was
+    /// synchronized with [Git],
+    /// that is, it existed and contained [Git::commit].
     pub was_cached: bool,
-    pub uri: Url,
+    pub url: Url,
     pub original_ref: String,
     pub resolved_hash: String,
     pub original_index: usize,
+    pub repo: gitwrap::Repository,
 }
 
+impl StoredGit {
+    /// Shares the Git repository in preparation of a build.
+    pub async fn share(&self, dest_dir: &Path) -> Result<SharedGit, Error> {
+        if let Some(parent) = dest_dir.parent() {
+            fs::create_dir_all(parent)?;
+        }
+
+        // Clone from our mirror to destdir
+        let cloned = self.repo.clone_to(dest_dir).await?;
+
+        // Cloning sets origin to the local mirror, but we want to use
+        // the original remote as submodule resolving may depend on this
+        let source_origin = self.repo.get_remote_url("origin").await?;
+        cloned.set_remote_url("origin", &source_origin).await?;
+
+        // Finally checkout the desired commit
+        cloned.checkout(&self.resolved_hash).await?;
+
+        Ok(SharedGit(dest_dir.to_owned()))
+    }
+}
+
+/// A shared Git repository is a copy of a stored Git
+/// in a location useful for a build.
+pub struct SharedGit(PathBuf);
+
+impl SharedGit {
+    /// Removes the shared Git repository.
+    pub fn remove(&self) -> Result<(), Error> {
+        fs::remove_dir_all(&self.0).map_err(Error::from)
+    }
+}
+
+/// Possible errors returned by functions in this module.
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("failed to clone {0}")]
-    GitFailed(Url),
-    #[error("git")]
-    Git(#[from] GitError),
-    #[error("io")]
+    /// An error occurred while handling a Git repository.
+    #[error("{0}")]
+    Git(#[from] gitwrap::Error),
+    /// A generic I/O error occurred.
+    #[error("{0}")]
     Io(#[from] io::Error),
 }
 
-#[derive(Debug, Error)]
-pub enum GitError {
-    #[error("ref '{ref_id}' did not resolve to a valid commit hash for {uri}")]
-    UnresolvedRef { ref_id: String, uri: Url },
-    #[error(transparent)]
-    Io(#[from] io::Error),
-    #[error(transparent)]
-    Utf8(#[from] string::FromUtf8Error),
+async fn clone(url: &Url, path: &Path, pb: &ProgressBar) -> Result<gitwrap::Repository, gitwrap::Error> {
+    let cb = set_progress_bar_style(pb);
+
+    let result = gitwrap::Repository::clone_mirror_progress(path, url, cb).await;
+    pb.finish_and_clear();
+
+    result
 }
 
-/// Resolves a git reference to its commit hash using `git rev-parse` on a cloned repo.
-pub(crate) fn resolve_git_ref(clone_dir: &Path, ref_id: &str, uri: &Url) -> Result<String, GitError> {
-    let output = process::Command::new("git")
-        .current_dir(clone_dir)
-        .args(["rev-parse", ref_id])
-        .output()?;
+async fn fetch(repo: &gitwrap::Repository, pb: &ProgressBar) -> Result<(), gitwrap::Error> {
+    let cb = set_progress_bar_style(pb);
 
-    if !output.status.success() {
-        return Err(GitError::UnresolvedRef {
-            ref_id: ref_id.to_owned(),
-            uri: uri.clone(),
-        });
-    }
+    let result = repo.fetch_progress(cb).await;
+    pb.finish_and_clear();
 
-    let stdout = String::from_utf8(output.stdout)?;
-    let parsed_hash = stdout.trim();
-
-    if !is_valid_commit_hash(parsed_hash) {
-        return Err(GitError::UnresolvedRef {
-            ref_id: ref_id.to_owned(),
-            uri: uri.clone(),
-        });
-    }
-
-    Ok(parsed_hash.to_owned())
+    result
 }
 
-/// Process git upstreams after cloning and return updated YAML if refs differ from resolved hashes.
-pub(crate) fn update_git_upstream_refs(
-    recipe_source: &str,
-    stored_upstreams: &[Stored],
-) -> Result<Option<String>, GitError> {
-    let mut yaml_updater = yaml::Updater::new();
-    let mut refs_updated = false;
+fn set_progress_bar_style(pb: &ProgressBar) -> impl Fn(gitwrap::FetchProgress) {
+    pb.set_length(100);
+    pb.set_style(
+        ProgressStyle::with_template(" {spinner} |{percent:>3}%| {wide_msg} {prefix:>.dim} ")
+            .unwrap()
+            .tick_chars("--=≡■≡=--"),
+    );
 
-    for stored in stored_upstreams.iter() {
-        if let Stored::Git(git) = stored
-            && git.resolved_hash != git.original_ref
-        {
-            update_git_upstream_ref_in_yaml(
-                &mut yaml_updater,
-                git.original_index,
-                git.uri.as_str(),
-                &git.resolved_hash,
-                &git.original_ref,
-            );
-            println!(
-                "{} | Updated ref '{}' to commit {} for {}",
-                "Warning".yellow(),
-                &git.resolved_hash[..8],
-                &git.original_ref,
-                &git.uri
-            );
-            refs_updated = true;
-        }
-    }
-
-    if refs_updated {
-        Ok(Some(yaml_updater.apply(recipe_source)))
-    } else {
-        Ok(None)
-    }
-}
-
-fn is_valid_commit_hash(s: &str) -> bool {
-    // git commit hashes can be SHA-1 or SHA-256 hashes
-    (s.len() == 40 || s.len() == 64) && s.chars().all(|c| c.is_ascii_hexdigit())
-}
-
-/// Replaces the non-hash refs for git upstreams with the hash for the given ref
-/// and includes a comment showing the original ref.
-fn update_git_upstream_ref_in_yaml(
-    updater: &mut yaml::Updater,
-    upstream_index: usize,
-    uri: &str,
-    new_ref: &str,
-    original_ref: &str,
-) {
-    let git_key = format!("git|{uri}");
-    let new_value_with_comment = format!("{new_ref} # {original_ref}");
-
-    // git|uri: <ref>
-    updater.update_value(&new_value_with_comment, |p| {
-        p / "upstreams" / upstream_index / git_key.as_str()
-    });
-
-    // git|uri:
-    // - ref: <ref>
-    // ...
-    updater.update_value(&new_value_with_comment, |p| {
-        p / "upstreams" / upstream_index / git_key.as_str() / "ref"
-    });
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::upstream::StoredGit;
-    use crate::upstream::plain::StoredPlain;
-
-    use super::*;
-    use fs_err as fs;
-    use std::process::Command;
-    use tempfile::TempDir;
-
-    #[test]
-    fn test_update_git_upstream_refs() {
-        let recipe_source = r#"
-upstreams:
-  - git|https://github.com/example/repo1.git: main
-  - git|https://github.com/example/repo2.git:
-      ref: main
-  - git|https://github.com/example/repo3.git: abcd1234567890abcdef1234567890abcdef1234
-  - git|https://github.com/example/repo4.git: abc123d
-  - https://example.com/file.tar.gz: some-hash
-"#;
-
-        let stored = vec![
-            Stored::Git(StoredGit {
-                name: "repo1.git".to_owned(),
-                path: "/tmp/repo1".into(),
-                was_cached: false,
-                uri: Url::parse("https://github.com/example/repo1.git").unwrap(),
-                original_ref: "main".to_owned(),
-                resolved_hash: "1111222233334444555566667777888899990000".to_owned(),
-                original_index: 0,
-            }),
-            Stored::Git(StoredGit {
-                name: "repo2.git".to_owned(),
-                path: "/tmp/repo2".into(),
-                was_cached: false,
-                uri: Url::parse("https://github.com/example/repo2.git").unwrap(),
-                original_ref: "main".to_owned(),
-                resolved_hash: "aaaa1111bbbb2222cccc3333dddd4444eeee5555".to_owned(),
-                original_index: 1,
-            }),
-            Stored::Git(StoredGit {
-                name: "repo3.git".to_owned(),
-                path: "/tmp/repo3".into(),
-                was_cached: false,
-                uri: Url::parse("https://github.com/example/repo3.git").unwrap(),
-                original_ref: "abcd1234567890abcdef1234567890abcdef1234".to_owned(),
-                resolved_hash: "abcd1234567890abcdef1234567890abcdef1234".to_owned(),
-                original_index: 2,
-            }),
-            Stored::Git(StoredGit {
-                name: "repo4.git".to_owned(),
-                path: "/tmp/repo4".into(),
-                was_cached: false,
-                uri: Url::parse("https://github.com/example/repo4.git").unwrap(),
-                original_ref: "abc123d".to_owned(),
-                resolved_hash: "abc123d567890abcdef1234567890abcdef12345".to_owned(),
-                original_index: 3,
-            }),
-            Stored::Git(StoredGit {
-                name: "file.tar.gz".to_owned(),
-                path: "/tmp/file.tar.gz".into(),
-                was_cached: false,
-                // We don't care about the values below.
-                uri: "http://example.com".try_into().unwrap(),
-                original_ref: String::new(),
-                resolved_hash: String::new(),
-                original_index: 0,
-            }),
-        ];
-
-        let result = update_git_upstream_refs(recipe_source, &stored).unwrap();
-
-        assert!(result.is_some());
-        let updated_yaml = result.unwrap();
-
-        // Should update short form ref to hash with comment
-        assert!(updated_yaml.contains("1111222233334444555566667777888899990000 # main"));
-
-        // Should update long form ref to hash with comment
-        assert!(updated_yaml.contains("aaaa1111bbbb2222cccc3333dddd4444eeee5555 # main"));
-
-        // Should not change hash that's already a hash
-        assert!(updated_yaml.contains("abcd1234567890abcdef1234567890abcdef1234"));
-        assert!(
-            !updated_yaml
-                .contains("abcd1234567890abcdef1234567890abcdef1234 # abcd1234567890abcdef1234567890abcdef1234")
-        );
-
-        // Should update short hash to long hash
-        assert!(updated_yaml.contains("abc123d567890abcdef1234567890abcdef12345 # abc123d"));
-
-        // Should preserve non-git upstreams unchanged
-        assert!(updated_yaml.contains("https://example.com/file.tar.gz: some-hash"));
-    }
-
-    #[test]
-    fn test_update_git_upstream_refs_no_updates() {
-        let recipe_source = r#"
-upstreams:
-  - git|https://github.com/example/repo3.git: abcd1234567890abcdef1234567890abcdef1234
-  - https://example.com/file.tar.gz: some-hash
-"#;
-
-        let stored = vec![
-            Stored::Git(StoredGit {
-                name: "repo3.git".to_owned(),
-                path: "/tmp/repo3".into(),
-                was_cached: false,
-                uri: Url::parse("https://github.com/example/repo3.git").unwrap(),
-                original_ref: "abcd1234567890abcdef1234567890abcdef1234".to_owned(),
-                resolved_hash: "abcd1234567890abcdef1234567890abcdef1234".to_owned(),
-                original_index: 0,
-            }),
-            Stored::Plain(StoredPlain {
-                name: "file.tar.gz".to_owned(),
-                path: "/tmp/file.tar.gz".into(),
-                was_cached: false,
-            }),
-        ];
-
-        let result = update_git_upstream_refs(recipe_source, &stored).unwrap();
-
-        assert!(result.is_none());
-    }
-
-    // Create a minimal test repo
-    fn setup_test_repo() -> (TempDir, String) {
-        let temp_dir = TempDir::new().unwrap();
-
-        // Initialize the repo
-        Command::new("git")
-            .current_dir(temp_dir.path())
-            .args(["init"])
-            .output()
-            .unwrap();
-        Command::new("git")
-            .current_dir(temp_dir.path())
-            .args(["config", "user.email", "test@test.com"])
-            .output()
-            .unwrap();
-        Command::new("git")
-            .current_dir(temp_dir.path())
-            .args(["config", "user.name", "Test"])
-            .output()
-            .unwrap();
-
-        // Create the first commit
-        fs::write(temp_dir.path().join("file"), "content").unwrap();
-        Command::new("git")
-            .current_dir(temp_dir.path())
-            .args(["add", "."])
-            .output()
-            .unwrap();
-        Command::new("git")
-            .current_dir(temp_dir.path())
-            .args(["commit", "-m", "test"])
-            .output()
-            .unwrap();
-
-        // Create a tag for testing
-        Command::new("git")
-            .current_dir(temp_dir.path())
-            .args(["tag", "v1.0"])
-            .output()
-            .unwrap();
-
-        // Get the commit hash for testing
-        let output = Command::new("git")
-            .current_dir(temp_dir.path())
-            .args(["rev-parse", "HEAD"])
-            .output()
-            .unwrap();
-        let commit_hash = String::from_utf8(output.stdout).unwrap().trim().to_owned();
-
-        (temp_dir, commit_hash)
-    }
-
-    #[test]
-    fn test_resolve_invalid_repo_path() {
-        let uri = Url::parse("https://example.com/test.git").unwrap();
-
-        let err = resolve_git_ref(Path::new("/nonexistent"), "v1.0", &uri).unwrap_err();
-
-        assert!(matches!(err, GitError::Io(_)));
-    }
-
-    #[test]
-    fn test_resolve_tag() {
-        let (temp_dir, expected_hash) = setup_test_repo();
-        let uri = Url::parse("https://example.com/test.git").unwrap();
-
-        let result = resolve_git_ref(temp_dir.path(), "v1.0", &uri).unwrap();
-
-        assert_eq!(result, expected_hash);
-    }
-
-    #[test]
-    fn test_resolve_short_hash() {
-        let (temp_dir, full_hash) = setup_test_repo();
-        let uri = Url::parse("https://example.com/test.git").unwrap();
-        let short_hash = &full_hash[..8];
-
-        let result = resolve_git_ref(temp_dir.path(), short_hash, &uri).unwrap();
-
-        assert_eq!(result, full_hash);
-    }
-
-    #[test]
-    fn test_resolve_full_hash() {
-        let (temp_dir, full_hash) = setup_test_repo();
-        let uri = Url::parse("https://example.com/test.git").unwrap();
-
-        let result = resolve_git_ref(temp_dir.path(), &full_hash, &uri).unwrap();
-
-        assert_eq!(result, full_hash);
-    }
-
-    #[test]
-    fn test_resolve_invalid_ref() {
-        let (temp_dir, _) = setup_test_repo();
-        let uri = Url::parse("https://example.com/test.git").unwrap();
-
-        let err = resolve_git_ref(temp_dir.path(), "nonexistent", &uri).unwrap_err();
-
-        assert!(matches!(err, GitError::UnresolvedRef { .. }));
+    |prog| {
+        pb.set_position(prog.percent as u64);
+        pb.set_prefix(prog.speed);
     }
 }

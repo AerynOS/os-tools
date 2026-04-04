@@ -262,6 +262,7 @@ dependencies = [
  "filetime",
  "fs-err",
  "futures-util",
+ "gitwrap",
  "glob",
  "hex",
  "itertools 0.14.0",
@@ -1224,6 +1225,15 @@ dependencies = [
  "r-efi 6.0.0",
  "wasip2",
  "wasip3",
+]
+
+[[package]]
+name = "gitwrap"
+version = "0.26.1"
+dependencies = [
+ "thiserror",
+ "tokio",
+ "url",
 ]
 
 [[package]]
