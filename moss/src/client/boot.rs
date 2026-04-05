@@ -23,7 +23,12 @@ use itertools::Itertools;
 use stone::{StonePayloadLayoutFile, StonePayloadLayoutRecord};
 use thiserror::{self, Error};
 
-use crate::{Installation, State, db, package::Id};
+use crate::{
+    Installation, State,
+    client::{ProgressCallback, ProgressEvent, ProgressStage},
+    db,
+    package::Id,
+};
 
 use super::Client;
 
@@ -166,7 +171,7 @@ fn os_schema_for_root(root: &Path) -> Result<Schema, Error> {
     }
 }
 
-pub fn synchronize(client: &Client, state: &State) -> Result<(), Error> {
+pub fn synchronize(client: &Client, state: &State, progress_callback: ProgressCallback) -> Result<(), Error> {
     let root = client.installation.root.clone();
     let is_native = root.to_string_lossy() == "/";
     // Create an appropriate configuration
@@ -178,6 +183,10 @@ pub fn synchronize(client: &Client, state: &State) -> Result<(), Error> {
         },
         vfs: "/".into(),
     };
+
+    if let Some(ref callback) = progress_callback {
+        callback(ProgressEvent::Stage(ProgressStage::Boot))
+    }
 
     // For the new/active state
     let head_layouts = layouts_for_state(client, state)?;

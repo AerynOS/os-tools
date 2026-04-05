@@ -179,7 +179,7 @@ pub(super) fn prune_states(client: &Client, strategy: Strategy<'_>, yes: bool) -
     }
 
     // Sync boot to ensure pruned states are removed from boot entries
-    boot::synchronize(client, &current_state).map_err(Error::SyncBoot)?;
+    boot::synchronize(client, &current_state, None).map_err(Error::SyncBoot)?;
 
     Ok(())
 }

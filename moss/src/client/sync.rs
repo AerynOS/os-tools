@@ -1,7 +1,6 @@
 use std::{
     collections::BTreeSet,
     path::{Path, PathBuf},
-    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -15,7 +14,7 @@ use tui::{
 
 use crate::{
     Client, Package, Provider, SystemModel,
-    client::{self, ProgressStage},
+    client::{self, ProgressCallback, ProgressEvent, ProgressStage},
     db, package,
     registry::transaction,
     runtime,
@@ -29,13 +28,13 @@ pub fn sync(
     yes: bool,
     simulate: bool,
     only_download: bool,
-    progress_callback: Option<Arc<dyn Fn(f32, ProgressStage) + Send + Sync>>,
+    progress_callback: ProgressCallback,
 ) -> Result<(Vec<Package>, Timing), Error> {
     let mut timing = Timing::default();
     let mut instant = Instant::now();
 
     if let Some(ref callback) = progress_callback {
-        callback(0.0, ProgressStage::Resolve);
+        callback(ProgressEvent::Stage(ProgressStage::Resolve))
     }
 
     let system_model = if let Some(path) = import {
@@ -62,6 +61,10 @@ pub fn sync(
             build_release = package.meta.build_release,
             "Package in finalized list"
         );
+    }
+
+    if let Some(ref callback) = progress_callback {
+        callback(ProgressEvent::Resolved(finalized.clone()))
     }
 
     timing.resolve = instant.elapsed();

@@ -4,10 +4,7 @@
 
 //! Installation-specific code for several core moss operations
 
-use std::{
-    sync::Arc,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 use thiserror::Error;
 use tracing::{Instrument, debug, info, info_span, instrument};
@@ -18,7 +15,7 @@ use tui::{
 
 use crate::{
     Package, Provider,
-    client::{self, Client, ProgressStage},
+    client::{self, Client, ProgressCallback, ProgressEvent, ProgressStage},
     package::{self, Flags},
     registry::transaction,
     runtime,
@@ -35,13 +32,13 @@ pub fn install(
     pkgs: &[&str],
     yes: bool,
     simulate: bool,
-    progress_callback: Option<Arc<dyn Fn(f32, ProgressStage) + Send + Sync>>,
+    progress_callback: ProgressCallback,
 ) -> Result<(Vec<Package>, Timing), Error> {
     let mut timing = Timing::default();
     let mut instant = Instant::now();
 
     if let Some(ref callback) = progress_callback {
-        callback(0.0, ProgressStage::Resolve);
+        callback(ProgressEvent::Stage(ProgressStage::Resolve))
     }
 
     // Resolve input packages
@@ -69,6 +66,10 @@ pub fn install(
         .into_iter()
         .filter(|p| client.is_ephemeral() || !is_installed(p))
         .collect::<Vec<_>>();
+
+    if let Some(ref callback) = progress_callback {
+        callback(ProgressEvent::Resolved(missing.clone()))
+    }
 
     timing.resolve = instant.elapsed();
     info!(
