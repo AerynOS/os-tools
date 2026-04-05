@@ -239,6 +239,10 @@ enum StonePayloadMetaDependency
    * An emul32-compatible pkgconfig .pc dependency (lib32*.pc)
    */
   STONE_PAYLOAD_META_DEPENDENCY_PKG_CONFIG32 = 8,
+  /**
+   * A Perl module
+   */
+  STONE_PAYLOAD_META_DEPENDENCY_PERL = 9,
   STONE_PAYLOAD_META_DEPENDENCY_UNKNOWN = 255,
 };
 #ifndef __cplusplus
