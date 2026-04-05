@@ -1,6 +1,5 @@
 use std::{
     collections::BTreeSet,
-    sync::Arc,
     time::{Duration, Instant},
 };
 
@@ -15,7 +14,7 @@ use tui::{
 
 use crate::{
     Client, Package, Provider,
-    client::{self, ProgressStage},
+    client::{self, ProgressCallback, ProgressEvent, ProgressStage},
     db,
     registry::transaction,
     state::Selection,
@@ -28,13 +27,13 @@ pub fn remove(
     pkgs: &[&str],
     yes: bool,
     simulate: bool,
-    progress_callback: Option<Arc<dyn Fn(f32, ProgressStage) + Send + Sync>>,
+    progress_callback: ProgressCallback,
 ) -> Result<(Vec<Package>, Timing), Error> {
     let mut timing = Timing::default();
     let mut instant = Instant::now();
 
     if let Some(ref callback) = progress_callback {
-        callback(0.0, ProgressStage::Resolve);
+        callback(ProgressEvent::Stage(ProgressStage::Resolve))
     }
 
     let installed = client.registry.list_installed().collect::<Vec<_>>();
@@ -93,6 +92,10 @@ pub fn remove(
 
     // Resolve all removed packages, where removed is (installed - finalized)
     let removed = client.resolve_packages(installed_ids.difference(&finalized))?;
+
+    if let Some(ref callback) = progress_callback {
+        callback(ProgressEvent::Resolved(removed.clone()))
+    }
 
     timing.resolve = instant.elapsed();
     info!(

@@ -148,7 +148,7 @@ impl Client {
         packages: &[&str],
         yes: bool,
         simulate: bool,
-        progress_callback: Option<Arc<dyn Fn(f32, ProgressStage) + Send + Sync>>,
+        progress_callback: ProgressCallback,
     ) -> Result<(Vec<Package>, install::Timing), Error> {
         install(self, packages, yes, simulate, progress_callback).map_err(|error| Error::Install(Box::new(error)))
     }
@@ -159,7 +159,7 @@ impl Client {
         packages: &[&str],
         yes: bool,
         simulate: bool,
-        progress_callback: Option<Arc<dyn Fn(f32, ProgressStage) + Send + Sync>>,
+        progress_callback: ProgressCallback,
     ) -> Result<(Vec<Package>, remove::Timing), Error> {
         remove(self, packages, yes, simulate, progress_callback).map_err(|error| Error::Remove(Box::new(error)))
     }
@@ -182,7 +182,7 @@ impl Client {
         yes: bool,
         simulate: bool,
         only_download: bool,
-        progress_callback: Option<Arc<dyn Fn(f32, ProgressStage) + Send + Sync>>,
+        progress_callback: ProgressCallback,
     ) -> Result<(Vec<Package>, sync::Timing), Error> {
         sync(self, import, yes, simulate, only_download, progress_callback)
             .map_err(|error| Error::Sync(Box::new(error)))
@@ -343,7 +343,7 @@ impl Client {
         id: state::Id,
         skip_triggers: bool,
         skip_boot: bool,
-        progress_callback: Option<Arc<dyn Fn(f32, ProgressStage) + Send + Sync>>,
+        progress_callback: ProgressCallback,
     ) -> Result<state::Id, Error> {
         // Fetch the new state
         let new = self.state_db.get(id).map_err(|_| Error::StateDoesntExist(id))?;
@@ -402,7 +402,7 @@ impl Client {
         &self,
         selections: &[Selection],
         summary: impl ToString,
-        progress_callback: Option<Arc<dyn Fn(f32, ProgressStage) + Send + Sync>>,
+        progress_callback: ProgressCallback,
     ) -> Result<Option<State>, Error> {
         let _guard = signal::ignore([Signal::SIGINT])?;
         let _fd = signal::inhibit(
@@ -468,7 +468,7 @@ impl Client {
     fn apply_triggers(
         scope: TriggerScope<'_>,
         fstree: &vfs::Tree<PendingFile>,
-        progress_callback: Option<Arc<dyn Fn(f32, ProgressStage) + Send + Sync>>,
+        progress_callback: ProgressCallback,
     ) -> Result<(), postblit::Error> {
         let triggers = postblit::triggers(scope, fstree)?;
 
@@ -524,7 +524,7 @@ impl Client {
                 let total_len = progress.length().unwrap_or(1);
                 let percentage = (current_pos as f32 / total_len as f32) * 100.0;
 
-                callback(percentage, phase);
+                callback(ProgressEvent::StageProgress(phase, percentage))
             }
         }
 
@@ -547,7 +547,7 @@ impl Client {
         state: &State,
         old_state: Option<state::Id>,
         system_model: SystemModel,
-        progress_callback: Option<Arc<dyn Fn(f32, ProgressStage) + Send + Sync>>,
+        progress_callback: ProgressCallback,
     ) -> Result<(), Error> {
         record_state_id(&self.installation.staging_dir(), state.id)?;
         record_os_release(&self.installation.staging_dir())?;
@@ -587,7 +587,7 @@ impl Client {
         fstree: vfs::Tree<PendingFile>,
         blit_root: &Path,
         system_model: SystemModel,
-        progress_callback: Option<Arc<dyn Fn(f32, ProgressStage) + Send + Sync>>,
+        progress_callback: ProgressCallback,
     ) -> Result<(), Error> {
         record_os_release(blit_root)?;
         record_system_model(blit_root, system_model)?;
@@ -679,14 +679,14 @@ impl Client {
     }
 
     /// Download & unpack the provided packages. Packages already cached will be validated & skipped.
-    pub async fn cache_packages<T>(
-        &self,
-        packages: &[T],
-        progress_callback: Option<Arc<dyn Fn(f32, ProgressStage) + Send + Sync>>,
-    ) -> Result<(), Error>
+    pub async fn cache_packages<T>(&self, packages: &[T], progress_callback: ProgressCallback) -> Result<(), Error>
     where
         T: Borrow<Package>,
     {
+        if let Some(ref callback) = progress_callback {
+            callback(ProgressEvent::Stage(ProgressStage::Downloading))
+        }
+
         // Setup progress bar
         let multi_progress = MultiProgress::new();
 
@@ -707,6 +707,10 @@ impl Client {
             .map(|package| async {
                 let package: &Package = package.borrow();
                 let progress_callback = progress_callback.clone();
+
+                if let Some(ref callback) = progress_callback {
+                    callback(ProgressEvent::PackageProgress(PackageEvent::Started(package.clone())))
+                }
 
                 // Setup the progress bar and set as downloading
                 let progress_bar = multi_progress.insert_before(
@@ -730,6 +734,13 @@ impl Client {
                 // Download and update progress
                 let download = cache::fetch(&package.meta, &self.installation, |progress| {
                     progress_bar.inc(progress.delta);
+                    if let Some(ref callback) = progress_callback {
+                        let pct = progress.completed as f32 / progress.total as f32;
+                        callback(ProgressEvent::PackageProgress(PackageEvent::Downloading(
+                            package.clone(),
+                            pct,
+                        )))
+                    }
                     info!(
                         progress = progress.completed as f32 / progress.total as f32,
                         current = progress.completed as usize,
@@ -740,7 +751,15 @@ impl Client {
                     );
                 })
                 .await
-                .map_err(|err| Error::CacheFetch(err, package.meta.name.clone()))?;
+                .map_err(|err| {
+                    if let Some(ref callback) = progress_callback {
+                        callback(ProgressEvent::PackageProgress(PackageEvent::Failed(
+                            package.clone(),
+                            err.to_string(),
+                        )))
+                    }
+                    Error::CacheFetch(err, package.meta.name.clone())
+                })?;
 
                 let is_cached = download.was_cached;
 
@@ -766,7 +785,8 @@ impl Client {
                     let unpacked = download
                         .unpack(unpacking_in_progress.clone(), {
                             let progress_bar = progress_bar.clone();
-                            let package_name = package_name.clone();
+                            let progress_callback = progress_callback.clone();
+                            let package = package.clone();
 
                             move |progress| {
                                 progress_bar.set_position((progress.pct() * 1000.0) as u64);
@@ -775,11 +795,26 @@ impl Client {
                                     current = progress.completed as usize,
                                     total = progress.total as usize,
                                     event_type = "progress_update",
-                                    "Unpacking {package_name}",
+                                    "Unpacking {}",
+                                    package.meta.name,
                                 );
+                                if let Some(ref callback) = progress_callback {
+                                    callback(ProgressEvent::PackageProgress(PackageEvent::Unpacking(
+                                        package.clone(),
+                                        progress.pct(),
+                                    )))
+                                }
                             }
                         })
-                        .map_err(|err| Error::CacheUnpack(err, package_name.clone(), download_path))?;
+                        .map_err(|err| {
+                            if let Some(ref callback) = progress_callback {
+                                callback(ProgressEvent::PackageProgress(PackageEvent::Failed(
+                                    package.clone(),
+                                    err.to_string(),
+                                )))
+                            }
+                            Error::CacheUnpack(err, package_name.clone(), download_path)
+                        })?;
 
                     // Remove this progress bar
                     progress_bar.finish();
@@ -802,7 +837,7 @@ impl Client {
                         let current_pos = total_progress.position();
                         let total_len = total_progress.length().unwrap_or(1);
                         let percentage = (current_pos as f32 / total_len as f32) * 100.0;
-                        callback(percentage, ProgressStage::Downloading)
+                        callback(ProgressEvent::StageProgress(ProgressStage::Downloading, percentage))
                     }
 
                     // Inc total progress by 1
@@ -890,7 +925,7 @@ impl Client {
     pub fn blit_root<'a>(
         &self,
         packages: impl IntoIterator<Item = &'a package::Id>,
-        progress_callback: Option<Arc<dyn Fn(f32, ProgressStage) + Send + Sync>>,
+        progress_callback: ProgressCallback,
     ) -> Result<vfs::Tree<PendingFile>, Error> {
         let blit_target = match &self.scope {
             Scope::Stateful => self.installation.staging_dir(),
@@ -1045,7 +1080,7 @@ pub fn blit_root(
     installation: &Installation,
     tree: &vfs::Tree<PendingFile>,
     blit_target: &Path,
-    progress_callback: Option<Arc<dyn Fn(f32, ProgressStage) + Send + Sync>>,
+    progress_callback: ProgressCallback,
 ) -> Result<(), Error> {
     // undirt.
     fs::remove_dir_all(blit_target)?;
@@ -1120,7 +1155,7 @@ fn blit_element(
     cache: RawFd,
     element: Element<'_, PendingFile>,
     progress: &ProgressBar,
-    progress_callback: Option<Arc<dyn Fn(f32, ProgressStage) + Send + Sync>>,
+    progress_callback: ProgressCallback,
 ) -> Result<BlitStats, Error> {
     let mut stats = BlitStats::default();
 
@@ -1131,7 +1166,7 @@ fn blit_element(
         let current_pos = progress.position();
         let total_len = progress.length().unwrap_or(1);
         let percentage = (current_pos as f32 / total_len as f32) * 100.0;
-        callback(percentage, ProgressStage::Blit);
+        callback(ProgressEvent::StageProgress(ProgressStage::Blit, percentage))
     }
 
     let (_, item) = match &element {
@@ -1467,14 +1502,33 @@ fn build_registry(
     Ok(registry)
 }
 
-#[derive(Clone, Copy, Debug)]
+type ProgressCallback = Option<Arc<dyn Fn(ProgressEvent) + Send + Sync>>;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProgressStage {
-    Resolve = 0,
-    Downloading = 1,
-    Blit = 2,
-    Transaction = 3,
-    System = 4,
-    Boot = 5,
+    Resolve,
+    Downloading,
+    Blit,
+    Transaction,
+    System,
+    Boot,
+}
+
+#[derive(Clone)]
+pub enum PackageEvent {
+    Started(Package),
+    Downloading(Package, f32),
+    Unpacking(Package, f32),
+    Complete(Package),
+    Failed(Package, String),
+}
+
+#[derive(Clone)]
+pub enum ProgressEvent {
+    Resolved(Vec<Package>),            // emitted after resolve, carries full package list
+    Stage(ProgressStage),              // global stage transition
+    StageProgress(ProgressStage, f32), // global progress within a stage
+    PackageProgress(PackageEvent),     // per-package, only emitted during Downloading stage
 }
 
 #[derive(Debug, Clone, Copy, Default)]
