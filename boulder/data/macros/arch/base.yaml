@@ -708,12 +708,15 @@ packages          :
             - /usr/lib/lib*.so
             - /usr/lib/pkgconfig
             - /usr/share/aclocal
+            - /usr/share/cmake
             - /usr/share/man/man2
             - /usr/share/man/man3
             - /usr/share/man/man9
             - /usr/share/pkgconfig
             # GObject introspection build files
             - /usr/share/gir-1.0/*.gir
+            - /usr/share/vala/vapi/*.deps
+            - /usr/share/vala/vapi/*.vapi
             # Qt5/Qt6
             - /usr/lib/*.prl
             - /usr/lib/metatypes
