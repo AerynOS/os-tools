@@ -21,7 +21,9 @@ pub use self::error::Error;
 use error::{Constraint, InnerError};
 
 /// An uninitialized repository, useful for unit tests.
-pub const NULL_REPOSITORY: Repository = Repository { path: PathBuf::new() };
+pub fn null_repository() -> Repository {
+    Repository { path: PathBuf::new() }
+}
 
 /// A Git repository.
 pub struct Repository {
