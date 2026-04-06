@@ -112,6 +112,8 @@ pub struct Options {
 pub struct Package {
     pub summary: Option<String>,
     pub description: Option<String>,
+    #[serde(default, rename = "provides-exclude")]
+    pub provides_exclude: Vec<String>,
     #[serde(default, rename = "rundeps")]
     pub run_deps: Vec<String>,
     #[serde(default, rename = "rundeps-exclude")]

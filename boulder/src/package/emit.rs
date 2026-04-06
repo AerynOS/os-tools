@@ -94,7 +94,21 @@ impl<'a> Package<'a> {
                     true
                 })
                 .collect(),
-            providers: self.analysis.providers().cloned().collect(),
+            providers: self
+                .analysis
+                .providers()
+                .filter(|provide| {
+                    for exclude_filter in self.definition.provides_exclude.iter() {
+                        if let Ok(re) = Regex::new(exclude_filter)
+                            && re.is_match(&provide.to_string())
+                        {
+                            return false;
+                        }
+                    }
+                    true
+                })
+                .cloned()
+                .collect(),
             conflicts: self
                 .definition
                 .conflicts

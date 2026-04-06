@@ -146,6 +146,7 @@ fn resolve_packages(
             .or(recipe.parsed.package.description.as_ref())
             .map(|description| parser.parse_content(description))
             .transpose()?;
+        package.provides_exclude = package.provides_exclude.into_iter().collect();
         package.run_deps = package
             .run_deps
             .into_iter()

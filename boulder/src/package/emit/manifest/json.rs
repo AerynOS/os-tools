@@ -47,7 +47,21 @@ pub fn write(
             depends.sort();
             depends.dedup();
 
-            let provides = package.analysis.providers().map(ToString::to_string).collect();
+            let provides = package
+                .analysis
+                .providers()
+                .map(ToString::to_string)
+                .filter(|provide| {
+                    for exclude_filter in package.definition.provides_exclude.iter() {
+                        if let Ok(re) = Regex::new(exclude_filter)
+                            && re.is_match(provide)
+                        {
+                            return false;
+                        }
+                    }
+                    true
+                })
+                .collect();
 
             let files = package
                 .analysis
