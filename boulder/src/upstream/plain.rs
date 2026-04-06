@@ -157,7 +157,7 @@ impl StoredPlain {
     ///
     /// This function tries to be as efficient as possible in terms
     /// of actual bytes copied: a hard link is created if possible.
-    pub fn share(&self, dest_dir: &Path) -> Result<SharedPlain, Error> {
+    pub fn share(&self, dest_dir: &Path) -> Result<(), Error> {
         let target = dest_dir.join(self.name.clone());
 
         if let Some(parent) = target.parent() {
@@ -165,23 +165,7 @@ impl StoredPlain {
         }
         util::hardlink_or_copy(&self.path, &target)?;
 
-        Ok(SharedPlain { path: target })
-    }
-}
-
-/// A shared source archive is a copy of a stored source archive
-/// in a location useful for a build.
-pub struct SharedPlain {
-    /// Path of the source archive after it was shared.
-    pub path: PathBuf,
-}
-
-impl SharedPlain {
-    /// Removes the shared source archive.
-    /// Should the archive no longer exist,
-    /// this function returns successfully (it is idempotent).
-    pub fn remove(&self) -> Result<(), Error> {
-        fs::remove_file(&self.path).map_err(Error::from)
+        Ok(())
     }
 }
 

@@ -13,8 +13,8 @@ use thiserror::Error;
 use tui::{MultiProgress, ProgressBar, ProgressStyle, Styled};
 
 use crate::upstream::{
-    git::{Git, SharedGit, StoredGit},
-    plain::{Plain, SharedPlain, StoredPlain},
+    git::{Git, StoredGit},
+    plain::{Plain, StoredPlain},
 };
 
 mod git;
@@ -105,30 +105,11 @@ impl Stored {
     ///
     /// This function tries to be as efficient as possible in terms
     /// of actual bytes written/copied, by linking files from the storage directory.
-    async fn share(&self, dest_dir: &Path) -> Result<Shared, Error> {
-        Ok(match self {
-            Stored::Plain(plain) => Shared::Plain(plain.share(dest_dir)?),
-            Stored::Git(git) => Shared::Git(git.share(&dest_dir.join(&git.name)).await?),
-        })
-    }
-}
-
-/// A shared upstream is a copy of an upstream
-/// in a location useful for a build.
-pub enum Shared {
-    Plain(SharedPlain),
-    Git(SharedGit),
-}
-
-impl Shared {
-    /// Removes the shared upstream.
-    /// Should the upstream no longer exist,
-    /// this function returns successfully (it is idempotent).
-    pub fn remove(&self) -> Result<(), Error> {
+    async fn share(&self, dest_dir: &Path) -> Result<(), Error> {
         match self {
-            Self::Plain(plain) => plain.remove()?,
-            Self::Git(git) => git.remove()?,
-        };
+            Stored::Plain(plain) => plain.share(dest_dir)?,
+            Stored::Git(git) => git.share(&dest_dir.join(&git.name)).await?,
+        }
         Ok(())
     }
 }
@@ -324,7 +305,7 @@ upstreams:
         let stored = vec![
             Stored::Git(StoredGit {
                 name: "repo1.git".to_owned(),
-                repo: gitwrap::NULL_REPOSITORY,
+                repo: gitwrap::null_repository(),
                 was_cached: false,
                 url: Url::parse("https://github.com/example/repo1.git").unwrap(),
                 original_ref: "main".to_owned(),
@@ -333,7 +314,7 @@ upstreams:
             }),
             Stored::Git(StoredGit {
                 name: "repo2.git".to_owned(),
-                repo: gitwrap::NULL_REPOSITORY,
+                repo: gitwrap::null_repository(),
                 was_cached: false,
                 url: Url::parse("https://github.com/example/repo2.git").unwrap(),
                 original_ref: "main".to_owned(),
@@ -342,7 +323,7 @@ upstreams:
             }),
             Stored::Git(StoredGit {
                 name: "repo3.git".to_owned(),
-                repo: gitwrap::NULL_REPOSITORY,
+                repo: gitwrap::null_repository(),
                 was_cached: false,
                 url: Url::parse("https://github.com/example/repo3.git").unwrap(),
                 original_ref: "abcd1234567890abcdef1234567890abcdef1234".to_owned(),
@@ -351,7 +332,7 @@ upstreams:
             }),
             Stored::Git(StoredGit {
                 name: "repo4.git".to_owned(),
-                repo: gitwrap::NULL_REPOSITORY,
+                repo: gitwrap::null_repository(),
                 was_cached: false,
                 url: Url::parse("https://github.com/example/repo4.git").unwrap(),
                 original_ref: "abc123d".to_owned(),
@@ -360,7 +341,7 @@ upstreams:
             }),
             Stored::Git(StoredGit {
                 name: "file.tar.gz".to_owned(),
-                repo: gitwrap::NULL_REPOSITORY,
+                repo: gitwrap::null_repository(),
                 was_cached: false,
                 // We don't care about the values below.
                 url: "http://example.com".try_into().unwrap(),
@@ -406,7 +387,7 @@ upstreams:
         let stored = vec![
             Stored::Git(StoredGit {
                 name: "repo3.git".to_owned(),
-                repo: gitwrap::NULL_REPOSITORY,
+                repo: gitwrap::null_repository(),
                 was_cached: false,
                 url: Url::parse("https://github.com/example/repo3.git").unwrap(),
                 original_ref: "abcd1234567890abcdef1234567890abcdef1234".to_owned(),

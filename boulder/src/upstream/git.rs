@@ -141,7 +141,7 @@ pub struct StoredGit {
 
 impl StoredGit {
     /// Shares the Git repository in preparation of a build.
-    pub async fn share(&self, dest_dir: &Path) -> Result<SharedGit, Error> {
+    pub async fn share(&self, dest_dir: &Path) -> Result<(), Error> {
         if let Some(parent) = dest_dir.parent() {
             fs::create_dir_all(parent)?;
         }
@@ -157,18 +157,7 @@ impl StoredGit {
         // Finally checkout the desired commit
         cloned.checkout(&self.resolved_hash).await?;
 
-        Ok(SharedGit(dest_dir.to_owned()))
-    }
-}
-
-/// A shared Git repository is a copy of a stored Git
-/// in a location useful for a build.
-pub struct SharedGit(PathBuf);
-
-impl SharedGit {
-    /// Removes the shared Git repository.
-    pub fn remove(&self) -> Result<(), Error> {
-        fs::remove_dir_all(&self.0).map_err(Error::from)
+        Ok(())
     }
 }
 
