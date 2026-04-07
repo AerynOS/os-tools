@@ -4,8 +4,7 @@ use fs_err as fs;
 use moss::{Dependency, dependency};
 use regex::Regex;
 
-// SPDX-FileCopyrightText: Copyright © 2020-2025 Serpent OS Developers
-//
+// SPDX-FileCopyrightText: 2024 AerynOS Developers
 // SPDX-License-Identifier: MPL-2.0
 use crate::draft::File;
 use crate::draft::build::{Error, Phases, State};

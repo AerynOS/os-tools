@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-FileCopyrightText: Copyright © 2025 Serpent OS Developers
-#
+# SPDX-FileCopyrightText: 2024 AerynOS Developers
 # SPDX-License-Identifier: MPL-2.0
 
 import argparse

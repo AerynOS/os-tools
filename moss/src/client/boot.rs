@@ -1,6 +1,5 @@
-// SPDX-FileCopyrightText: Copyright © 2020-2025 Serpent OS Developers
-// SPDX-FileCopyrightText: Copyright © 2025 AerynOS Developers
-//
+// SPDX-FileCopyrightText: 2024 AerynOS Developers
+// SPDX-FileCopyrightText: 2024 AerynOS Developers
 // SPDX-License-Identifier: MPL-2.0
 
 //! Boot management integration in moss

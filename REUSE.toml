@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: 2026 AerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
+
+version = 1
+
+# Annotate files that we cannot edit or comment.
+# We don't report the initial year for simplicity;
+# it is a valid copyright notice anyway.
+[[annotations]]
+path = [
+    "Cargo.lock",
+    "funding.json",
+    "moss/src/db/*/schema.rs",
+    "test/**/*.stone",
+]
+SPDX-FileCopyrightText = "AerynOS Developers"
+SPDX-License-Identifier = "MPL-2.0"
