@@ -54,8 +54,10 @@ actions              :
         description: scriptBase is merged to the top of all newly generated build scripts.
         command: |
             #!/bin/sh
-            set -e
-            set -x
+            set -o xtrace
+            set -o errexit
+            set -o pipefail
+            set -o nounset
             TERM="dumb"; export TERM
             PKG_CONFIG_PATH="%(pkgconfigpath)"; export PKG_CONFIG_PATH
             CFLAGS="%(cflags)"; export CFLAGS

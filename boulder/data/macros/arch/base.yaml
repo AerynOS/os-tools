@@ -64,8 +64,10 @@ actions              :
         description: scriptBase is merged to the top of all newly generated build scripts.
         command: |
             #!/usr/bin/bash
-            set -e
-            set -x
+            set -o xtrace
+            set -o errexit
+            set -o pipefail
+            set -o nounset
             TERM="dumb"; export TERM
             SOURCE_DATE_EPOCH="%(sourcedateepoch)"; export SOURCE_DATE_EPOCH
             PGO_STAGE="%(pgo_stage)"; export PGO_STAGE
