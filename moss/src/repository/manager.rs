@@ -11,13 +11,14 @@ use fs_err::{self as fs, File};
 use futures_util::{StreamExt, TryStreamExt, stream};
 use stone::{StoneDecodedPayload, StonePayloadMetaTag, StoneReadError};
 use thiserror::Error;
+use url::Url;
 use xxhash_rust::xxh3::xxh3_64;
 
 use tui::{MultiProgress, ProgressBar, ProgressStyle, Styled};
 
 use crate::db::meta;
-use crate::repository::{self, Repository};
-use crate::{Installation, package};
+use crate::repository::{self, Repository, format};
+use crate::{Installation, package, request};
 use crate::{environment, runtime};
 
 enum Source {
@@ -88,7 +89,7 @@ impl Manager {
             .map(|(id, repository)| {
                 let db = open_meta_db(source.identifier(), &repository, &installation)?;
 
-                Ok((id.clone(), repository::Cached { id, repository, db }))
+                Ok((id.clone(), repository::Cached::new(id, repository, db)))
             })
             .collect::<Result<_, Error>>()?;
 
@@ -116,7 +117,7 @@ impl Manager {
         let db = open_meta_db(self.source.identifier(), &repository, &self.installation)?;
 
         self.repositories
-            .insert(id.clone(), repository::Cached { id, repository, db });
+            .insert(id.clone(), repository::Cached::new(id, repository, db));
 
         Ok(())
     }
@@ -137,7 +138,7 @@ impl Manager {
 
     /// Refresh all [`Repository`]'s by fetching it's latest index
     /// file and updating it's associated meta database
-    pub async fn refresh_all(&mut self) -> Result<(), Error> {
+    pub async fn refresh_all(&self) -> Result<(), Error> {
         let mpb = MultiProgress::new();
 
         // Fetch index files asynchronously and then
@@ -290,7 +291,20 @@ impl Manager {
 
 /// Directory for the repo cached data (db & stone index), hashed by identifier & repo URI
 fn cache_dir(identifier: &str, repo: &Repository, installation: &Installation) -> PathBuf {
-    let hash = format!("{:02x}", xxh3_64(format!("{identifier}-{}", repo.uri).as_bytes()));
+    let hash = match &repo.source {
+        repository::Source::DirectIndex(uri) => {
+            format!("{:02x}", xxh3_64(format!("{identifier}-{uri}").as_bytes()))
+        }
+        repository::Source::RootIndex(repository::RootIndexSource {
+            base_uri,
+            channel,
+            version,
+        }) => format!(
+            "{:02x}",
+            xxh3_64(format!("{identifier}-{base_uri}-{channel}-{version}").as_bytes())
+        ),
+    };
+
     installation.repo_path(hash)
 }
 
@@ -319,10 +333,33 @@ async fn fetch_index(
         .await
         .map_err(Error::CreateDir)?;
 
+    let index_uri = match &state.repository.source {
+        repository::Source::DirectIndex(uri) => uri.clone(),
+        repository::Source::RootIndex(source) => {
+            let root_index_uri = source.uri();
+
+            let root_index = request::download_json::<format::RootIndex>(root_index_uri.clone())
+                .await
+                .map_err(|err| Error::FetchRootIndex(err, root_index_uri))?;
+
+            let (history_ident, _) = root_index
+                .resolve_version_to_history(&source.version)
+                .ok_or_else(|| Error::MissingRootIndexVersion(source.version.clone()))?;
+
+            // TOOD: Format validation & upgrade check -> failure flow
+
+            let index_uri = source.history_index_uri(history_ident, "x86_64");
+
+            state.set_index_uri(index_uri.clone());
+
+            index_uri
+        }
+    };
+
     let out_path = out_dir.join("stone.index");
 
     // Fetch index & write to `out_path`
-    repository::fetch_index(state.repository.uri.clone(), &out_path).await?;
+    repository::fetch_index(index_uri, &out_path).await?;
 
     Ok(out_path)
 }
@@ -390,6 +427,10 @@ pub enum Error {
     SaveConfig(#[source] config::SaveError),
     #[error("unknown repo")]
     UnknownRepo(repository::Id),
+    #[error("fetch & decode root index file: {1}")]
+    FetchRootIndex(#[source] request::Error, Url),
+    #[error("root index doesn't have version identifier {0}")]
+    MissingRootIndexVersion(format::ScopedIdentifier),
 }
 
 impl From<package::MissingMetaFieldError> for Error {

@@ -3,7 +3,9 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 
+use arc_swap::ArcSwap;
 use derive_more::{Debug, Display, From, Into};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -41,7 +43,8 @@ impl Id {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Repository {
     pub description: String,
-    pub uri: Url,
+    #[serde(flatten)]
+    pub source: Source,
     pub priority: Priority,
     #[serde(default = "default_as_true")]
     pub active: bool,
@@ -58,6 +61,32 @@ pub struct Cached {
     pub id: Id,
     pub repository: Repository,
     pub db: meta::Database,
+    index_uri: Arc<ArcSwap<Option<Url>>>,
+}
+
+impl Cached {
+    pub fn new(id: Id, repository: Repository, db: meta::Database) -> Self {
+        let index_uri = repository.source.direct_index().cloned();
+
+        Self {
+            id,
+            repository,
+            db,
+            index_uri: Arc::new(ArcSwap::new(Arc::new(index_uri))),
+        }
+    }
+
+    /// Resolved index uri from a repository [`Source`]
+    ///
+    /// Is `None` if the [`Source`] has not yet been resolved,
+    /// in the case of a `root-index` source
+    pub fn index_uri(&self) -> Option<Url> {
+        self.index_uri.load().as_ref().clone()
+    }
+
+    fn set_index_uri(&self, uri: Url) {
+        self.index_uri.swap(Arc::new(Some(uri)));
+    }
 }
 
 /// The selection priority of a [`Repository`]
@@ -149,4 +178,73 @@ pub enum FetchError {
     Request(#[from] request::Error),
     #[error("io")]
     Io(#[from] io::Error),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Source {
+    #[serde(rename = "uri")]
+    DirectIndex(Url),
+    #[serde(untagged)]
+    RootIndex(RootIndexSource),
+}
+
+impl Source {
+    pub fn direct_index(&self) -> Option<&Url> {
+        if let Self::DirectIndex(url) = self {
+            Some(url)
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RootIndexSource {
+    pub base_uri: Url,
+    #[serde(default = "default_channel")]
+    pub channel: format::Identifier,
+    pub version: format::ScopedIdentifier,
+}
+
+impl RootIndexSource {
+    pub fn uri(&self) -> Url {
+        let mut uri = self.base_uri.clone();
+        let mut path = uri.path().to_owned();
+
+        if !path.ends_with('/') {
+            path.push('/');
+        }
+
+        path.push_str(self.channel.as_ref());
+        path.push('/');
+        path.push_str("moss-root.json");
+
+        uri.set_path(&path);
+
+        uri
+    }
+
+    pub fn history_index_uri(&self, ident: &format::Identifier, arch: &str) -> Url {
+        let mut uri = self.base_uri.clone();
+        let mut path = uri.path().to_owned();
+
+        if !path.ends_with('/') {
+            path.push('/');
+        }
+
+        path.push_str(self.channel.as_ref());
+        path.push_str("/history/");
+        path.push_str(ident.as_ref());
+        path.push('/');
+        path.push_str(arch);
+        path.push_str("/stone.index");
+
+        uri.set_path(&path);
+
+        uri
+    }
+}
+
+fn default_channel() -> format::Identifier {
+    "main".to_owned().try_into().expect("valid identifier")
 }

@@ -29,7 +29,7 @@ fn encode_repositories<'a>(repositories: impl IntoIterator<Item = (&'a repositor
             });
 
             push_child(repo_node, "uri", |uri| {
-                push_value(uri, repo.uri.to_string());
+                push_value(uri, repo.source.direct_index().expect("TODO UPDATE").to_string());
             });
 
             push_child(repo_node, "priority", |priority| {
@@ -115,7 +115,7 @@ packages {
                 repository::Id::new("foo"),
                 Repository {
                     description: "test".to_owned(),
-                    uri: "https://test.dev/index.stone".parse().unwrap(),
+                    source: repository::Source::DirectIndex("https://test.dev/index.stone".parse().unwrap()),
                     priority: repository::Priority::new(1),
                     active: true,
                 },
@@ -124,7 +124,7 @@ packages {
                 repository::Id::new("disabled"),
                 Repository {
                     description: "disabled".to_owned(),
-                    uri: "https://test2.dev/index.stone".parse().unwrap(),
+                    source: repository::Source::DirectIndex("https://test2.dev/index.stone".parse().unwrap()),
                     priority: repository::Priority::new(2),
                     active: false,
                 },

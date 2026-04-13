@@ -104,7 +104,8 @@ fn decode_repository(node: &KdlNode) -> Result<(repository::Id, Repository), Err
         id,
         Repository {
             description: description.to_owned(),
-            uri,
+            // TODO: Update
+            source: repository::Source::DirectIndex(uri),
             priority,
             active: enabled,
         },
