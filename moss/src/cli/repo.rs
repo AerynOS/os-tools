@@ -151,7 +151,7 @@ fn add(
         id.clone(),
         Repository {
             description: comment,
-            uri,
+            source: repository::Source::DirectIndex(uri),
             priority,
             active: true,
         },
@@ -179,14 +179,18 @@ fn list(manager: repository::Manager) -> Result<(), Error> {
             String::new()
         };
 
-        println!(" - {id} = {} [{}]{disabled}", repo.uri, repo.priority);
+        println!(
+            " - {id} = {} [{}]{disabled}",
+            repo.source.direct_index().expect("TODO UPDATE"),
+            repo.priority
+        );
     }
 
     Ok(())
 }
 
 /// Update specific repos or all
-fn update(mut manager: repository::Manager, which: Option<String>) -> Result<(), Error> {
+fn update(manager: repository::Manager, which: Option<String>) -> Result<(), Error> {
     runtime::block_on(async {
         match which {
             Some(repo) => manager.refresh(&repository::Id::new(&repo)).await,

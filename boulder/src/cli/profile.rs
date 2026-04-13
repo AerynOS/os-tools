@@ -72,7 +72,8 @@ fn parse_repository(s: &str) -> Result<(repository::Id, Repository), String> {
         id,
         Repository {
             description: String::default(),
-            uri,
+            // TODO: Update
+            source: repository::Source::DirectIndex(uri),
             priority: repository::Priority::new(priority),
             active: true,
         },
@@ -103,7 +104,11 @@ pub fn list(manager: profile::Manager<'_>) -> Result<(), Error> {
             .iter()
             .sorted_by(|(_, a), (_, b)| a.priority.cmp(&b.priority).reverse())
         {
-            println!(" - {id} = {} [{}]", repo.uri, repo.priority);
+            println!(
+                " - {id} = {} [{}]",
+                repo.source.direct_index().expect("TODO UPDATE"),
+                repo.priority
+            );
         }
     }
 

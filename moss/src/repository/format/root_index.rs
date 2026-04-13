@@ -14,6 +14,25 @@ pub struct RootIndex {
     pub history: IndexMap<Identifier, HistoryMeta>,
 }
 
+impl RootIndex {
+    pub fn resolve_version_to_history<'a>(
+        &'a self,
+        version: &'a ScopedIdentifier,
+    ) -> Option<(&'a Identifier, &'a HistoryMeta)> {
+        let ident = match version {
+            ScopedIdentifier::Stream(identifier) => self.streams.get(identifier).map(|meta| &meta.history),
+            ScopedIdentifier::Tag(identifier) => self.tags.get(identifier).map(|meta| &meta.history),
+            ScopedIdentifier::History(identifier) => Some(identifier),
+        }?;
+
+        self.get_history(ident).map(|meta| (ident, meta))
+    }
+
+    fn get_history(&self, version: &Identifier) -> Option<&HistoryMeta> {
+        self.history.get(version)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct StreamMeta {
     pub format: Format,
