@@ -14,8 +14,10 @@ use config::Config;
 
 use crate::{db::meta, request};
 
+pub use self::format::Format;
 pub use self::manager::Manager;
 
+pub mod format;
 pub mod manager;
 
 /// A unique [`Repository`] identifier
