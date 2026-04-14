@@ -313,9 +313,10 @@ fn cache_dir(identifier: &str, repo: &Repository, installation: &Installation) -
             base_uri,
             channel,
             version,
+            arch,
         }) => format!(
             "{:02x}",
-            xxh3_64(format!("{identifier}-{base_uri}-{channel}-{version}").as_bytes())
+            xxh3_64(format!("{identifier}-{base_uri}-{channel}-{version}-{arch}").as_bytes())
         ),
     };
 
@@ -434,7 +435,7 @@ async fn resolve_index_from_root(
         .resolve_version_to_history(&source.version)
         .ok_or_else(|| Error::MissingRootIndexVersion(source.version.clone()))?;
 
-    let index_uri = source.history_index_uri(history_ident, "x86_64");
+    let index_uri = source.history_index_uri(history_ident);
 
     fs_err::tokio::write(out_dir.join("index-uri"), index_uri.as_str().as_bytes())
         .await

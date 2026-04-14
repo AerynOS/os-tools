@@ -23,6 +23,7 @@ pub mod format;
 pub mod manager;
 
 pub const DEFAULT_CHANNEL: &str = "main";
+pub const DEFAULT_ARCH: &str = "x86_64";
 
 /// A unique [`Repository`] identifier
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Ord, PartialOrd, From, Display)]
@@ -204,6 +205,8 @@ pub struct RootIndexSource {
     #[serde(default = "default_channel")]
     pub channel: format::Identifier,
     pub version: format::ScopedIdentifier,
+    #[serde(default = "default_arch")]
+    pub arch: String,
 }
 
 impl RootIndexSource {
@@ -224,7 +227,7 @@ impl RootIndexSource {
         uri
     }
 
-    pub fn history_index_uri(&self, ident: &format::Identifier, arch: &str) -> Url {
+    pub fn history_index_uri(&self, ident: &format::Identifier) -> Url {
         let mut uri = self.base_uri.clone();
         let mut path = uri.path().to_owned();
 
@@ -236,7 +239,7 @@ impl RootIndexSource {
         path.push_str("/history/");
         path.push_str(ident.as_ref());
         path.push('/');
-        path.push_str(arch);
+        path.push_str(&self.arch);
         path.push_str("/stone.index");
 
         uri.set_path(&path);
@@ -247,4 +250,8 @@ impl RootIndexSource {
 
 fn default_channel() -> format::Identifier {
     DEFAULT_CHANNEL.try_into().expect("valid identifier")
+}
+
+fn default_arch() -> String {
+    DEFAULT_ARCH.to_owned()
 }
