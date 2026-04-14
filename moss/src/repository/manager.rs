@@ -367,29 +367,7 @@ async fn fetch_index(
 
     let index_uri = match &state.repository.source {
         repository::Source::DirectIndex(uri) => uri.clone(),
-        repository::Source::RootIndex(source) => {
-            let root_index_uri = source.uri();
-
-            let root_index = request::download_json::<format::RootIndex>(root_index_uri.clone())
-                .await
-                .map_err(|err| Error::FetchRootIndex(err, root_index_uri))?;
-
-            let (history_ident, _) = root_index
-                .resolve_version_to_history(&source.version)
-                .ok_or_else(|| Error::MissingRootIndexVersion(source.version.clone()))?;
-
-            // TOOD: Format validation & upgrade check -> failure flow
-
-            let index_uri = source.history_index_uri(history_ident, "x86_64");
-
-            fs_err::tokio::write(out_dir.join("index-uri"), index_uri.as_str().as_bytes())
-                .await
-                .map_err(Error::WriteCachedIndexUri)?;
-
-            state.set_index_uri(index_uri.clone());
-
-            index_uri
-        }
+        repository::Source::RootIndex(source) => resolve_index_from_root(state, &out_dir, source).await?,
     };
 
     let out_path = out_dir.join("stone.index");
@@ -439,6 +417,32 @@ fn update_meta_db(state: &repository::Cached, index_path: &Path) -> Result<(), E
     state.db.batch_add(packages)?;
 
     Ok(())
+}
+
+async fn resolve_index_from_root(
+    state: &repository::Cached,
+    out_dir: &Path,
+    source: &repository::RootIndexSource,
+) -> Result<Url, Error> {
+    let root_index_uri = source.uri();
+
+    let root_index = request::download_json::<format::RootIndex>(root_index_uri.clone())
+        .await
+        .map_err(|err| Error::FetchRootIndex(err, root_index_uri))?;
+
+    let (history_ident, _) = root_index
+        .resolve_version_to_history(&source.version)
+        .ok_or_else(|| Error::MissingRootIndexVersion(source.version.clone()))?;
+
+    let index_uri = source.history_index_uri(history_ident, "x86_64");
+
+    fs_err::tokio::write(out_dir.join("index-uri"), index_uri.as_str().as_bytes())
+        .await
+        .map_err(Error::WriteCachedIndexUri)?;
+
+    state.set_index_uri(index_uri.clone());
+
+    Ok(index_uri)
 }
 
 #[derive(Debug, Error)]
