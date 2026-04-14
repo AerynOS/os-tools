@@ -123,10 +123,24 @@ fn decode_repository(node: &KdlNode) -> Result<(repository::Id, Repository), Err
             .parse()
             .map_err(|err| Error::ParseRepositoryVersion(err, name.to_owned()))?;
 
+        let arch = get_child_value(node, "arch")
+            .map(|value| {
+                value.as_string().ok_or(Error::InvalidNodeValue(
+                    "repository",
+                    name.to_owned(),
+                    "arch",
+                    "string",
+                    value.to_string(),
+                ))
+            })
+            .transpose()?
+            .unwrap_or(repository::DEFAULT_ARCH);
+
         repository::Source::RootIndex(repository::RootIndexSource {
             base_uri,
             channel,
             version,
+            arch: arch.to_owned(),
         })
     };
 

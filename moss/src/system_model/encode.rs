@@ -38,6 +38,7 @@ fn encode_repositories<'a>(repositories: impl IntoIterator<Item = (&'a repositor
                     base_uri,
                     channel,
                     version,
+                    arch,
                 }) => {
                     push_child(repo_node, "base-uri", |uri_node| {
                         push_value(uri_node, base_uri.to_string());
@@ -52,6 +53,12 @@ fn encode_repositories<'a>(repositories: impl IntoIterator<Item = (&'a repositor
                     push_child(repo_node, "version", |version_node| {
                         push_value(version_node, version.to_string());
                     });
+
+                    if arch != repository::DEFAULT_ARCH {
+                        push_child(repo_node, "arch", |arch_node| {
+                            push_value(arch_node, arch.clone());
+                        });
+                    }
                 }
             }
 
@@ -117,6 +124,7 @@ mod test {
         base-uri "https://test.dev/"
         channel testing
         version "tag/test-this"
+        arch aarch64
         priority 10
     }
     disabled {
@@ -150,6 +158,7 @@ packages {
                         base_uri: "https://test.dev".parse().unwrap(),
                         channel: "testing".try_into().unwrap(),
                         version: "tag/test-this".parse().unwrap(),
+                        arch: "aarch64".to_owned(),
                     }),
                     priority: repository::Priority::new(10),
                     active: true,
@@ -172,6 +181,7 @@ packages {
                         base_uri: "https://test.dev".parse().unwrap(),
                         channel: "main".try_into().unwrap(),
                         version: "stream/unstable".parse().unwrap(),
+                        arch: repository::DEFAULT_ARCH.to_owned(),
                     }),
                     priority: repository::Priority::new(1),
                     active: true,
