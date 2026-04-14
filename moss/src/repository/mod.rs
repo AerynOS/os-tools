@@ -22,6 +22,8 @@ pub use self::manager::Manager;
 pub mod format;
 pub mod manager;
 
+pub const DEFAULT_CHANNEL: &str = "main";
+
 /// A unique [`Repository`] identifier
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Ord, PartialOrd, From, Display)]
 #[debug("{_0:?}")]
@@ -244,5 +246,5 @@ impl RootIndexSource {
 }
 
 fn default_channel() -> format::Identifier {
-    "main".to_owned().try_into().expect("valid identifier")
+    DEFAULT_CHANNEL.try_into().expect("valid identifier")
 }
