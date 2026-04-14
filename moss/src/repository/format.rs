@@ -1,3 +1,5 @@
+use std::fmt;
+
 use serde::{Deserialize, Serialize};
 
 pub use self::identifier::{Identifier, ScopedIdentifier};
@@ -25,6 +27,16 @@ impl From<&str> for Format {
             "legacy" => Format::Legacy,
             "v0" => Format::V0,
             _ => Format::Unsupported(value.to_owned()),
+        }
+    }
+}
+
+impl fmt::Display for Format {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Format::Legacy => "legacy".fmt(f),
+            Format::V0 => "v0".fmt(f),
+            Format::Unsupported(s) => s.fmt(f),
         }
     }
 }
