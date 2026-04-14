@@ -89,7 +89,14 @@ impl Manager {
             .map(|(id, repository)| {
                 let db = open_meta_db(source.identifier(), &repository, &installation)?;
 
-                Ok((id.clone(), repository::Cached::new(id, repository, db)))
+                let index_uri = match &repository.source {
+                    repository::Source::DirectIndex(uri) => Some(uri.clone()),
+                    repository::Source::RootIndex(_) => {
+                        load_cached_index_uri(source.identifier(), &repository, &installation)?
+                    }
+                };
+
+                Ok((id.clone(), repository::Cached::new(id, repository, db, index_uri)))
             })
             .collect::<Result<_, Error>>()?;
 
@@ -116,8 +123,15 @@ impl Manager {
 
         let db = open_meta_db(self.source.identifier(), &repository, &self.installation)?;
 
+        let index_uri = match &repository.source {
+            repository::Source::DirectIndex(uri) => Some(uri.clone()),
+            repository::Source::RootIndex(_) => {
+                load_cached_index_uri(self.source.identifier(), &repository, &self.installation)?
+            }
+        };
+
         self.repositories
-            .insert(id.clone(), repository::Cached::new(id, repository, db));
+            .insert(id.clone(), repository::Cached::new(id, repository, db, index_uri));
 
         Ok(())
     }
@@ -320,6 +334,24 @@ fn open_meta_db(identifier: &str, repo: &Repository, installation: &Installation
     Ok(db)
 }
 
+fn load_cached_index_uri(
+    identifier: &str,
+    repo: &Repository,
+    installation: &Installation,
+) -> Result<Option<Url>, Error> {
+    let dir = cache_dir(identifier, repo, installation);
+
+    let path = dir.join("index-uri");
+
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let content = fs_err::read_to_string(path).map_err(Error::ReadCachedIndexUri)?;
+
+    content.parse().map_err(Error::ParseCachedIndexUri).map(Some)
+}
+
 /// Fetches a stone index file from the repository URL
 /// and saves it to the repo installation path
 async fn fetch_index(
@@ -349,6 +381,10 @@ async fn fetch_index(
             // TOOD: Format validation & upgrade check -> failure flow
 
             let index_uri = source.history_index_uri(history_ident, "x86_64");
+
+            fs_err::tokio::write(out_dir.join("index-uri"), index_uri.as_str().as_bytes())
+                .await
+                .map_err(Error::WriteCachedIndexUri)?;
 
             state.set_index_uri(index_uri.clone());
 
@@ -431,6 +467,12 @@ pub enum Error {
     FetchRootIndex(#[source] request::Error, Url),
     #[error("root index doesn't have version identifier {0}")]
     MissingRootIndexVersion(format::ScopedIdentifier),
+    #[error("read cached index uri")]
+    ReadCachedIndexUri(#[source] io::Error),
+    #[error("write cached index uri")]
+    WriteCachedIndexUri(#[source] io::Error),
+    #[error("parse cached index uri")]
+    ParseCachedIndexUri(#[source] url::ParseError),
 }
 
 impl From<package::MissingMetaFieldError> for Error {
