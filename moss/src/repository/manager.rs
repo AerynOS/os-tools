@@ -17,7 +17,7 @@ use xxhash_rust::xxh3::xxh3_64;
 use tui::{MultiProgress, ProgressBar, ProgressStyle, Styled};
 
 use crate::db::meta;
-use crate::repository::{self, Repository, format};
+use crate::repository::{self, Format, Repository, format};
 use crate::{Installation, package, request};
 use crate::{environment, runtime};
 
@@ -429,11 +429,19 @@ async fn resolve_index_from_root(
 
     let root_index = request::download_json::<format::RootIndex>(root_index_uri.clone())
         .await
-        .map_err(|err| Error::FetchRootIndex(err, root_index_uri))?;
+        .map_err(|err| Error::FetchRootIndex(err, root_index_uri.clone()))?;
 
-    let (history_ident, _) = root_index
+    let (history_ident, history_meta) = root_index
         .resolve_version_to_history(&source.version)
         .ok_or_else(|| Error::MissingRootIndexVersion(source.version.clone()))?;
+
+    if matches!(history_meta.format, Format::Unsupported(_)) {
+        return Err(Error::UnsupportedRepoFormat {
+            root_index_uri: Box::new(root_index_uri),
+            version: source.version.clone(),
+            format: history_meta.format.clone(),
+        });
+    }
 
     let index_uri = source.history_index_uri(history_ident);
 
@@ -478,6 +486,12 @@ pub enum Error {
     WriteCachedIndexUri(#[source] io::Error),
     #[error("parse cached index uri")]
     ParseCachedIndexUri(#[source] url::ParseError),
+    #[error("Unsupported repository format, upgrade required\n\nVersion '{version}' requires format '{format}'")]
+    UnsupportedRepoFormat {
+        root_index_uri: Box<Url>,
+        version: format::ScopedIdentifier,
+        format: Format,
+    },
 }
 
 impl From<package::MissingMetaFieldError> for Error {

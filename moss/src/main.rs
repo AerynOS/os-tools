@@ -3,15 +3,24 @@
 
 use std::error::Error;
 
+use moss::repository;
 use tracing::error;
 use tui::Styled;
+use url::Url;
 
 mod cli;
 
 /// Main entry point
 fn main() {
     if let Err(error) = cli::process() {
-        report_error(error);
+        if let Some(error) = error_needs_manual_handling(&error) {
+            match error {
+                ManuallyHandledError::UnsupportedRepoFormat { .. } => todo!("handle unsupported repo format"),
+            }
+        } else {
+            report_error(error);
+        }
+
         std::process::exit(1);
     }
 }
@@ -33,4 +42,42 @@ fn sources(error: &cli::Error) -> Vec<String> {
         source = error.source();
     }
     sources
+}
+
+/// Finds the error source `E` in the given errors nested sources
+fn find_source<E: Error + 'static>(error: &dyn Error) -> Option<&E> {
+    if let Some(source) = error.source() {
+        if let Some(found) = source.downcast_ref::<E>() {
+            return Some(found);
+        }
+
+        return find_source(source);
+    }
+
+    None
+}
+
+fn error_needs_manual_handling(error: &cli::Error) -> Option<ManuallyHandledError> {
+    if let Some(repository::manager::Error::UnsupportedRepoFormat {
+        root_index_uri,
+        version,
+        format,
+    }) = find_source::<repository::manager::Error>(&error)
+    {
+        return Some(ManuallyHandledError::UnsupportedRepoFormat {
+            root_index_uri: (**root_index_uri).clone(),
+            version: version.clone(),
+            format: format.clone(),
+        });
+    }
+
+    None
+}
+
+pub enum ManuallyHandledError {
+    UnsupportedRepoFormat {
+        root_index_uri: Url,
+        version: repository::format::ScopedIdentifier,
+        format: repository::Format,
+    },
 }
