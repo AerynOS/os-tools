@@ -65,9 +65,7 @@ pub struct Cached {
 }
 
 impl Cached {
-    pub fn new(id: Id, repository: Repository, db: meta::Database) -> Self {
-        let index_uri = repository.source.direct_index().cloned();
-
+    pub fn new(id: Id, repository: Repository, db: meta::Database, index_uri: Option<Url>) -> Self {
         Self {
             id,
             repository,
