@@ -3,29 +3,38 @@
 // SPDX-License-Identifier: MPL-2.0
 use std::path::PathBuf;
 
-use clap::{ArgMatches, Command, arg, value_parser};
+use clap::Parser; // {ArgMatches, Command, arg, value_parser};
+
+#[derive(Debug, Parser)]
+#[command(about = "Index a collection of .stone packages")]
+pub struct Command {
+    #[arg(
+        short,
+        long = "inputdir",
+        help = "The directory from which to start the index operation",
+        default_value = ".",
+        global = false
+    )]
+    pub inputdir: Option<PathBuf>,
+    #[arg(
+        short,
+        long = "outputdir",
+        help = "The directory to which to write the stone.index (defaults to {index_dir})",
+        default_value = "{index_dir}",
+        global = false
+    )]
+    pub outputdir: Option<PathBuf>,
+}
 
 pub use moss::client::index::Error;
 
-pub fn command() -> Command {
-    Command::new("index")
-        .visible_alias("ix")
-        .about("Index a collection of packages")
-        .arg(arg!(<INDEX_DIR> "directory of index files").value_parser(value_parser!(PathBuf)))
-        .arg(
-            arg!(-o --"output-dir" [output_dir] "directory to write the stone.index to (defaults to INDEX_DIR)")
-                .value_parser(value_parser!(PathBuf)),
-        )
-}
+pub fn handle(command: Command) -> Result<(), Error> {
+    let Command { inputdir, outputdir } = command;
 
-pub fn handle(args: &ArgMatches) -> Result<(), Error> {
-    let index_dir = args.get_one::<PathBuf>("INDEX_DIR").unwrap().canonicalize()?;
-    let output_dir = args
-        .get_one::<PathBuf>("output-dir")
-        .map(|dir| dir.canonicalize())
-        .transpose()?;
+    let _inputdir = command.inputdir.clone();
+    let _outputdir = command.outputdir.clone();
 
-    moss::client::index(&index_dir, output_dir.as_deref())?;
+    moss::client::index(&_inputdir.unwrap(), _outputdir.as_deref())?;
 
     Ok(())
 }
