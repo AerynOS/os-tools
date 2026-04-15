@@ -2,30 +2,35 @@
 //
 // SPDX-License-Identifier: MPL-2.0
 
-use clap::{ArgMatches, Command};
+use clap::Parser;
 use thiserror::Error;
 
 use moss::{Client, Installation, client, environment};
 
-pub fn command() -> Command {
-    Command::new("boot")
-        .about("Boot management")
-        .long_about("Manage boot configuration")
-        .subcommand_required(true)
-        .subcommand(Command::new("status").about("Status of boot configuration"))
-        .subcommand(Command::new("sync").about("Synchronize boot configuration"))
+#[derive(Debug, Parser)]
+#[command(about = "Manage boot configuration via blsforme")]
+pub struct Command {
+    #[command(subcommand)]
+    subcommand: Subcommand, // NOTE: No Option, because a subcommand is required
+}
+
+#[derive(Debug, clap::Subcommand)]
+pub enum Subcommand {
+    #[command(about = "Show boot configuration status")]
+    Status,
+    #[command(about = "Synchronize boot configuration")]
+    Sync,
 }
 
 /// Handle status for now
-pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
-    match args.subcommand() {
-        Some(("status", args)) => status(args, installation),
-        Some(("sync", args)) => sync(args, installation),
-        _ => unreachable!(),
+pub fn handle(command: Command, installation: Installation) -> Result<(), Error> {
+    match command.subcommand {
+        Subcommand::Status => status(installation),
+        Subcommand::Sync => sync(installation),
     }
 }
 
-fn status(_args: &ArgMatches, installation: Installation) -> Result<(), Error> {
+fn status(installation: Installation) -> Result<(), Error> {
     let client = Client::new(environment::NAME, installation).map_err(Error::Client)?;
 
     client.print_boot_status()?;
@@ -33,7 +38,7 @@ fn status(_args: &ArgMatches, installation: Installation) -> Result<(), Error> {
     Ok(())
 }
 
-fn sync(_args: &ArgMatches, installation: Installation) -> Result<(), Error> {
+fn sync(installation: Installation) -> Result<(), Error> {
     let client = Client::new(environment::NAME, installation)?;
 
     client.synchronize_boot()?;
