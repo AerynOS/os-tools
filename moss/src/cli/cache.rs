@@ -1,29 +1,41 @@
 // SPDX-FileCopyrightText: 2025 AerynOS Developers
 // SPDX-License-Identifier: MPL-2.0
 
-use clap::{ArgMatches, Command};
+use clap::{ArgMatches, CommandFactory, FromArgMatches, Parser};
 use moss::{Client, Installation, client, environment};
 use thiserror::Error;
 
-pub fn command() -> Command {
-    Command::new("cache")
-        .about("Manage cached data")
-        .subcommand_required(true)
-        .subcommand(Command::new("prune").about("Prune cached artefacts").long_about(
-            "Prune cached artefacts
+pub fn command() -> clap::Command {
+    Command::command()
+}
 
-This will remove all downloaded stones & unpacked asset data for packages not in any state or active repository.",
-        ))
+#[derive(Debug, Parser)]
+#[command(about = "Managed cached data")]
+pub struct Command {
+    #[command(subcommand)]
+    subcommand: Subcommand,
+}
+
+#[derive(Debug, clap::Subcommand)]
+pub enum Subcommand {
+    #[command(
+        about = "Prune cached artefacts",
+        long_about = "Prune cached artefacts
+
+This will remove all downloaded stones & unpacked asset data for packages not in any state or active repository."
+    )]
+    Prune,
 }
 
 pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
-    match args.subcommand() {
-        Some(("prune", args)) => handle_prune(args, installation),
-        _ => unreachable!(),
+    let command = Command::from_arg_matches(args).expect("validated by clap");
+
+    match command.subcommand {
+        Subcommand::Prune => handle_prune(installation),
     }
 }
 
-fn handle_prune(_args: &ArgMatches, installation: Installation) -> Result<(), Error> {
+fn handle_prune(installation: Installation) -> Result<(), Error> {
     let client = Client::new(environment::NAME, installation).map_err(Error::SetupClient)?;
 
     let num_removed_files = client.prune_cache().map_err(Error::PruneCache)?;
