@@ -17,6 +17,10 @@ pub fn command() -> Command {
 
 /// Handle status for now
 pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
+    if nix::unistd::geteuid() != 0.into() {
+        return Err(Error::MossBootRootIsRequired);
+    }
+
     match args.subcommand() {
         Some(("status", args)) => status(args, installation),
         Some(("sync", args)) => sync(args, installation),
@@ -46,6 +50,8 @@ fn sync(_args: &ArgMatches, installation: Installation) -> Result<(), Error> {
 
 #[derive(Debug, Error)]
 pub enum Error {
+    #[error("root is required to manage & view boot configuration")]
+    MossBootRootIsRequired,
     #[error("client")]
     Client(#[from] client::Error),
 }
