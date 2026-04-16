@@ -52,6 +52,7 @@ tracing-subscriber.workspace = true
 url.workspace = true
 xxhash-rust.workspace = true
 zbus.workspace = true
+walkdir.workspace = true
 astr = { workspace = true, features = ["diesel"] }
 
 [package.metadata.cargo-machete]

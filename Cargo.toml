@@ -98,6 +98,7 @@ triomphe = { version = "0.1.15", default-features = false }
 url = { version = "2.5.2", features = ["serde"] }
 xxhash-rust = { version = "0.8.11", features = ["xxh3"] }
 zstd = { version = "0.13.2", features = ["zstdmt"] }
+walkdir = "2.5.0"
 mailparse = "0.16.1"
 zbus = { version = "5.1.1", default-features = false, features = ["tokio"] }
 tempfile = "3.20.0"

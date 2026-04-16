@@ -136,7 +136,7 @@ impl Config for Map {
     }
 }
 
-async fn fetch_index(url: Url, out_path: impl Into<PathBuf>) -> Result<(), FetchError> {
+pub async fn fetch_index(url: Url, out_path: impl Into<PathBuf>) -> Result<(), FetchError> {
     request::download(url, &out_path.into()).await?;
     Ok(())
 }

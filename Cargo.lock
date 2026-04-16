@@ -1921,6 +1921,7 @@ dependencies = [
  "tui",
  "url",
  "vfs",
+ "walkdir",
  "xxhash-rust",
  "zbus",
 ]
