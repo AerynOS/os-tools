@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2023 AerynOS Developers
 // SPDX-License-Identifier: MPL-2.0
 
-use std::{collections::BTreeMap, path::PathBuf, process, str::FromStr};
+use std::{collections::BTreeMap, path::PathBuf, process};
 
 use clap::{Arg, ArgAction, ArgMatches, Command, arg, builder::ValueParser};
 use itertools::Itertools;
@@ -63,15 +63,14 @@ pub fn command() -> Command {
                     Arg::new("root-index")
                         .long("root-index")
                         .value_name("root-index-options")
-                        .default_missing_value("version=stream/unstable")
                         .help(concat!(
                             "Defines the repo via root index options where <URI> is the base-uri ",
                             "and all other options are passed to this flag\n\n",
-                            "Example: --root-index [default: version=stream/unstable]\n",
-                            "Example: --root-index=version=stream/volatile",
+                            "Example: --root-index version=stream/unstable\n",
+                            "Example: --root-index channel=testing,version=tag/some-bug",
                         ))
                         .action(ArgAction::Set)
-                        .num_args(0..=1)
+                        .num_args(1)
                         .value_parser(ValueParser::new(parse_root_index_options)),
                 ),
         )
@@ -308,11 +307,11 @@ fn parse_root_index_options(s: &str) -> Result<RootIndexOptions, String> {
     let channel =
         repository::format::Identifier::try_from(key_values.remove("channel").unwrap_or(repository::DEFAULT_CHANNEL))
             .map_err(|err| err.to_string())?;
-
-    let version =
-        repository::format::ScopedIdentifier::from_str(key_values.remove("version").unwrap_or("stream/unstable"))
-            .map_err(|err| format!("invalid version identifier: {err}"))?;
-
+    let version = key_values
+        .remove("version")
+        .ok_or("version is required")?
+        .parse::<repository::format::ScopedIdentifier>()
+        .map_err(|err| format!("invalid version identifier: {err}"))?;
     let arch = key_values.remove("arch").unwrap_or(repository::DEFAULT_ARCH).to_owned();
 
     if let Some(key) = key_values.into_keys().next() {
