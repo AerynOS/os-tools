@@ -42,7 +42,7 @@ use self::sync::sync;
 use self::verify::verify;
 use crate::{
     Installation, Package, Provider, Registry, Signal, State, SystemModel,
-    client::fetch::fetch,
+    client::fetch::{fetch, resolve_input},
     db, environment, installation, package,
     registry::plugin::{self, Plugin},
     repository, runtime, signal,
@@ -55,7 +55,6 @@ pub use self::index::index;
 
 mod boot;
 mod cache;
-mod fetch;
 mod install;
 mod postblit;
 mod remove;
@@ -63,6 +62,7 @@ mod sync;
 mod verify;
 
 pub mod extract;
+pub mod fetch;
 pub mod index;
 pub mod prune;
 
@@ -152,7 +152,9 @@ impl Client {
 
     /// Perform package fetches
     pub fn fetch(&mut self, packages: &[&str], output_dir: &Path, verbose: bool) -> Result<fetch::Timing, Error> {
-        fetch(self, packages, output_dir, verbose).map_err(|error| Error::Fetch(Box::new(error)))
+        let input = resolve_input(packages, self).map_err(|error| Error::Fetch(Box::new(error)))?;
+
+        fetch(&input, output_dir, verbose).map_err(|error| Error::Fetch(Box::new(error)))
     }
 
     /// Perform a sync
