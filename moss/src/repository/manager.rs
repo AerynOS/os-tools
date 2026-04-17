@@ -8,7 +8,7 @@ use std::time::Duration;
 
 use astr::AStr;
 use fs_err::{self as fs, File};
-use futures_util::{StreamExt, TryStreamExt, stream};
+use futures_util::{StreamExt, stream};
 use stone::{StoneDecodedPayload, StonePayloadMetaTag, StoneReadError};
 use thiserror::Error;
 use url::Url;
@@ -177,7 +177,16 @@ impl Manager {
                 Ok(())
             })
             .buffer_unordered(environment::MAX_NETWORK_CONCURRENCY)
-            .try_collect()
+            .fold(Ok(()), |acc, result| async {
+                match (acc, result) {
+                    (Ok(_), Ok(_)) => Ok(()),
+                    (Err(err), Ok(_)) => Err(err),
+                    (Err(Error::UnsupportedRepos(a)), Err(Error::UnsupportedRepos(b))) => {
+                        Err(Error::UnsupportedRepos(a.into_iter().chain(b).collect()))
+                    }
+                    (_, Err(err)) => Err(err),
+                }
+            })
             .await
     }
 
@@ -227,7 +236,16 @@ impl Manager {
                 Ok(()) as Result<_, Error>
             })
             .buffer_unordered(environment::MAX_NETWORK_CONCURRENCY)
-            .try_collect::<()>()
+            .fold(Ok(()), |acc, result| async {
+                match (acc, result) {
+                    (Ok(_), Ok(_)) => Ok(()),
+                    (Err(err), Ok(_)) => Err(err),
+                    (Err(Error::UnsupportedRepos(a)), Err(Error::UnsupportedRepos(b))) => {
+                        Err(Error::UnsupportedRepos(a.into_iter().chain(b).collect()))
+                    }
+                    (_, Err(err)) => Err(err),
+                }
+            })
             .await?;
 
         Ok(uninitialized.len())
@@ -436,11 +454,26 @@ async fn resolve_index_from_root(
         .ok_or_else(|| Error::MissingRootIndexVersion(source.version.clone()))?;
 
     if matches!(history_meta.format, Format::Unsupported(_)) {
-        return Err(Error::UnsupportedRepoFormat {
-            root_index_uri: Box::new(root_index_uri),
+        let upgrade_via_index_uri = root_index
+            .formats
+            .v0
+            .upgrade_via
+            .as_ref()
+            .map(|version| {
+                root_index
+                    .resolve_version_to_history(version)
+                    .ok_or_else(|| Error::MissingRootIndexVersion(version.clone()))
+            })
+            .transpose()?
+            .map(|(ident, _)| source.history_index_uri(ident));
+
+        return Err(Error::UnsupportedRepos(vec![UnsupportedRepoFormat {
+            repository: state.clone(),
+            root_index_uri,
+            upgrade_via_index_uri,
             version: source.version.clone(),
             format: history_meta.format.clone(),
-        });
+        }]));
     }
 
     let index_uri = source.history_index_uri(history_ident);
@@ -486,12 +519,8 @@ pub enum Error {
     WriteCachedIndexUri(#[source] io::Error),
     #[error("parse cached index uri")]
     ParseCachedIndexUri(#[source] url::ParseError),
-    #[error("Unsupported repository format, upgrade required\n\nVersion '{version}' requires format '{format}'")]
-    UnsupportedRepoFormat {
-        root_index_uri: Box<Url>,
-        version: format::ScopedIdentifier,
-        format: Format,
-    },
+    #[error("one or more repositories has an unsupported format")]
+    UnsupportedRepos(Vec<UnsupportedRepoFormat>),
 }
 
 impl From<package::MissingMetaFieldError> for Error {
@@ -504,4 +533,13 @@ impl From<package::MissingMetaFieldError> for Error {
 pub enum Removal {
     NotFound,
     ConfigDeleted(bool),
+}
+
+#[derive(Debug, Clone)]
+pub struct UnsupportedRepoFormat {
+    pub repository: repository::Cached,
+    pub root_index_uri: Url,
+    pub upgrade_via_index_uri: Option<Url>,
+    pub version: format::ScopedIdentifier,
+    pub format: Format,
 }

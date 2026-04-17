@@ -91,7 +91,7 @@ impl Cached {
 }
 
 /// The selection priority of a [`Repository`]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Display, Into)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Display, From, Into)]
 pub struct Priority(u64);
 
 impl Priority {

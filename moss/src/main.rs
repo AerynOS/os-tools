@@ -6,7 +6,6 @@ use std::error::Error;
 use moss::repository;
 use tracing::error;
 use tui::Styled;
-use url::Url;
 
 mod cli;
 
@@ -15,7 +14,7 @@ fn main() {
     if let Err(error) = cli::process() {
         if let Some(error) = error_needs_manual_handling(&error) {
             match error {
-                ManuallyHandledError::UnsupportedRepoFormat { .. } => todo!("handle unsupported repo format"),
+                ManuallyHandledError::UnsupportedRepos(_) => todo!("handle unsupported repo format"),
             }
         } else {
             report_error(error);
@@ -58,26 +57,14 @@ fn find_source<E: Error + 'static>(error: &dyn Error) -> Option<&E> {
 }
 
 fn error_needs_manual_handling(error: &cli::Error) -> Option<ManuallyHandledError> {
-    if let Some(repository::manager::Error::UnsupportedRepoFormat {
-        root_index_uri,
-        version,
-        format,
-    }) = find_source::<repository::manager::Error>(&error)
+    if let Some(repository::manager::Error::UnsupportedRepos(repos)) = find_source::<repository::manager::Error>(&error)
     {
-        return Some(ManuallyHandledError::UnsupportedRepoFormat {
-            root_index_uri: (**root_index_uri).clone(),
-            version: version.clone(),
-            format: format.clone(),
-        });
+        return Some(ManuallyHandledError::UnsupportedRepos(repos.clone()));
     }
 
     None
 }
 
 pub enum ManuallyHandledError {
-    UnsupportedRepoFormat {
-        root_index_uri: Url,
-        version: repository::format::ScopedIdentifier,
-        format: repository::Format,
-    },
+    UnsupportedRepos(Vec<repository::manager::UnsupportedRepoFormat>),
 }

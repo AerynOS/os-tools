@@ -52,6 +52,7 @@ use crate::{
 
 pub use self::extract::extract;
 pub use self::index::index;
+pub use self::self_upgrade::self_upgrade;
 
 mod boot;
 mod cache;
@@ -59,6 +60,7 @@ mod fetch;
 mod install;
 mod postblit;
 mod remove;
+mod self_upgrade;
 mod sync;
 mod verify;
 
