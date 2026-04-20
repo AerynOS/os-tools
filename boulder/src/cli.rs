@@ -39,7 +39,7 @@ pub struct Global {
     pub verbose: bool,
     #[arg(short = 'V', long, default_value = "false", global = true)]
     pub version: bool,
-    #[arg(long, global = true)]
+    #[arg(short = 'y', long, global = true)]
     pub yes: bool,
     #[arg(long, global = true)]
     pub cache_dir: Option<PathBuf>,
