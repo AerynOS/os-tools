@@ -87,12 +87,15 @@ pub enum Subcommand {
                 "Example: -u \"https://some.plan/file.tar.gz\" -u \"git|v1.1\"")
         )]
         upstreams: Vec<UpdatedSource>,
-        #[arg(help = "Path to recipe file, otherwise read from standard input")]
-        recipe: Option<PathBuf>,
+        #[arg(
+            default_value = "./stone.yaml",
+            help = "Path to recipe file, use '-' to read from standard input"
+        )]
+        recipe: PathBuf,
         #[arg(
             short = 'w',
             long,
-            default_value = "false",
+            default_value = "true",
             help = "Overwrite the recipe file in place instead of printing to standard output"
         )]
         overwrite: bool,
@@ -189,7 +192,7 @@ fn autoupdate(env: Env, recipe: PathBuf, yes: bool) -> Result<(), Error> {
 
         update(
             env,
-            Some(recipe.clone()),
+            recipe.clone(),
             true,
             Some(newest),
             vec![updated_source],
@@ -312,23 +315,21 @@ fn new(env: Env, output: PathBuf, upstreams: Vec<Url>) -> Result<(), Error> {
 
 fn update(
     env: Env,
-    recipe: Option<PathBuf>,
+    recipe: PathBuf,
     overwrite: bool,
     version: Option<String>,
     sources: Vec<UpdatedSource>,
     no_bump: bool,
     yes: bool,
 ) -> Result<(), Error> {
-    if overwrite && recipe.is_none() {
-        return Err(Error::OverwriteRecipeRequired);
-    }
+    let is_stdin = *recipe == *"-";
 
     if !overwrite && (version.is_none() && sources.is_empty()) {
         return Err(Error::OverwriteNotEnabled);
     }
 
-    let input = if let Some(recipe_path) = &recipe {
-        let path = recipe::resolve_path(recipe_path).map_err(Error::ResolvePath)?;
+    let input = if !is_stdin {
+        let path = recipe::resolve_path(&recipe).map_err(Error::ResolvePath)?;
 
         if version.is_none() && sources.is_empty() {
             return autoupdate(env, path, yes);
@@ -442,8 +443,7 @@ fn update(
     // Apply updates
     let updated = updater.apply(input);
 
-    if overwrite {
-        let recipe = recipe.expect("checked above");
+    if overwrite && !is_stdin {
         fs::write(&recipe, updated.as_bytes()).map_err(Error::Write)?;
         println!("{} updated", recipe.display());
     } else {
@@ -585,8 +585,6 @@ impl ColumnDisplay for PrintMacro<'_> {
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("Recipe file must be provided to use -w/--overwrite")]
-    OverwriteRecipeRequired,
     #[error("Overwrite must be enabled if auto-updating recipe")]
     OverwriteNotEnabled,
     #[error("Mismatch for upstream[{0}], expected {1} got {2}")]
