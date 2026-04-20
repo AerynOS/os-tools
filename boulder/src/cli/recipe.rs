@@ -197,28 +197,8 @@ fn autoupdate(env: Env, recipe: PathBuf, yes: bool) -> Result<(), Error> {
             Some(newest),
             vec![updated_source],
             false,
-            true,
+            yes,
         )?;
-
-        let autoupdated_recipe = fs::read_to_string(&recipe).map_err(Error::Read)?;
-
-        let diff = TextDiff::from_lines(&input, autoupdated_recipe);
-
-        println!("{}", diff.unified_diff());
-
-        let write_updated_recipe = if yes {
-            true
-        } else {
-            Confirm::with_theme(&ColorfulTheme::default())
-                .with_prompt(" Do you wish to continue? ")
-                .default(false)
-                .interact()?
-        };
-
-        // User rejected the auto-update, write back the original
-        if !write_updated_recipe {
-            fs::write(&recipe, input)?;
-        }
     };
 
     Ok(())
@@ -458,9 +438,20 @@ fn update(
     let _ = mpb.clear();
 
     // Apply updates
-    let updated = updater.apply(input);
+    let updated = updater.apply(input.clone());
 
     if let Some(path) = output_path {
+        if !yes {
+            let diff = TextDiff::from_lines(&input, &updated);
+            println!("{}", diff.unified_diff());
+            let write_updated_recipe = Confirm::with_theme(&ColorfulTheme::default())
+                .with_prompt(" Do you wish to continue? ")
+                .default(false)
+                .interact()?;
+            if !write_updated_recipe {
+                return Ok(());
+            }
+        }
         fs::write(&path, updated.as_bytes()).map_err(Error::Write)?;
         println!("{} updated", path.display());
     } else {
