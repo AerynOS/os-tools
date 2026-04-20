@@ -240,8 +240,6 @@ fn replace_aliases(args: env::Args) -> Vec<String> {
     const ALIASES: &[(&str, &[&str])] = &[
         ("li", &["list", "installed"]),
         ("la", &["list", "available"]),
-        ("ls", &["list", "sync"]),
-        ("lu", &["list", "sync"]),
         ("ar", &["repo", "add"]),
         ("lr", &["repo", "list"]),
         ("rr", &["repo", "remove"]),

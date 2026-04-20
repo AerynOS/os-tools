@@ -29,39 +29,18 @@ pub fn command() -> Command {
                 .about("List all available packages")
                 .visible_alias("la"),
         )
-        .subcommand(
-            Command::new("sync")
-                .about("List packages with sync changes")
-                .visible_aliases(["ls", "lu"])
-                .arg(arg!(--"upgrade-only" "Only sync packages that have a version upgrade")),
-        )
-}
-
-enum Sync {
-    All,
-    Upgrades,
 }
 
 /// Handle listing by filter
 pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
-    let (filter_flags, sync) = match args.subcommand() {
-        Some(("available", _)) => (Flags::new().with_available(), None),
+    let filter_flags = match args.subcommand() {
+        Some(("available", _)) => Flags::new().with_available(),
         Some(("installed", args)) => {
-            let flags = if *args.get_one::<bool>("explicit").unwrap() {
+            if *args.get_one::<bool>("explicit").unwrap() {
                 Flags::new().with_installed().with_explicit()
             } else {
                 Flags::new().with_installed()
-            };
-            (flags, None)
-        }
-        Some(("sync", args)) => {
-            let sync = if *args.get_one::<bool>("upgrade-only").unwrap() {
-                Sync::Upgrades
-            } else {
-                Sync::All
-            };
-
-            (Flags::new().with_installed(), Some(sync))
+            }
         }
         _ => unreachable!(),
     };
@@ -70,12 +49,6 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     let client = Client::new(environment::NAME, installation)?;
     let pkgs = client.list_packages(filter_flags).collect::<Vec<_>>();
 
-    let sync_available = if sync.is_some() {
-        client.list_packages(Flags::new().with_available()).collect::<Vec<_>>()
-    } else {
-        vec![]
-    };
-
     if pkgs.is_empty() {
         return Err(Error::NoneFound);
     }
@@ -83,41 +56,19 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     // map to renderable state
     let mut set = pkgs
         .into_iter()
-        .map(|p| {
-            let sync = sync_available
-                .iter()
-                // Get first (priority based)
-                .find(|u| u.meta.name == p.meta.name)
-                // Ensure it's an upgrade (if `upgrades-only`)
-                // otherwise check if it's a change
-                .filter(|u| {
-                    if matches!(sync, Some(Sync::Upgrades)) {
-                        u.meta.source_release > p.meta.source_release
-                    } else {
-                        u.meta.source_release != p.meta.source_release
-                    }
-                })
-                .map(|u| Revision {
-                    version: u.meta.version_identifier.clone(),
-                    release: u.meta.source_release.to_string(),
-                });
-
-            Format {
-                name: p.meta.name.to_string(),
-                revision: Revision {
-                    version: p.meta.version_identifier,
-                    release: p.meta.source_release.to_string(),
-                },
-                summary: p.meta.summary,
-                explicit: if filter_flags == Flags::new().with_installed() {
-                    p.flags.explicit
-                } else {
-                    true
-                },
-                sync,
-            }
+        .map(|p| Format {
+            name: p.meta.name.to_string(),
+            revision: Revision {
+                version: p.meta.version_identifier,
+                release: p.meta.source_release.to_string(),
+            },
+            summary: p.meta.summary,
+            explicit: if filter_flags == Flags::new().with_installed() {
+                p.flags.explicit
+            } else {
+                true
+            },
         })
-        .filter(|item| if sync.is_some() { item.sync.is_some() } else { true })
         .collect_vec();
 
     // Thanks to priorities, first in list is the winning candidate in list available.
@@ -138,23 +89,13 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         };
         print!("{name} {:width$} ", " ");
 
-        let print_revision = |rev: Revision, is_sync| {
-            let version = if is_sync {
-                rev.version.green()
-            } else {
-                rev.version.magenta()
-            };
+        let print_revision = |rev: Revision| {
+            let version = rev.version.magenta();
             print!("{version}-{}", rev.release.dim());
         };
 
         // Print revision
-        print_revision(item.revision, false);
-
-        // Print sync version
-        if let Some(sync) = item.sync {
-            print!(" => ");
-            print_revision(sync, true);
-        }
+        print_revision(item.revision);
 
         println!(" - {}", item.summary);
     }
@@ -168,12 +109,11 @@ struct Format {
     summary: String,
     revision: Revision,
     explicit: bool,
-    sync: Option<Revision>,
 }
 
 impl Format {
     fn size(&self) -> usize {
-        self.name.len() + self.revision.size() + self.sync.as_ref().map(Revision::size).unwrap_or_default()
+        self.name.len() + self.revision.size()
     }
 }
 
