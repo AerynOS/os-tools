@@ -115,7 +115,7 @@ impl VersionExtractor {
                 VersionStyle::Semver,
                 r"(?x)
                     (?:[^\/]+\/)*?
-                    (?:v?(?P<series_version>\d+(?:\.\d+)*)\/)?
+                    (?:v?(?P<release_series>\d+(?:\.\d+)*)\/)?
                     (?P<name>[^\/\d][^\/]*)
                     [-_]
                     v?(?P<version>(?:\d+[._]\d+[._]\d+
@@ -142,7 +142,7 @@ impl VersionExtractor {
                 VersionStyle::Simple,
                 r"(?x)
                     (?:[^\/]+\/)*?
-                    (?:v?(?P<series_version>\d+(?:\.\d+)*)\/)?
+                    (?:v?(?P<release_series>\d+(?:\.\d+)*)\/)?
                     (?P<name>[^\/]+)
                     [-_]
                     v?(?P<version>\d+\.\d+)
@@ -155,7 +155,7 @@ impl VersionExtractor {
                 VersionStyle::Simple,
                 r"(?x)
                     (?:[^\/]+\/)*?
-                    (?:v?(?P<series_version>\d+(?:\.\d+)*)\/)?
+                    (?:v?(?P<release_series>\d+(?:\.\d+)*)\/)?
                     (?P<name>[^\/]+)
                     [-_]
                     v?(?P<version>\d+)
@@ -168,7 +168,7 @@ impl VersionExtractor {
                 VersionStyle::Simple,
                 r"(?x)
                     (?:[^\/]+\/)*?
-                    (?:v?(?P<series_version>\d+(?:\.\d+)*)\/)?
+                    (?:v?(?P<release_series>\d+(?:\.\d+)*)\/)?
                     (?P<name>[^\/]+)
                     [-]
                     (?P<version>[^-/]+?)
@@ -203,7 +203,7 @@ impl VersionExtractor {
                 return Ok(Extraction {
                     name: name.as_str().to_owned(),
                     version: version.as_str().to_owned(),
-                    series_version: caps.name("series_version").map(|m| m.as_str().to_owned()),
+                    release_series: caps.name("release_series").map(|m| m.as_str().to_owned()),
                 });
             }
         }
@@ -252,7 +252,7 @@ pub struct Extraction {
     /// Version string
     pub version: String,
     /// Optional URI sub-version string
-    pub series_version: Option<String>,
+    pub release_series: Option<String>,
 }
 
 #[cfg(test)]
@@ -267,7 +267,7 @@ mod tests {
                 Extraction {
                     version: "1.50.0".to_string(),
                     name: "NetworkManager".to_string(),
-                    series_version: Some("1.50".to_string()),
+                    release_series: Some("1.50".to_string()),
                 },
             ),
             (
@@ -275,7 +275,7 @@ mod tests {
                 Extraction {
                     version: "2.63.2".to_string(),
                     name: "cli".to_string(),
-                    series_version: None,
+                    release_series: None,
                 },
             ),
             (
@@ -283,7 +283,7 @@ mod tests {
                 Extraction {
                     version: "24.1.4".to_string(),
                     name: "xwayland".to_string(),
-                    series_version: None,
+                    release_series: None,
                 },
             ),
             (
@@ -291,7 +291,7 @@ mod tests {
                 Extraction {
                     version: "3.24.33".to_string(),
                     name: "gtk+".to_string(),
-                    series_version: Some("3.24".to_string()),
+                    release_series: Some("3.24".to_string()),
                 },
             ),
             (
@@ -299,7 +299,7 @@ mod tests {
                 Extraction {
                     version: "9.3.1".to_string(),
                     name: "nano".to_string(),
-                    series_version: Some("9".to_string()),
+                    release_series: Some("9".to_string()),
                 },
             ),
             (
@@ -307,7 +307,7 @@ mod tests {
                 Extraction {
                     version: "8.3".to_string(),
                     name: "nano".to_string(),
-                    series_version: Some("8".to_string()),
+                    release_series: Some("8".to_string()),
                 },
             ),
             (
@@ -315,7 +315,7 @@ mod tests {
                 Extraction {
                     version: "6.13.4".to_string(),
                     name: "linux".to_string(),
-                    series_version: None, // chars in sub-versions not handled
+                    release_series: None, // chars in sub-versions not handled
                 },
             ),
             (
@@ -323,7 +323,7 @@ mod tests {
                 Extraction {
                     version: "20250211".to_string(),
                     name: "Intel-Linux-Processor-Microcode-Data-Files".to_string(),
-                    series_version: None,
+                    release_series: None,
                 },
             ),
             (
@@ -331,7 +331,7 @@ mod tests {
                 Extraction {
                     version: "46.1".to_string(),
                     name: "gnome-disk-utility".to_string(),
-                    series_version: Some("46".to_string()),
+                    release_series: Some("46".to_string()),
                 },
             ),
             (
@@ -339,7 +339,7 @@ mod tests {
                 Extraction {
                     version: "20221030-3.1".to_string(),
                     name: "libedit".to_string(),
-                    series_version: None,
+                    release_series: None,
                 },
             ),
             (
@@ -347,7 +347,7 @@ mod tests {
                 Extraction {
                     version: "1.9.16p2".to_string(),
                     name: "sudo".to_string(),
-                    series_version: None,
+                    release_series: None,
                 },
             ),
             (
@@ -355,7 +355,7 @@ mod tests {
                 Extraction {
                     version: "570.86.16".to_string(),
                     name: "nvidia-persistenced".to_string(),
-                    series_version: None,
+                    release_series: None,
                 },
             ),
             (
@@ -363,7 +363,7 @@ mod tests {
                 Extraction {
                     version: "570.86.16".to_string(),
                     name: "NVIDIA-Linux-x86_64".to_string(),
-                    series_version: Some("570.86.16".to_string()),
+                    release_series: Some("570.86.16".to_string()),
                 },
             ),
             (
@@ -371,7 +371,7 @@ mod tests {
                 Extraction {
                     version: "1.0.0-alpha.6".to_string(),
                     name: "cosmic-applets".to_string(),
-                    series_version: None,
+                    release_series: None,
                 },
             ),
         ];
