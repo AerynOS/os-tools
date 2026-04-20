@@ -444,16 +444,15 @@ fn update(
     let updated = updater.apply(input.clone());
 
     if let Some(path) = output_path {
-        if !yes {
-            let diff = TextDiff::from_lines(&input, &updated);
-            println!("{}", diff.unified_diff());
-            let write_updated_recipe = Confirm::with_theme(&ColorfulTheme::default())
+        let diff = TextDiff::from_lines(&input, &updated);
+        println!("{}", diff.unified_diff());
+        let write_updated_recipe = yes
+            || Confirm::with_theme(&ColorfulTheme::default())
                 .with_prompt(" Do you wish to write the above changes? ")
                 .default(false)
                 .interact()?;
-            if !write_updated_recipe {
-                return Ok(());
-            }
+        if !write_updated_recipe {
+            return Ok(());
         }
         fs::write(&path, updated.as_bytes()).map_err(Error::Write)?;
         println!("{} updated", path.display());
