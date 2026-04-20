@@ -142,7 +142,7 @@ pub fn handle(command: Command, env: Env, yes: bool) -> Result<(), Error> {
     }
 }
 
-fn autoupdate(env: Env, recipe: PathBuf, yes: bool) -> Result<(), Error> {
+fn autoupdate(env: Env, recipe: PathBuf, write: Option<PathBuf>, yes: bool) -> Result<(), Error> {
     // TODO: We neednessly reparse here when coming from update()
     //       but, we need the path regardless to parse with ent.
     let path = recipe::resolve_path(&recipe).map_err(Error::ResolvePath)?;
@@ -193,7 +193,7 @@ fn autoupdate(env: Env, recipe: PathBuf, yes: bool) -> Result<(), Error> {
         update(
             env,
             recipe.clone(),
-            None,
+            write,
             Some(newest),
             vec![updated_source],
             false,
@@ -304,12 +304,12 @@ fn update(
 ) -> Result<(), Error> {
     let is_stdin = *recipe == *"-";
 
-    let output_path = match write {
+    let output_path = match write.as_ref() {
         Some(p) => {
-            if p == *"-" {
+            if p == "-" {
                 None
             } else {
-                Some(p)
+                Some(p.clone())
             }
         }
         None => {
@@ -329,7 +329,7 @@ fn update(
         let path = recipe::resolve_path(&recipe).map_err(Error::ResolvePath)?;
 
         if version.is_none() && sources.is_empty() {
-            return autoupdate(env, path, yes);
+            return autoupdate(env, path, write, yes);
         }
 
         fs::read_to_string(path).map_err(Error::Read)?
