@@ -30,10 +30,10 @@ use version_parse::VersionExtractor;
 
 const LONG_UPDATE_ABOUT: &str = concat!(
     "Update a recipe file\n\n",
-    "If no version or upstreams are provided then the recipe will attempt to be autoupdated\n",
+    "If no version or upstreams are provided, boulder will attempt to autoupdate the recipe\n",
     "using the release information supplied in the monitoring.yaml file.\n\n",
-    "If a version is passed but no upstream, boulder will attempt to guess the new url from\n",
-    "the existing url.\n\n",
+    "If a version is passed but no upstream is passed, boulder will attempt to guess the new\n",
+    "url from the existing url.\n\n",
     "If an upstream is passed but no version is passed, boulder will parse the new version\n",
     "from the new upstream."
 );
@@ -95,8 +95,7 @@ pub enum Subcommand {
         #[arg(
             short = 'w',
             long = "write",
-            alias = "overwrite",
-            help = "Path to write the updated recipe to. Use '-' for standard output. If omitted, defaults to the recipe path."
+            help = "Path to which to write the updated recipe. Use '-' for standard output. If omitted, defaults to ./stone.yaml."
         )]
         write: Option<PathBuf>,
         #[arg(long, default_value = "false", help = "Don't increment the release number")]
@@ -306,11 +305,11 @@ fn update(
     no_bump: bool,
     yes: bool,
 ) -> Result<(), Error> {
-    let is_stdin = *recipe == *"-";
+    let is_stdin = *recipe.clone().to_str().expect("could not read from stdin") == *"-";
 
     let output_path = match write.as_ref() {
         Some(p) => {
-            if p == "-" {
+            if p.clone().to_str().expect("could not write to stdout") == "-" {
                 None
             } else {
                 Some(p.clone())
@@ -449,7 +448,7 @@ fn update(
             let diff = TextDiff::from_lines(&input, &updated);
             println!("{}", diff.unified_diff());
             let write_updated_recipe = Confirm::with_theme(&ColorfulTheme::default())
-                .with_prompt(" Do you wish to continue? ")
+                .with_prompt(" Do you wish to write the above changes? ")
                 .default(false)
                 .interact()?;
             if !write_updated_recipe {
