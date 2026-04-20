@@ -186,6 +186,10 @@ fn autoupdate(env: Env, recipe: PathBuf, write: Option<PathBuf>, yes: bool) -> R
             .split_first()
             .expect("upstreams must not be empty");
 
+        if matches!(first_upstream.props, upstream::Props::Git { .. }) {
+            return Err(Error::GitUpstreamMustProvideVersion);
+        }
+
         let new_url = guess_new_url(newest.as_str(), first_upstream.url.as_str())?;
 
         let updated_source = parse_updated_source(new_url.as_str()).unwrap();
