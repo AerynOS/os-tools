@@ -94,11 +94,11 @@ pub enum Subcommand {
         recipe: PathBuf,
         #[arg(
             short = 'w',
-            long,
-            default_value = "true",
-            help = "Overwrite the recipe file in place instead of printing to standard output"
+            long = "write",
+            alias = "overwrite",
+            help = "Path to write the updated recipe to. Use '-' for standard output. If omitted, defaults to the recipe path."
         )]
-        overwrite: bool,
+        write: Option<PathBuf>,
         #[arg(long, default_value = "false", help = "Don't increment the release number")]
         no_bump: bool,
     },
@@ -133,11 +133,11 @@ pub fn handle(command: Command, env: Env, yes: bool) -> Result<(), Error> {
         Subcommand::New { output, upstreams } => new(env, output, upstreams),
         Subcommand::Update {
             recipe,
-            overwrite,
+            write,
             version,
             upstreams,
             no_bump,
-        } => update(env, recipe, overwrite, version, upstreams, no_bump, yes),
+        } => update(env, recipe, write, version, upstreams, no_bump, yes),
         Subcommand::Macros { _macro } => macros(_macro, env),
     }
 }
@@ -193,7 +193,7 @@ fn autoupdate(env: Env, recipe: PathBuf, yes: bool) -> Result<(), Error> {
         update(
             env,
             recipe.clone(),
-            true,
+            None,
             Some(newest),
             vec![updated_source],
             false,
@@ -316,7 +316,7 @@ fn new(env: Env, output: PathBuf, upstreams: Vec<Url>) -> Result<(), Error> {
 fn update(
     env: Env,
     recipe: PathBuf,
-    overwrite: bool,
+    write: Option<PathBuf>,
     version: Option<String>,
     sources: Vec<UpdatedSource>,
     no_bump: bool,
@@ -324,7 +324,24 @@ fn update(
 ) -> Result<(), Error> {
     let is_stdin = *recipe == *"-";
 
-    if !overwrite && (version.is_none() && sources.is_empty()) {
+    let output_path = match write {
+        Some(p) => {
+            if p == *"-" {
+                None
+            } else {
+                Some(p)
+            }
+        }
+        None => {
+            if is_stdin {
+                None
+            } else {
+                Some(recipe.clone())
+            }
+        }
+    };
+
+    if output_path.is_none() && (version.is_none() && sources.is_empty()) && !is_stdin {
         return Err(Error::OverwriteNotEnabled);
     }
 
@@ -443,9 +460,9 @@ fn update(
     // Apply updates
     let updated = updater.apply(input);
 
-    if overwrite && !is_stdin {
-        fs::write(&recipe, updated.as_bytes()).map_err(Error::Write)?;
-        println!("{} updated", recipe.display());
+    if let Some(path) = output_path {
+        fs::write(&path, updated.as_bytes()).map_err(Error::Write)?;
+        println!("{} updated", path.display());
     } else {
         print!("{updated}");
     }
