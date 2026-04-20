@@ -211,21 +211,21 @@ fn guess_new_url(new_version: &str, current_url: &str) -> Result<String, Error> 
     let upstreams_parser = VersionExtractor::new();
     let parsed_upstream = upstreams_parser.extract(current_url)?;
     println!(
-        "Parsed URI: name = {}, version = {}, series-version = {:?}",
-        parsed_upstream.name, parsed_upstream.version, parsed_upstream.series_version
+        "Parsed URI: name = {}, version = {}, release-series = {:?}",
+        parsed_upstream.name, parsed_upstream.version, parsed_upstream.release_series
     );
 
     let current_version = &parsed_upstream.version;
 
-    let new_series_version = parsed_upstream
-        .series_version
+    let new_release_series = parsed_upstream
+        .release_series
         .as_deref()
-        .map(|sv| (sv, derive_series_version(sv, new_version)));
+        .map(|sv| (sv, derive_release_series(sv, new_version)));
 
     Ok(current_url
         .split('/')
         .map(|segment| {
-            if let Some((old_sv, ref new_sv)) = new_series_version {
+            if let Some((old_sv, ref new_sv)) = new_release_series {
                 let segment_stripped = segment.trim_start_matches('v');
                 if segment_stripped == old_sv {
                     // Preserve the v prefix if the segment had one
@@ -245,8 +245,8 @@ fn guess_new_url(new_version: &str, current_url: &str) -> Result<String, Error> 
         .join("/"))
 }
 
-fn derive_series_version(old_series_version: &str, new_version: &str) -> String {
-    let segment_count = old_series_version.split('.').count();
+fn derive_release_series(old_release_series: &str, new_version: &str) -> String {
+    let segment_count = old_release_series.split('.').count();
 
     new_version.split('.').take(segment_count).join(".")
 }
