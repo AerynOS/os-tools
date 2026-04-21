@@ -45,7 +45,7 @@ actions:
         description: Compile .pyc bytecode files from any miscellaneous .py files in the install directory.
         command: |
             function python_compile() {
-                if [ -z "$1" ]; then
+                if [ ${#} -eq 0 ]; then
                     python3 -m compileall -q %(installroot) || exit 1
                 else
                     python3 -m compileall -q $* || exit 1

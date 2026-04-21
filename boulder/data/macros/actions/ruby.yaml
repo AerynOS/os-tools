@@ -8,7 +8,7 @@ actions:
             %gem_build
         command: |
             function gem_build() {
-                if [ -z "$1" ]; then
+                if [ ${#} -eq 0 ]; then
                     gem build *.gemspec || exit 1
                 else
                     gem build $* || exit 1
