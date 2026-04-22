@@ -415,8 +415,7 @@ fn update(
     // Apply updates
     let updated_content = updater.apply(recipe_content.clone());
 
-    let diff = TextDiff::from_lines(&recipe_content, &updated_content);
-    println!("{}", diff.unified_diff());
+    print_diff(&recipe_content, &updated_content);
 
     let write_updated_recipe = yes
         || Confirm::with_theme(&ColorfulTheme::default())
@@ -560,6 +559,22 @@ impl ColumnDisplay for PrintMacro<'_> {
             " ".repeat(width),
             self.description,
         );
+    }
+}
+
+fn print_diff(a: &str, b: &str) {
+    let diff = TextDiff::from_lines(a, b);
+
+    for line in diff.unified_diff().to_string().lines() {
+        let colored = if line.starts_with('-') {
+            line.red()
+        } else if line.starts_with('+') {
+            line.green()
+        } else {
+            line.dim()
+        };
+
+        println!("{colored}");
     }
 }
 
