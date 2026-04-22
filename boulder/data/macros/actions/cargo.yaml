@@ -33,7 +33,7 @@ actions:
     - cargo_build:
         description: Build the rust project to %(cargo_target_dir)
         command: |
-            cargo build %(options_cargo_release)
+            cargo build --jobs "%(jobs)" %(options_cargo_release)
         dependencies:
             - binary(cargo)
 
@@ -56,7 +56,7 @@ actions:
     - cargo_test:
         description: Run tests
         command: |
-            cargo test %(options_cargo_release) --workspace
+            cargo test --jobs "%(jobs)" %(options_cargo_release) --workspace
         dependencies:
             - binary(cargo)
 
