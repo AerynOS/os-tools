@@ -32,14 +32,14 @@ pub struct Global {
     #[arg(
         short,
         long = "verbose",
-        help = "Prints additional information about what boulder is doing",
+        help = "Print additional information about what boulder is doing",
         default_value = "false",
         global = true
     )]
     pub verbose: bool,
     #[arg(short = 'V', long, default_value = "false", global = true)]
     pub version: bool,
-    #[arg(short = 'y', long, global = true)]
+    #[arg(short = 'y', long, global = true, help = "Answer yes to confirmation prompts")]
     pub yes: bool,
     #[arg(long, global = true)]
     pub cache_dir: Option<PathBuf>,
@@ -69,7 +69,7 @@ pub fn process() -> Result<(), Error> {
     let args = replace_aliases(std::env::args());
     let Command { global, subcommand } = Command::parse_from(args.clone());
 
-    // Prints the cli's information about version at startup
+    // Print the cli's information about version at startup
     if global.version {
         println!("boulder {}", tools_buildinfo::get_full_version());
     }
