@@ -30,12 +30,12 @@ use version_parse::VersionExtractor;
 
 const LONG_UPDATE_ABOUT: &str = concat!(
     "Update a recipe file\n\n",
-    "If no version or upstreams are provided, boulder will attempt to autoupdate the recipe\n",
-    "using the release information supplied in the monitoring.yaml file.\n\n",
-    "If a version is passed but no upstream is passed, boulder will attempt to guess the new\n",
-    "url from the existing url.\n\n",
-    "If an upstream is passed but no version is passed, boulder will parse the new version\n",
-    "from the new upstream."
+    "If no version or upstreams are provided, boulder will attempt to autoupdate the\n",
+    "recipe, using the release information supplied in the monitoring.yaml file.\n\n",
+    "If a version is passed but no upstream is passed, boulder will attempt to guess\n",
+    "the new url from the existing url.\n\n",
+    "If an upstream is passed but no version is passed, boulder will parse the new\n",
+    "version from the new upstream."
 );
 
 #[derive(Debug, Parser)]
@@ -49,12 +49,7 @@ pub struct Command {
 pub enum Subcommand {
     #[command(about = "Bump a recipe's release")]
     Bump {
-        #[arg(
-            short,
-            long,
-            default_value = "./stone.yaml",
-            help = "Location of the recipe file to update"
-        )]
+        #[arg(short, long, default_value = "./stone.yaml", help = "The recipe file to update")]
         recipe: PathBuf,
         #[arg(
             short = 'n',
@@ -82,20 +77,20 @@ pub enum Subcommand {
             value_parser = parse_updated_source,
             help = concat!(
                 "Update upstream source, can be passed multiple times.\n",
-                "Applied in same order as defined in recipe file. To update a Git upstream,\n",
+                "Applied in same order as defined in recipe file.\n",
+                "To update a Git upstream,\n",
                 "Use the \"git|commit_or_tag\" syntax.\n\n",
-                "Example: -u \"https://some.plan/file.tar.gz\" -u \"git|v1.1\"")
+                "Example:\n",
+                " -u \"https://some.plan/file.tar.gz\" -u \"git|v1.1\"")
         )]
         upstreams: Vec<UpdatedSource>,
-        #[arg(
-            default_value = "./stone.yaml",
-            help = "Path to recipe file, use '-' to read from standard input"
-        )]
+        #[arg(default_value = "./stone.yaml", help = "Recipe input path.")]
         recipe: PathBuf,
         #[arg(
             short = 'w',
             long = "write",
-            help = "Path to which to write the updated recipe. Use '-' for standard output. If omitted, defaults to ./stone.yaml."
+            required = false,
+            help = "Recipe output path. [default: ./stone.yaml]"
         )]
         write: Option<PathBuf>,
         #[arg(long, default_value = "false", help = "Don't increment the release number")]
@@ -305,30 +300,34 @@ fn update(
     no_bump: bool,
     yes: bool,
 ) -> Result<(), Error> {
-    let is_stdin = *recipe.clone().to_str().expect("could not read from stdin") == *"-";
+    // let is_stdin = *recipe.clone().to_str().expect("could not read from stdin") == *"-";
 
     let output_path = match write.as_ref() {
+        // write recipe to a different file
         Some(p) => {
-            if p.clone().to_str().expect("could not write to stdout") == "-" {
-                None
-            } else {
-                Some(p.clone())
-            }
+            // if p.clone().to_str().expect("could not write to stdout") == "-" {
+            //     None
+            // } else {
+            Some(p.clone())
+            // }
         }
+        // write recipe to input filename
         None => {
-            if is_stdin {
-                None
-            } else {
-                Some(recipe.clone())
-            }
+            // if is_stdin {
+            //     None
+            // } else {
+            Some(recipe.clone())
+            // }
         }
     };
 
-    if output_path.is_none() && (version.is_none() && sources.is_empty()) && !is_stdin {
+    if output_path.is_none() && (version.is_none() && sources.is_empty()) {
+        // && !is_stdin {
         return Err(Error::OverwriteNotEnabled);
     }
 
-    let input = if !is_stdin {
+    // let input = if !is_stdin {
+    let input = {
         let path = recipe::resolve_path(&recipe).map_err(Error::ResolvePath)?;
 
         if version.is_none() && sources.is_empty() {
@@ -336,10 +335,10 @@ fn update(
         }
 
         fs::read_to_string(path).map_err(Error::Read)?
-    } else {
-        let mut bytes = vec![];
-        io::stdin().lock().read_to_end(&mut bytes).map_err(Error::Read)?;
-        String::from_utf8(bytes)?
+        // } else {
+        //     let mut bytes = vec![];
+        //     io::stdin().lock().read_to_end(&mut bytes).map_err(Error::Read)?;
+        //     String::from_utf8(bytes)?
     };
 
     // Parsed allows us to access known values in a type safe way
