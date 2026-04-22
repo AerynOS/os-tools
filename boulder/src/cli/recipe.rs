@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2024 AerynOS Developers
 // SPDX-License-Identifier: MPL-2.0
 use std::{
-    io::{self, Read},
-    path::PathBuf,
+    io,
+    path::{Path, PathBuf},
     time::Duration,
 };
 
@@ -86,13 +86,8 @@ pub enum Subcommand {
         upstreams: Vec<UpdatedSource>,
         #[arg(default_value = "./stone.yaml", help = "Recipe input path.")]
         recipe: PathBuf,
-        #[arg(
-            short = 'w',
-            long = "write",
-            required = false,
-            help = "Recipe output path. [default: ./stone.yaml]"
-        )]
-        write: Option<PathBuf>,
+        #[arg(short, long, help = "Recipe output path. If omitted, overwrites the input recipe.")]
+        output: Option<PathBuf>,
         #[arg(long, default_value = "false", help = "Don't increment the release number")]
         no_bump: bool,
     },
@@ -127,23 +122,16 @@ pub fn handle(command: Command, env: Env, yes: bool) -> Result<(), Error> {
         Subcommand::New { output, upstreams } => new(env, output, upstreams),
         Subcommand::Update {
             recipe,
-            write,
+            output,
             version,
             upstreams,
             no_bump,
-        } => update(env, recipe, write, version, upstreams, no_bump, yes),
+        } => update(env, &recipe, output.as_deref(), version, upstreams, no_bump, yes),
         Subcommand::Macros { _macro } => macros(_macro, env),
     }
 }
 
-fn autoupdate(env: Env, recipe: PathBuf, write: Option<PathBuf>, yes: bool) -> Result<(), Error> {
-    // TODO: We neednessly reparse here when coming from update()
-    //       but, we need the path regardless to parse with ent.
-    let path = recipe::resolve_path(&recipe).map_err(Error::ResolvePath)?;
-    let input = fs::read_to_string(path).map_err(Error::Read)?;
-
-    let parsed_recipe: recipe::Parsed = serde_yaml::from_str(&input)?;
-
+fn detect_update(recipe_path: &Path, parsed_recipe: &recipe::Parsed) -> Result<DetectedUpdate, Error> {
     // Setup ent parser
     // TODO: Can we avoid the inventory dep and parse the stone directly?
     let registration = inventory::iter::<ParserRegistration>
@@ -153,53 +141,56 @@ fn autoupdate(env: Env, recipe: PathBuf, write: Option<PathBuf>, yes: bool) -> R
     let ent_parser = (registration.parser)();
 
     // Parse our recipe with ent
-    let ent_parsed = ent_parser.parse(recipe.as_path())?;
+    let ent_parsed = ent_parser.parse(recipe_path)?;
 
-    if let Some(m) = ent_parsed.monitoring {
-        // Call the release-monitoring.org API using the ID found in monitoring.yaml
-        let response = runtime::block_on(get_latest_version(m.project_id))?;
-
-        let current_version = parsed_recipe.source.version;
-
-        let newest = response
-            .stable_versions
-            .first()
-            .cloned()
-            .unwrap_or_else(|| response.latest_version.unwrap_or_default());
-
-        println!("Newest version found: {newest}, current version: {current_version}");
-
-        if newest == current_version {
-            println!("Already up-to-date!");
-            return Ok(());
-        }
-
-        // Only parse the first upstream source for now...
-        let (first_upstream, _) = parsed_recipe
-            .upstreams
-            .split_first()
-            .expect("upstreams must not be empty");
-
-        if matches!(first_upstream.props, upstream::Props::Git { .. }) {
-            return Err(Error::GitUpstreamMustProvideVersion);
-        }
-
-        let new_url = guess_new_url(newest.as_str(), first_upstream.url.as_str())?;
-
-        let updated_source = parse_updated_source(new_url.as_str()).unwrap();
-
-        update(
-            env,
-            recipe.clone(),
-            write,
-            Some(newest),
-            vec![updated_source],
-            false,
-            yes,
-        )?;
+    let Some(monitoring) = ent_parsed.monitoring else {
+        return Err(Error::AutoupdateMissingMonitoringFile);
     };
 
-    Ok(())
+    // Call the release-monitoring.org API using the ID found in monitoring.yaml
+    let response = runtime::block_on(get_latest_version(monitoring.project_id))?;
+
+    let current_version = &parsed_recipe.source.version;
+
+    let newest = response
+        .stable_versions
+        .first()
+        .cloned()
+        .unwrap_or_else(|| response.latest_version.unwrap_or_default());
+
+    println!("Newest version found: {newest}, current version: {current_version}");
+
+    if newest == *current_version {
+        println!("Already up-to-date!");
+        return Ok(DetectedUpdate::AlreadyUpToDate);
+    }
+
+    // Only parse the first upstream source for now...
+    let (first_upstream, _) = parsed_recipe
+        .upstreams
+        .split_first()
+        .expect("upstreams must not be empty");
+
+    if matches!(first_upstream.props, upstream::Props::Git { .. }) {
+        return Err(Error::GitUpstreamMustProvideVersion);
+    }
+
+    let new_url = guess_new_url(newest.as_str(), first_upstream.url.as_str())?;
+
+    let updated_source = parse_updated_source(new_url.as_str()).unwrap();
+
+    Ok(DetectedUpdate::UpdateRequired {
+        version: newest,
+        sources: vec![updated_source],
+    })
+}
+
+enum DetectedUpdate {
+    AlreadyUpToDate,
+    UpdateRequired {
+        version: String,
+        sources: Vec<UpdatedSource>,
+    },
 }
 
 fn guess_new_url(new_version: &str, current_url: &str) -> Result<String, Error> {
@@ -293,58 +284,40 @@ fn new(env: Env, output: PathBuf, upstreams: Vec<Url>) -> Result<(), Error> {
 
 fn update(
     env: Env,
-    recipe: PathBuf,
-    write: Option<PathBuf>,
-    version: Option<String>,
-    sources: Vec<UpdatedSource>,
+    recipe_path: &Path,
+    output_path: Option<&Path>,
+    mut version: Option<String>,
+    mut sources: Vec<UpdatedSource>,
     no_bump: bool,
     yes: bool,
 ) -> Result<(), Error> {
-    // let is_stdin = *recipe.clone().to_str().expect("could not read from stdin") == *"-";
+    // Resolve & canonicalize input recipe path
+    let recipe_path = recipe::resolve_path(recipe_path).map_err(Error::ResolvePath)?;
+    // Overwrite recipe if no explicit output path is supplied
+    let output_path = output_path.unwrap_or(&recipe_path);
 
-    let output_path = match write.as_ref() {
-        // write recipe to a different file
-        Some(p) => {
-            // if p.clone().to_str().expect("could not write to stdout") == "-" {
-            //     None
-            // } else {
-            Some(p.clone())
-            // }
-        }
-        // write recipe to input filename
-        None => {
-            // if is_stdin {
-            //     None
-            // } else {
-            Some(recipe.clone())
-            // }
-        }
-    };
-
-    if output_path.is_none() && (version.is_none() && sources.is_empty()) {
-        // && !is_stdin {
-        return Err(Error::OverwriteNotEnabled);
-    }
-
-    // let input = if !is_stdin {
-    let input = {
-        let path = recipe::resolve_path(&recipe).map_err(Error::ResolvePath)?;
-
-        if version.is_none() && sources.is_empty() {
-            return autoupdate(env, path, write, yes);
-        }
-
-        fs::read_to_string(path).map_err(Error::Read)?
-        // } else {
-        //     let mut bytes = vec![];
-        //     io::stdin().lock().read_to_end(&mut bytes).map_err(Error::Read)?;
-        //     String::from_utf8(bytes)?
-    };
-
+    let recipe_content = fs::read_to_string(&recipe_path).map_err(Error::Read)?;
     // Parsed allows us to access known values in a type safe way
-    let parsed: recipe::Parsed = serde_yaml::from_str(&input)?;
+    let recipe: recipe::Parsed = serde_yaml::from_str(&recipe_content)?;
     // Value allows us to access map keys in their original form
-    let value: serde_yaml::Value = serde_yaml::from_str(&input)?;
+    let recipe_yaml: serde_yaml::Value = serde_yaml::from_str(&recipe_content)?;
+
+    // If no version or source are supplied, attempt to detect
+    // them automatically
+    if version.is_none() && sources.is_empty() {
+        match detect_update(&recipe_path, &recipe)? {
+            DetectedUpdate::UpdateRequired {
+                version: auto_version,
+                sources: auto_sources,
+            } => {
+                version = Some(auto_version);
+                sources = auto_sources;
+            }
+            DetectedUpdate::AlreadyUpToDate => {
+                return Ok(());
+            }
+        }
+    }
 
     // If version isn't specified guess it from parsing the first upstream url
     let version = if let Some(v) = version {
@@ -372,10 +345,10 @@ fn update(
 
     let mut updates = vec![Update::Version(version)];
     if !no_bump {
-        updates.push(Update::Release(parsed.source.release + 1));
+        updates.push(Update::Release(recipe.source.release + 1));
     }
 
-    for (i, (original, update)) in parsed.upstreams.into_iter().zip(sources).enumerate() {
+    for (i, (original, update)) in recipe.upstreams.into_iter().zip(sources).enumerate() {
         match (original.props, update) {
             (upstream::Props::Plain { .. }, UpdatedSource::Git(_)) => {
                 return Err(Error::UpstreamMismatch(i, "Plain", "Git"));
@@ -384,7 +357,7 @@ fn update(
                 return Err(Error::UpstreamMismatch(i, "Git", "Plain"));
             }
             (upstream::Props::Plain { .. }, UpdatedSource::Plain(new_uri)) => {
-                let key = value["upstreams"][i]
+                let key = recipe_yaml["upstreams"][i]
                     .as_mapping()
                     .and_then(|map| map.keys().next())
                     .cloned();
@@ -393,7 +366,7 @@ fn update(
                 }
             }
             (upstream::Props::Git { .. }, UpdatedSource::Git(new_ref)) => {
-                let key = value["upstreams"][i]
+                let key = recipe_yaml["upstreams"][i]
                     .as_mapping()
                     .and_then(|map| map.keys().next())
                     .cloned();
@@ -440,24 +413,22 @@ fn update(
     let _ = mpb.clear();
 
     // Apply updates
-    let updated = updater.apply(input.clone());
+    let updated_content = updater.apply(recipe_content.clone());
 
-    if let Some(path) = output_path {
-        let diff = TextDiff::from_lines(&input, &updated);
-        println!("{}", diff.unified_diff());
-        let write_updated_recipe = yes
-            || Confirm::with_theme(&ColorfulTheme::default())
-                .with_prompt(" Do you wish to write the above changes? ")
-                .default(false)
-                .interact()?;
-        if !write_updated_recipe {
-            return Ok(());
-        }
-        fs::write(&path, updated.as_bytes()).map_err(Error::Write)?;
-        println!("{} updated", path.display());
-    } else {
-        print!("{updated}");
+    let diff = TextDiff::from_lines(&recipe_content, &updated_content);
+    println!("{}", diff.unified_diff());
+
+    let write_updated_recipe = yes
+        || Confirm::with_theme(&ColorfulTheme::default())
+            .with_prompt(" Do you wish to write the above changes? ")
+            .default(false)
+            .interact()?;
+    if !write_updated_recipe {
+        return Ok(());
     }
+
+    fs::write(output_path, updated_content.as_bytes()).map_err(Error::Write)?;
+    println!("{} updated", output_path.display());
 
     Ok(())
 }
@@ -594,8 +565,10 @@ impl ColumnDisplay for PrintMacro<'_> {
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("Overwrite must be enabled if auto-updating recipe")]
-    OverwriteNotEnabled,
+    #[error(
+        "Missing monitoring file, cannot autoupdate. Either add a monitoring file or supply an explicit --ver or --upstream."
+    )]
+    AutoupdateMissingMonitoringFile,
     #[error("Mismatch for upstream[{0}], expected {1} got {2}")]
     UpstreamMismatch(usize, &'static str, &'static str),
     #[error("load macros")]
