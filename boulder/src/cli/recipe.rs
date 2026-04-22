@@ -116,7 +116,7 @@ fn parse_updated_source(s: &str) -> Result<UpdatedSource, String> {
     }
 }
 
-pub fn handle(command: Command, env: Env, yes: bool) -> Result<(), Error> {
+pub fn handle(command: Command, env: Env, yes: bool, verbose: bool) -> Result<(), Error> {
     match command.subcommand {
         Subcommand::Bump { recipe, release } => bump(recipe, release),
         Subcommand::New { output, upstreams } => new(env, output, upstreams),
@@ -126,12 +126,21 @@ pub fn handle(command: Command, env: Env, yes: bool) -> Result<(), Error> {
             version,
             upstreams,
             no_bump,
-        } => update(env, &recipe, output.as_deref(), version, upstreams, no_bump, yes),
+        } => update(
+            env,
+            &recipe,
+            output.as_deref(),
+            version,
+            upstreams,
+            no_bump,
+            yes,
+            verbose,
+        ),
         Subcommand::Macros { _macro } => macros(_macro, env),
     }
 }
 
-fn detect_update(recipe_path: &Path, parsed_recipe: &recipe::Parsed) -> Result<DetectedUpdate, Error> {
+fn detect_update(recipe_path: &Path, parsed_recipe: &recipe::Parsed, verbose: bool) -> Result<DetectedUpdate, Error> {
     // Setup ent parser
     // TODO: Can we avoid the inventory dep and parse the stone directly?
     let registration = inventory::iter::<ParserRegistration>
@@ -175,7 +184,7 @@ fn detect_update(recipe_path: &Path, parsed_recipe: &recipe::Parsed) -> Result<D
         return Err(Error::GitUpstreamMustProvideVersion);
     }
 
-    let new_url = guess_new_url(newest.as_str(), first_upstream.url.as_str())?;
+    let new_url = guess_new_url(newest.as_str(), first_upstream.url.as_str(), verbose)?;
 
     let updated_source = parse_updated_source(new_url.as_str()).unwrap();
 
@@ -193,13 +202,16 @@ enum DetectedUpdate {
     },
 }
 
-fn guess_new_url(new_version: &str, current_url: &str) -> Result<String, Error> {
+fn guess_new_url(new_version: &str, current_url: &str, verbose: bool) -> Result<String, Error> {
     let upstreams_parser = VersionExtractor::new();
     let parsed_upstream = upstreams_parser.extract(current_url)?;
-    println!(
-        "Parsed URI: name = {}, version = {}, release-series = {:?}",
-        parsed_upstream.name, parsed_upstream.version, parsed_upstream.release_series
-    );
+
+    if verbose {
+        println!(
+            "Parsed URI: name = {}, version = {}, release-series = {:?}",
+            parsed_upstream.name, parsed_upstream.version, parsed_upstream.release_series
+        );
+    }
 
     let current_version = &parsed_upstream.version;
 
@@ -282,6 +294,7 @@ fn new(env: Env, output: PathBuf, upstreams: Vec<Url>) -> Result<(), Error> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 fn update(
     env: Env,
     recipe_path: &Path,
@@ -290,6 +303,7 @@ fn update(
     mut sources: Vec<UpdatedSource>,
     no_bump: bool,
     yes: bool,
+    verbose: bool,
 ) -> Result<(), Error> {
     // Resolve & canonicalize input recipe path
     let recipe_path = recipe::resolve_path(recipe_path).map_err(Error::ResolvePath)?;
@@ -305,7 +319,7 @@ fn update(
     // If no version or source are supplied, attempt to detect
     // them automatically
     if version.is_none() && sources.is_empty() {
-        match detect_update(&recipe_path, &recipe)? {
+        match detect_update(&recipe_path, &recipe, verbose)? {
             DetectedUpdate::UpdateRequired {
                 version: auto_version,
                 sources: auto_sources,
@@ -633,6 +647,7 @@ mod tests {
         let new_url = guess_new_url(
             "1.52.7",
             "https://download.gnome.org/sources/NetworkManager/1.50/NetworkManager-1.50.0.tar.xz",
+            false,
         )
         .unwrap();
         assert_eq!(
@@ -640,15 +655,21 @@ mod tests {
             "https://download.gnome.org/sources/NetworkManager/1.52/NetworkManager-1.52.7.tar.xz"
         );
 
-        let new_url = guess_new_url("9.0.1", "https://www.nano-editor.org/dist/v8/nano-8.7.1.tar.xz").unwrap();
+        let new_url = guess_new_url("9.0.1", "https://www.nano-editor.org/dist/v8/nano-8.7.1.tar.xz", false).unwrap();
         assert_eq!(new_url, "https://www.nano-editor.org/dist/v9/nano-9.0.1.tar.xz");
 
-        let new_url = guess_new_url("50.0", "https://download.gnome.org/sources/ghex/48/ghex-48.3.tar.xz").unwrap();
+        let new_url = guess_new_url(
+            "50.0",
+            "https://download.gnome.org/sources/ghex/48/ghex-48.3.tar.xz",
+            false,
+        )
+        .unwrap();
         assert_eq!(new_url, "https://download.gnome.org/sources/ghex/50/ghex-50.0.tar.xz");
 
         let new_url = guess_new_url(
             "1.91.2",
             "https://gitlab.freedesktop.org/upower/upower/-/archive/v1.90.10/upower-v1.90.10.tar.gz",
+            false,
         )
         .unwrap();
         assert_eq!(
@@ -659,6 +680,7 @@ mod tests {
         let new_url = guess_new_url(
             "260.1",
             "https://github.com/systemd/systemd/archive/refs/tags/v257.13.tar.gz",
+            false,
         )
         .unwrap();
         assert_eq!(

@@ -127,7 +127,7 @@ pub fn process() -> Result<(), Error> {
         Some(Subcommand::Cache(command)) => cache::handle(command, env)?,
         Some(Subcommand::Chroot(command)) => chroot::handle(command, env)?,
         Some(Subcommand::Profile(command)) => profile::handle(command, env)?,
-        Some(Subcommand::Recipe(command)) => recipe::handle(command, env, global.yes)?,
+        Some(Subcommand::Recipe(command)) => recipe::handle(command, env, global.yes, global.verbose)?,
         Some(Subcommand::Version(command)) => version::handle(command),
         None => {
             println!("Pass --help to view usage.");
