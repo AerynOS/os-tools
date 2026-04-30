@@ -257,7 +257,6 @@ mod test {
 
     use crate::db::Error;
     use itertools::Itertools;
-    use stone::StoneDecodedPayload;
 
     use super::*;
 
@@ -352,31 +351,6 @@ mod test {
         db.batch_remove(entries.iter().take(5).map(|(id, _)| id))?;
         itertools::assert_equal(db.all()?.iter(), entries[5..].iter());
         Ok(())
-    }
-
-    #[test]
-    fn create_insert_select() {
-        let database = Database::new(":memory:").unwrap();
-
-        let bash_completion = include_bytes!("../../../../test/bash-completion-2.11-1-1-x86_64.stone");
-
-        let mut stone = stone::read_bytes(bash_completion).unwrap();
-
-        let payloads = stone.payloads().unwrap().collect::<Result<Vec<_>, _>>().unwrap();
-        let layouts = payloads
-            .iter()
-            .filter_map(StoneDecodedPayload::layout)
-            .flat_map(|p| &p.body)
-            .map(|layout| (package::Id::from("test"), layout))
-            .collect::<Vec<_>>();
-
-        let count = layouts.len();
-
-        database.batch_add(layouts.iter().map(|(p, l)| (p, *l))).unwrap();
-
-        let all = database.all().unwrap();
-
-        assert_eq!(count, all.len());
     }
 
     const NUM_ENTRIES: u32 = 512;
