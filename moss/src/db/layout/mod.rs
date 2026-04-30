@@ -253,9 +253,106 @@ mod model {
 
 #[cfg(test)]
 mod test {
+    use std::{iter, sync::LazyLock};
+
+    use crate::db::Error;
+    use itertools::Itertools;
     use stone::StoneDecodedPayload;
 
     use super::*;
+
+    #[test]
+    fn creates_in_memory_db_connection() -> Result<(), Error> {
+        Database::new(":memory:").map(|_| ())
+    }
+
+    #[test]
+    fn db_queries_package_id() -> Result<(), Error> {
+        let non_unique_id = package::Id::from(NUM_ENTRIES.to_string());
+        let entries = SHARED_DB.query(iter::once(&non_unique_id))?;
+        let expected_entries = all_entries().filter(|(id, _)| id == &non_unique_id);
+        itertools::assert_equal(entries.into_iter(), expected_entries);
+        Ok(())
+    }
+
+    #[test]
+    fn db_returns_all_entries() -> Result<(), Error> {
+        let entries = SHARED_DB.all()?;
+        itertools::assert_equal(entries.into_iter(), all_entries());
+        Ok(())
+    }
+
+    #[test]
+    fn db_returns_package_ids() -> Result<(), Error> {
+        let ids = SHARED_DB.package_ids()?;
+        let expected_ids = all_entries().map(|(id, _)| id);
+        // FIXME? BTreeSet sorts its elements according to the Ord trait
+        // of the elements. But maybe the intention was to return package IDs
+        // in order they are inside the database?
+        itertools::assert_equal(ids.into_iter(), expected_ids.sorted());
+        Ok(())
+    }
+
+    #[test]
+    fn db_returns_file_hashes() -> Result<(), Error> {
+        let hashes = SHARED_DB.file_hashes()?;
+        let expected_hashes = all_entries().filter_map(|(_, record)| {
+            if let StonePayloadLayoutFile::Regular(hash, _) = record.file {
+                Some(format!("{hash:02x}"))
+            } else {
+                None
+            }
+        });
+        // FIXME? Same as the test above.
+        itertools::assert_equal(hashes.into_iter(), expected_hashes.sorted());
+        Ok(())
+    }
+
+    #[test]
+    fn db_adds_one_entry() -> Result<(), Error> {
+        let (expected_id, expected_record) = all_entries().next().unwrap();
+        let db = Database::new(":memory:")?;
+        db.add(&expected_id, &expected_record)?;
+        assert_eq!(db.all()?, vec![(expected_id, expected_record)]);
+        Ok(())
+    }
+
+    #[test]
+    fn db_adds_multiple_entries() -> Result<(), Error> {
+        // FIXME: Same observation as in SHARED_DB.
+        let expected_entries = all_entries().take(10).collect::<Vec<_>>();
+        let expected_entries_ref = expected_entries.iter().map(|(id, rec)| (id, rec)).collect::<Vec<_>>();
+        let db = Database::new(":memory:")?;
+        db.batch_add(expected_entries_ref)?;
+        assert_eq!(db.all()?, expected_entries);
+        Ok(())
+    }
+
+    #[test]
+    fn db_removes_one_entry() -> Result<(), Error> {
+        // FIXME: Same observation as in SHARED_DB.
+        let entries = all_entries().take(10).collect::<Vec<_>>();
+        let entries_ref = entries.iter().map(|(id, rec)| (id, rec)).collect::<Vec<_>>();
+        let db = Database::new(":memory:")?;
+        db.batch_add(entries_ref)?;
+
+        db.remove(&entries.last().unwrap().0)?;
+        itertools::assert_equal(db.all()?.iter(), entries.iter().take(9));
+        Ok(())
+    }
+
+    #[test]
+    fn db_removes_multiple_entries() -> Result<(), Error> {
+        // FIXME: Same observation as in SHARED_DB.
+        let entries = all_entries().take(10).collect::<Vec<_>>();
+        let entries_ref = entries.iter().map(|(id, rec)| (id, rec)).collect::<Vec<_>>();
+        let db = Database::new(":memory:")?;
+        db.batch_add(entries_ref)?;
+
+        db.batch_remove(entries.iter().take(5).map(|(id, _)| id))?;
+        itertools::assert_equal(db.all()?.iter(), entries[5..].iter());
+        Ok(())
+    }
 
     #[test]
     fn create_insert_select() {
@@ -280,5 +377,52 @@ mod test {
         let all = database.all().unwrap();
 
         assert_eq!(count, all.len());
+    }
+
+    const NUM_ENTRIES: u32 = 512;
+
+    static SHARED_DB: LazyLock<Database> = LazyLock::new(|| {
+        // FIXME: This allocates a lot. Maybe we can make batched functions
+        // in mod.rs accept Borrow, so that it works with both owned and referenced values?
+        let entries = all_entries().collect::<Vec<_>>();
+        let entries_ref = entries.iter().map(|(id, rec)| (id, rec)).collect::<Vec<_>>();
+
+        let db = Database::new(":memory:").unwrap();
+        db.batch_add(entries_ref).unwrap();
+        db
+    });
+
+    fn all_entries() -> impl Iterator<Item = (package::Id, StonePayloadLayoutRecord)> {
+        let file_from_index = |index: u32| -> StonePayloadLayoutFile {
+            let i_str = index.to_string();
+            match index % 8 {
+                0 => StonePayloadLayoutFile::Regular(index as u128, AStr::from(i_str)),
+                1 => StonePayloadLayoutFile::Symlink(AStr::from(i_str.clone()), AStr::from(i_str)),
+                2 => StonePayloadLayoutFile::Directory(AStr::from(i_str)),
+                3 => StonePayloadLayoutFile::CharacterDevice(AStr::from(i_str)),
+                4 => StonePayloadLayoutFile::BlockDevice(AStr::from(i_str)),
+                5 => StonePayloadLayoutFile::Fifo(AStr::from(i_str)),
+                6 => StonePayloadLayoutFile::Socket(AStr::from(i_str)),
+                _ => StonePayloadLayoutFile::Unknown(AStr::from(i_str.clone()), AStr::from(i_str)),
+            }
+        };
+        let record_from_index = move |index: u32| -> StonePayloadLayoutRecord {
+            StonePayloadLayoutRecord {
+                uid: index,
+                gid: index,
+                mode: index,
+                tag: index,
+                file: file_from_index(index),
+            }
+        };
+
+        (0..NUM_ENTRIES)
+            .map(move |i| (package::Id::from(i.to_string()), record_from_index(i)))
+            // Package IDs are not unique. Ensure there is at least
+            // one ID listed twice to test this possibility.
+            .chain(iter::once((
+                package::Id::from(NUM_ENTRIES.to_string()),
+                record_from_index(NUM_ENTRIES),
+            )))
     }
 }
