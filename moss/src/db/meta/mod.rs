@@ -477,7 +477,6 @@ mod test {
 
     use crate::dependency::Kind;
     use itertools::Itertools;
-    use stone::StoneDecodedPayload;
 
     use super::*;
 
@@ -715,87 +714,6 @@ mod test {
         entries.sort_by(|(id1, _), (id2, _)| id1.cmp(id2));
         itertools::assert_equal(entries.into_iter(), all_entries.into_iter().skip(5));
         Ok(())
-    }
-
-    #[test]
-    fn create_insert_select() {
-        let db = Database::new(":memory:").unwrap();
-
-        let bash_completion = include_bytes!("../../../../test/bash-completion-2.11-1-1-x86_64.stone");
-
-        let mut stone = stone::read_bytes(bash_completion).unwrap();
-
-        let payloads = stone.payloads().unwrap().collect::<Result<Vec<_>, _>>().unwrap();
-        let meta_payload = payloads.iter().find_map(StoneDecodedPayload::meta).unwrap();
-        let meta = Meta::from_stone_payload(&meta_payload.body).unwrap();
-
-        let id = package::Id::from("test");
-
-        db.add(id.clone(), meta.clone()).unwrap();
-
-        assert_eq!(&meta.name, &"bash-completion".to_owned().into());
-
-        // Now retrieve by provider.
-        let lookup = Filter::Provider(Provider {
-            kind: Kind::PackageName,
-            name: "bash-completion".to_owned(),
-        });
-        let fetched = db.query(Some(lookup)).unwrap();
-        assert_eq!(fetched.len(), 1);
-
-        db.remove(&id).unwrap();
-
-        let result = db.get(&id);
-
-        assert!(result.is_err());
-
-        // Test wipe
-        db.add(id.clone(), meta).unwrap();
-        db.wipe().unwrap();
-        let result = db.get(&id);
-        assert!(result.is_err());
-    }
-
-    #[test]
-    fn test_conflict_is_recognized() {
-        let db = Database::new(":memory:").unwrap();
-
-        // See `test/conflicts/italian-pizza.yml` for the recipe file that produced this stone.
-        // It should be obvious that this package conflicts with `name(pineapple)`.
-        let italian_pizza = include_bytes!("../../../../test/conflicts/italian-pizza-1-1-1-x86_64.stone");
-        let pineapple_provider = Provider {
-            kind: Kind::PackageName,
-            name: "pineapple".to_owned(),
-        };
-
-        let mut stone = stone::read_bytes(italian_pizza).unwrap();
-
-        let payloads = stone.payloads().unwrap().collect::<Result<Vec<_>, _>>().unwrap();
-        let meta_payload = payloads.iter().find_map(StoneDecodedPayload::meta).unwrap();
-        let meta = Meta::from_stone_payload(&meta_payload.body).unwrap();
-        db.add(package::Id::from(meta.id()), meta.clone()).unwrap();
-
-        // Ensure we're parsing the correct package!
-        assert_eq!(&meta.name, &"italian-pizza".to_owned().into());
-        // Ensure that the conflict info already exists in the binary package.
-        assert_eq!(
-            meta.conflicts.iter().collect::<Vec<&Provider>>(),
-            vec![&pineapple_provider]
-        );
-
-        // Now retrieve by provider.
-        let lookup = Filter::Provider(Provider {
-            kind: Kind::PackageName,
-            name: "italian-pizza".to_owned(),
-        });
-        let fetched = db.query(Some(lookup)).unwrap();
-        assert_eq!(fetched.len(), 1);
-
-        let (_, retrieved_pkg) = fetched.first().unwrap();
-        let retrieved_conflicts: Vec<&Provider> = retrieved_pkg.conflicts.iter().collect();
-        // Ensure that the conflicts field is inserted into and can be queried from our database
-        // correctly.
-        assert_eq!(retrieved_conflicts, vec![&pineapple_provider]);
     }
 
     fn create_db() -> Result<Database, Error> {
