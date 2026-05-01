@@ -473,11 +473,249 @@ mod model {
 
 #[cfg(test)]
 mod test {
-    use stone::StoneDecodedPayload;
+    use std::{collections::BTreeSet, iter, sync::LazyLock};
 
     use crate::dependency::Kind;
+    use itertools::Itertools;
+    use stone::StoneDecodedPayload;
 
     use super::*;
+
+    #[test]
+    fn creates_in_memory_db_connection() -> Result<(), Error> {
+        Database::new(":memory:").map(|_| ())
+    }
+
+    #[test]
+    fn db_wipes_all_entries() -> Result<(), Error> {
+        let entries = all_entries().take(10).collect::<Vec<_>>();
+        let db = Database::new(":memory:")?;
+        db.batch_add(entries.clone())?;
+
+        assert!(!db.query(None)?.is_empty());
+        db.wipe()?;
+        assert!(db.query(None)?.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn db_gets_meta_of_package_id() -> Result<(), Error> {
+        let (expected_id, mut expected_meta) = all_entries().nth((NUM_ENTRIES / 2) as usize).unwrap();
+        // FIXME: licenses are a one-to-many relationship and Database seems to
+        // return the list of licenses, sorted.
+        // The license list should likely be a HashSet, since we don't care about the order of licenses
+        // *and* they should be unique.
+        expected_meta.licenses.sort();
+
+        let meta = SHARED_DB.get(&expected_id)?;
+        assert_eq!(meta, expected_meta);
+        Ok(())
+    }
+
+    #[test]
+    fn db_returns_provider_packages() -> Result<(), Error> {
+        let expected_ids =
+            all_entries().filter_map(|(id, meta)| meta.providers.contains(&common_provider()).then_some(id));
+        let ids = SHARED_DB.provider_packages(&common_provider())?;
+        itertools::assert_equal(ids, expected_ids);
+        Ok(())
+    }
+
+    #[test]
+    fn db_queries_by_provider() -> Result<(), Error> {
+        let expected_entries = all_entries()
+            .filter_map(|(id, mut meta)| {
+                if meta.providers.contains(&common_provider()) {
+                    meta.licenses.sort(); // FIXME: See db_gets_meta_of_package_id().
+                    Some((id, meta))
+                } else {
+                    None
+                }
+            })
+            .sorted_by(|(id1, _), (id2, _)| id1.cmp(&id2));
+
+        let mut entries = SHARED_DB.query(Some(Filter::Provider(common_provider())))?;
+        entries.sort_by(|(id1, _), (id2, _)| id1.cmp(&id2));
+
+        itertools::assert_equal(entries.into_iter(), expected_entries);
+        Ok(())
+    }
+
+    #[test]
+    fn db_queries_by_dependency() -> Result<(), Error> {
+        let dependency = Dependency {
+            kind: Kind::PackageName,
+            name: "6".to_owned(),
+        };
+        let expected_entries = all_entries()
+            .filter_map(|(id, mut meta)| {
+                if meta.dependencies.contains(&dependency) {
+                    meta.licenses.sort(); // FIXME: See db_gets_meta_of_package_id().
+                    Some((id, meta))
+                } else {
+                    None
+                }
+            })
+            .sorted_by(|(id1, _), (id2, _)| id1.cmp(&id2));
+
+        let mut entries = SHARED_DB.query(Some(Filter::Dependency(dependency)))?;
+        entries.sort_by(|(id1, _), (id2, _)| id1.cmp(&id2));
+
+        itertools::assert_equal(entries.into_iter(), expected_entries);
+        Ok(())
+    }
+
+    #[test]
+    fn db_queries_by_name() -> Result<(), Error> {
+        let mut expected_entries = all_entries().nth((NUM_ENTRIES / 2) as usize).unwrap();
+        expected_entries.1.licenses.sort(); // FIXME: See db_gets_meta_of_package_id().
+        let meta = SHARED_DB.query(Some(Filter::Name(package::Name::from(format!(
+            "Name {}",
+            NUM_ENTRIES / 2
+        )))))?;
+        itertools::assert_equal(meta.into_iter(), iter::once(expected_entries));
+        Ok(())
+    }
+
+    #[test]
+    fn db_queries_by_keyword() -> Result<(), Error> {
+        {
+            // Filter by summary.
+            // All packages have "Summary" in their summary, so this should return all packages.
+            let expected_entries = all_entries()
+                .map(|(id, mut meta)| {
+                    meta.licenses.sort(); // FIXME: See db_gets_meta_of_package_id().
+                    (id, meta)
+                })
+                .sorted_by(|(id1, _), (id2, _)| id1.cmp(&id2));
+            let mut entries = SHARED_DB.query(Some(Filter::Keyword("Summary")))?;
+            entries.sort_by(|(id1, _), (id2, _)| id1.cmp(&id2));
+            itertools::assert_equal(entries.into_iter(), expected_entries);
+        }
+        {
+            // Filter by name this time.
+            let expected_entries = all_entries()
+                .filter_map(|(id, mut meta)| {
+                    if meta.name.contains("Name 10") {
+                        meta.licenses.sort(); // FIXME: See db_gets_meta_of_package_id().
+                        Some((id, meta))
+                    } else {
+                        None
+                    }
+                })
+                .sorted_by(|(id1, _), (id2, _)| id1.cmp(&id2));
+            let mut entries = SHARED_DB.query(Some(Filter::Keyword("Name 10")))?;
+            entries.sort_by(|(id1, _), (id2, _)| id1.cmp(&id2));
+            itertools::assert_equal(entries.into_iter(), expected_entries);
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn db_queries_all() -> Result<(), Error> {
+        let expected_entries = all_entries()
+            .map(|(id, mut meta)| {
+                meta.licenses.sort(); // FIXME: See db_gets_meta_of_package_id().
+                (id, meta)
+            })
+            .sorted_by(|(id1, _), (id2, _)| id1.cmp(id2));
+        let mut entries = SHARED_DB.query(None)?;
+        entries.sort_by(|(id1, _), (id2, _)| id1.cmp(id2));
+        itertools::assert_equal(entries.into_iter(), expected_entries);
+        Ok(())
+    }
+
+    #[test]
+    fn db_returns_package_ids() -> Result<(), Error> {
+        let ids = SHARED_DB.package_ids()?;
+        let expected_ids: std::collections::BTreeSet<_> = all_entries().map(|(id, _)| id.clone()).collect();
+        itertools::assert_equal(ids, expected_ids);
+        Ok(())
+    }
+
+    #[test]
+    fn db_returns_file_hashes() -> Result<(), Error> {
+        let hashes = SHARED_DB.file_hashes()?;
+        let expected_hashes = all_entries()
+            .filter_map(|(_, meta)| meta.hash.clone())
+            .collect::<BTreeSet<_>>();
+        itertools::assert_equal(hashes, expected_hashes);
+        Ok(())
+    }
+
+    #[test]
+    fn db_adds_one_entry() -> Result<(), Error> {
+        let (expected_id, mut expected_meta) = all_entries().next().unwrap();
+        expected_meta.licenses.sort(); // FIXME: See db_gets_meta_of_package_id().
+        let db = Database::new(":memory:")?;
+        db.add(expected_id.clone(), expected_meta.clone())?;
+
+        let entries = db.query(None)?;
+        itertools::assert_equal(entries.into_iter(), iter::once((expected_id, expected_meta)));
+        Ok(())
+    }
+
+    #[test]
+    fn db_adds_multiple_entries() -> Result<(), Error> {
+        let db = Database::new(":memory:")?;
+        db.batch_add(all_entries().take((NUM_ENTRIES / 2) as usize).collect())?;
+
+        let mut entries = db.query(None)?;
+        entries.sort_by(|(id1, _), (id2, _)| id1.cmp(id2));
+
+        let expected_entries = all_entries()
+            .take((NUM_ENTRIES / 2) as usize)
+            .map(|(id, mut meta)| {
+                meta.licenses.sort(); // FIXME: See db_gets_meta_of_package_id().
+                (id, meta)
+            })
+            .sorted_by(|(id1, _), (id2, _)| id1.cmp(id2));
+        itertools::assert_equal(entries.into_iter(), expected_entries);
+        Ok(())
+    }
+
+    #[test]
+    fn db_removes_one_entry() -> Result<(), Error> {
+        let all_entries = all_entries()
+            .take(10)
+            .map(|(id, mut meta)| {
+                meta.licenses.sort(); // FIXME: See db_gets_meta_of_package_id().
+                (id, meta)
+            })
+            .sorted_by(|(id1, _), (id2, _)| id1.cmp(id2))
+            .collect::<Vec<_>>();
+        let db = Database::new(":memory:")?;
+        db.batch_add(all_entries.clone())?;
+
+        db.remove(&all_entries.last().unwrap().0)?;
+
+        let mut entries = db.query(None)?;
+        entries.sort_by(|(id1, _), (id2, _)| id1.cmp(id2));
+        itertools::assert_equal(entries.into_iter(), all_entries.into_iter().take(9));
+        Ok(())
+    }
+
+    #[test]
+    fn db_removes_multiple_entries() -> Result<(), Error> {
+        let all_entries = all_entries()
+            .take(10)
+            .map(|(id, mut meta)| {
+                meta.licenses.sort(); // FIXME: See db_gets_meta_of_package_id().
+                (id, meta)
+            })
+            .sorted_by(|(id1, _), (id2, _)| id1.cmp(id2))
+            .collect::<Vec<_>>();
+        let db = Database::new(":memory:")?;
+        db.batch_add(all_entries.clone())?;
+
+        db.batch_remove(&all_entries.iter().take(5).map(|(id, _)| id.clone()).collect::<Vec<_>>())?;
+
+        let mut entries = db.query(None)?;
+        entries.sort_by(|(id1, _), (id2, _)| id1.cmp(id2));
+        itertools::assert_equal(entries.into_iter(), all_entries.into_iter().skip(5));
+        Ok(())
+    }
 
     #[test]
     fn create_insert_select() {
@@ -558,5 +796,92 @@ mod test {
         // Ensure that the conflicts field is inserted into and can be queried from our database
         // correctly.
         assert_eq!(retrieved_conflicts, vec![&pineapple_provider]);
+    }
+
+    const NUM_ENTRIES: u32 = 101;
+
+    static SHARED_DB: LazyLock<Database> = LazyLock::new(|| {
+        let entries = all_entries().collect::<Vec<_>>();
+        let db = Database::new(":memory:").unwrap();
+        db.batch_add(entries).unwrap();
+        db
+    });
+
+    fn all_entries() -> impl Iterator<Item = (package::Id, Meta)> {
+        // We use the modulo operator to create some variety
+        // in the generated entries, while ensuring that
+        // we have a deterministic set of entries for testing.
+        (0..NUM_ENTRIES).map(move |i| {
+            let mut dependencies = BTreeSet::new();
+            if i % 5 == 0 {
+                dependencies.insert(Dependency {
+                    kind: Kind::PackageName,
+                    name: format!("{}", i + 1),
+                });
+            }
+            if i % 7 == 0 {
+                dependencies.insert(Dependency {
+                    kind: Kind::SharedLibrary,
+                    name: format!("libc.so.{}", i % 3),
+                });
+            }
+
+            let mut providers = BTreeSet::from_iter(iter::once(Provider {
+                kind: Kind::PackageName,
+                name: i.to_string(),
+            }));
+            if i % 3 == 0 {
+                providers.insert(Provider {
+                    kind: Kind::PkgConfig,
+                    name: format!("pkg-{i}"),
+                });
+                providers.insert(common_provider());
+            }
+
+            let mut conflicts = BTreeSet::new();
+            if i % 11 == 0 {
+                conflicts.insert(Provider {
+                    kind: Kind::PackageName,
+                    name: format!("conflicting-package-{i}"),
+                });
+            }
+
+            let mut licenses = vec!["MPL-2.0".to_string()];
+            if i % 2 == 0 {
+                licenses.push("MIT".to_string());
+            }
+
+            (
+                package::Id::from(i.to_string()),
+                Meta {
+                    name: package::Name::from(format!("Name {}", i)),
+                    version_identifier: format!("{i}.0.0"),
+                    source_release: i as u64,
+                    build_release: i as u64,
+                    architecture: "x86_64".to_string(),
+                    summary: format!("Summary {i}"),
+                    description: format!("Description {i}"),
+                    source_id: i.to_string(),
+                    homepage: format!("https://example.com/{i}"),
+                    licenses,
+                    dependencies,
+                    providers,
+                    conflicts,
+                    uri: (i % 2 == 0).then_some(format!("https://repo.example.com/{i}.stone")),
+                    hash: (i % 2 != 0).then_some(format!("{i:032x}")),
+                    download_size: (i % 2 == 0).then_some(1024 * (i as u64 + 1)),
+                },
+            )
+        })
+    }
+
+    /// Returns a provider that is shared across
+    /// multiple packages, to test that multiple
+    /// package IDs can be associated to the same provider.
+    fn common_provider() -> Provider {
+        Provider {
+            kind: Kind::SharedLibrary,
+            name: "libcommon.so.6".to_owned(),
+        }
     }
 }
