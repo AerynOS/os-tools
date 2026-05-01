@@ -76,6 +76,8 @@ sudo moss it binutils glibc-devel linux-headers clang bsdtar-static cpio
 # remember to add ~/.cargo/bin to your $PATH if this is how you installed rustfmt
 cargo install rustfmt
 
+cargo install typos-cli --locked
+
 # from inside the moss clone, this will build boulder and moss
 # and install them to ${HOME}/.local/bin/ by default
 just get-started
