@@ -12,6 +12,7 @@ use thiserror::Error;
 
 pub mod layout;
 pub mod meta;
+mod migrations;
 pub mod state;
 
 /// Max number of variables (binds) for a prepared statement
