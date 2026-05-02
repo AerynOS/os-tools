@@ -76,15 +76,6 @@ impl Selection {
         }
     }
 
-    /// Construct a new transitive Selection to mark automatic installation
-    pub fn transitive(package: package::Id) -> Self {
-        Self {
-            package,
-            explicit: true,
-            reason: None,
-        }
-    }
-
     /// Record a reason for the Selection entering the state
     pub fn reason(self, reason: impl ToString) -> Self {
         Self {
