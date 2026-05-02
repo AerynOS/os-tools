@@ -240,34 +240,223 @@ mod model {
 
 #[cfg(test)]
 mod test {
-    use chrono::Utc;
+    use std::{collections::HashSet, iter};
 
     use super::*;
     use crate::package;
 
     #[test]
-    fn create_insert_select() {
-        let database = Database::new(":memory:").unwrap();
+    fn creates_in_memory_db_connection() -> Result<(), Error> {
+        Database::new(":memory:").map(|_| ())
+    }
 
-        let selections = vec![
-            Selection::explicit(package::Id::from("pkg a")),
-            Selection::explicit(package::Id::from("pkg b")),
-            Selection::explicit(package::Id::from("pkg c")),
-        ];
+    #[test]
+    fn db_lists_ids() -> Result<(), Error> {
+        // IDs are assigned by the database, we can't predict them.
+        // We can only check that the correct number of IDs is returned
+        // and that they are unique.
+        let ids = create_db()?.list_ids()?;
+        assert_eq!(ids.len(), NUM_STATES as usize);
+        assert_eq!(ids.iter().collect::<HashSet<_>>().len(), ids.len());
+        Ok(())
+    }
 
-        let state = database.add(&selections, Some("test"), Some("test")).unwrap();
+    #[test]
+    fn db_returns_all_states() -> Result<(), Error> {
+        let states = create_db()?.all()?;
+        itertools::assert_equal(states.into_iter().map(|s| Into::<TestState>::into(s)), all_entries());
+        Ok(())
+    }
 
-        // First record
-        assert_eq!(i32::from(state.id), 1);
+    #[test]
+    fn db_gets_single_state() -> Result<(), Error> {
+        let (id, _) = create_db()?
+            .list_ids()?
+            .into_iter()
+            .sorted_by_key(|(id1, _)| *id1)
+            .nth(NUM_STATES as usize / 2)
+            .unwrap();
+        let state = create_db()?.get(id)?;
+        let expected_state = all_entries().nth(NUM_STATES as usize / 2).unwrap();
 
-        // Check created
-        let elapsed = Utc::now().signed_duration_since(state.created);
-        assert!(elapsed.num_seconds() == 0);
-        assert!(!elapsed.is_zero());
+        assert_eq!(Into::<TestState>::into(state), expected_state);
+        Ok(())
+    }
 
-        assert_eq!(state.summary.as_deref(), Some("test"));
-        assert_eq!(state.description.as_deref(), Some("test"));
+    #[test]
+    fn db_adds_one_state() -> Result<(), Error> {
+        let expected_state = all_entries().nth(NUM_STATES as usize / 3).unwrap();
 
-        assert_eq!(state.selections, selections);
+        let db = Database::new(":memory:")?;
+        db.add(
+            &expected_state.selections,
+            expected_state.summary.as_deref(),
+            expected_state.description.as_deref(),
+        )?;
+        let all_entries = db.all()?;
+
+        itertools::assert_equal(
+            all_entries.into_iter().map(|s| Into::<TestState>::into(s)),
+            iter::once(expected_state),
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn db_adds_multiple_states() -> Result<(), Error> {
+        let expected_states = || all_entries().take(10);
+
+        let db = Database::new(":memory:")?;
+        for entry in expected_states() {
+            db.add(
+                &entry.selections,
+                entry.summary.as_deref(),
+                entry.description.as_deref(),
+            )?;
+        }
+        let mut all_entries = db.all()?;
+        all_entries.sort_by_key(|s| s.id);
+
+        itertools::assert_equal(
+            all_entries.into_iter().map(|s| Into::<TestState>::into(s)),
+            expected_states(),
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn db_removes_one_state() -> Result<(), Error> {
+        const SAMPLE_SIZE: usize = 10;
+        let expected_states = || all_entries().take(SAMPLE_SIZE);
+
+        let db = Database::new(":memory:")?;
+        for entry in expected_states() {
+            db.add(
+                &entry.selections,
+                entry.summary.as_deref(),
+                entry.description.as_deref(),
+            )?;
+        }
+        let mut ids = db.list_ids()?;
+        ids.sort_by_key(|id| *id);
+        db.remove(&ids[0].0)?;
+
+        itertools::assert_equal(
+            db.all()?.into_iter().map(|s| Into::<TestState>::into(s)),
+            expected_states().skip(1),
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn db_batch_removes_states() -> Result<(), Error> {
+        const SAMPLE_SIZE: usize = 10;
+        const DELETE_COUNT: usize = SAMPLE_SIZE / 2;
+        let expected_states = || all_entries().take(SAMPLE_SIZE);
+
+        let db = Database::new(":memory:")?;
+        for entry in expected_states() {
+            db.add(
+                &entry.selections,
+                entry.summary.as_deref(),
+                entry.description.as_deref(),
+            )?;
+        }
+        let mut ids = db.list_ids()?;
+        ids.sort_by_key(|id| *id);
+        db.batch_remove(ids.iter().take(DELETE_COUNT).map(|(id, _)| id))?;
+
+        itertools::assert_equal(
+            db.all()?.into_iter().map(|s| Into::<TestState>::into(s)),
+            expected_states().skip(DELETE_COUNT),
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn db_created_timestamps_are_recent() -> Result<(), Error> {
+        let entries = create_db()?.all()?;
+        let created_times = entries.into_iter().map(|s| s.created);
+
+        let now_ = Utc::now();
+        // Unfortunately we have to gamble on the created time being
+        // within 1 hour of the test running, since we can't predict it.
+        let grace_time = chrono::Duration::hours(1);
+        for created in created_times {
+            assert!(created <= now_, "Created time {created} is in the future");
+            assert!(created >= now_ - grace_time, "Created time {created} is too old")
+        }
+        Ok(())
+    }
+
+    fn create_db() -> Result<Database, Error> {
+        let db = Database::new(":memory:").unwrap();
+        for state in all_entries() {
+            db.add(
+                &state.selections,
+                state.summary.as_deref(),
+                state.description.as_deref(),
+            )
+            .unwrap();
+        }
+        Ok(db)
+    }
+
+    const NUM_STATES: u32 = 128;
+
+    fn all_entries() -> impl Iterator<Item = TestState> {
+        let selections_from_index = |index: u32| -> Vec<Selection> {
+            let count = (index % 4) as usize;
+            (0..count)
+                .map(|j| {
+                    let pkg_id = format!("pkg_{}_{}", index, j);
+                    Selection {
+                        package: package::Id::from(pkg_id),
+                        explicit: j % 2 == 0,
+                        reason: (j % 3 == 0).then_some(format!("Reason {index}")),
+                    }
+                })
+                .collect()
+        };
+
+        (0..NUM_STATES).map(move |i| TestState {
+            summary: (i % 2 == 0).then_some(format!("Summary {}", i)),
+            description: (i % 3 == 0).then_some(format!("Description {}", i)),
+            selections: selections_from_index(i),
+            kind: state::Kind::Transaction,
+        })
+    }
+
+    /// Helper struct to compare expected states
+    /// without relying on database-assigned fields, since
+    /// these are not predictable.
+    #[derive(Debug, PartialEq, Eq)]
+    struct TestState {
+        // `id` is assigned by the database.
+        summary: Option<String>,
+        description: Option<String>,
+        selections: Vec<Selection>,
+        // `created` is assigned by the database.
+        kind: state::Kind,
+    }
+
+    impl PartialEq<State> for TestState {
+        fn eq(&self, other: &State) -> bool {
+            self.summary == other.summary
+                && self.description == other.description
+                && self.selections == other.selections
+                && self.kind == other.kind
+        }
+    }
+
+    impl From<State> for TestState {
+        fn from(test_state: State) -> Self {
+            Self {
+                summary: test_state.summary,
+                description: test_state.description,
+                selections: test_state.selections,
+                kind: test_state.kind,
+            }
+        }
     }
 }
