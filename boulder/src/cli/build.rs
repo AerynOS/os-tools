@@ -111,11 +111,22 @@ pub fn handle(command: Command, env: Env) -> Result<(), Error> {
 
     // Set the current thread priority to SCHED_BATCH so that it's inherited by all child processes
     if !normal_priority {
-        thread_priority::set_thread_priority_and_policy(
+        println!("Changing boulder thread priority to SCHED_BATCH during build:");
+        match thread_priority::set_thread_priority_and_policy(
             thread_native_id(),
             ThreadPriority::Min,
             ThreadSchedulePolicy::Normal(NormalThreadSchedulePolicy::Batch),
-        )?;
+        ) {
+            Ok(_) => {
+                println!("└─ priority set.\n");
+            }
+            Err(e) => {
+                println!("└─ unable to change boulder thread scheduling priority to SCHED_BATCH.");
+                println!("   └─ '{e:?}'");
+                println!("   └─ ignoring inconsequential error.\n");
+            }
+        }
+        println!("Continuing build:\n");
     }
 
     // hold a fd

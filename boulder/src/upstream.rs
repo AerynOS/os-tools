@@ -133,7 +133,7 @@ pub fn sync(
     share_dir: &Path,
 ) -> Result<Vec<Stored>, Error> {
     println!();
-    println!("Sharing {} upstream(s) with the build container", upstreams.len());
+    println!("Sharing {} upstream(s) with the build container:", upstreams.len());
 
     let mp = MultiProgress::new();
     let tp = mp.add(
