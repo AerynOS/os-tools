@@ -1,7 +1,6 @@
 -- SPDX-FileCopyrightText: 2024 AerynOS Developers
 -- SPDX-License-Identifier: MPL-2.0
 
--- Your SQL goes here
 CREATE TABLE IF NOT EXISTS meta (
     package TEXT NOT NULL PRIMARY KEY,
     name TEXT NOT NULL,

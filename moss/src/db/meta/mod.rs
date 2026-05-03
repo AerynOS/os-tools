@@ -1,23 +1,21 @@
 // SPDX-FileCopyrightText: 2023 AerynOS Developers
 // SPDX-License-Identifier: MPL-2.0
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
+use std::iter;
 
-use astr::AStr;
-use diesel::prelude::*;
-use diesel::{Connection as _, SqliteConnection};
-use diesel_migrations::{EmbeddedMigrations, MigrationHarness, embed_migrations};
+use indoc::indoc;
 
-use crate::db::Connection;
+use crate::db::{Connection, migrations::Migrations};
 use crate::package::{self, Meta};
 use crate::{Dependency, Provider};
 
 pub use super::Error;
-use super::MAX_VARIABLE_NUMBER;
 
-const MIGRATIONS: EmbeddedMigrations = embed_migrations!("src/db/meta/migrations");
+mod types;
 
-mod schema;
+const SCHEMAS: &[&str] = &[include_str!("schemas/v1_up.sql")];
+const MIGRATIONS: Migrations = Migrations::new(SCHEMAS);
 
 #[derive(Debug)]
 pub enum Filter<'a> {
@@ -25,451 +23,191 @@ pub enum Filter<'a> {
     Dependency(Dependency),
     Name(package::Name),
     Keyword(&'a str),
+    All,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct Database {
     conn: Connection,
 }
 
 impl Database {
     pub fn new(url: &str) -> Result<Self, Error> {
-        let mut conn = SqliteConnection::establish(url)?;
-
-        conn.run_pending_migrations(MIGRATIONS).map_err(Error::Migration)?;
-
+        let mut conn = rusqlite::Connection::open(url)?;
+        MIGRATIONS.migrate(&mut conn, MIGRATIONS.latest())?;
         Ok(Database {
             conn: Connection::new(conn),
         })
     }
 
     pub fn wipe(&self) -> Result<(), Error> {
-        self.conn.exclusive_tx(|tx| {
-            // Cascading wipes other tables
-            diesel::delete(model::meta::table).execute(tx)?;
-            Ok(())
-        })
+        self.conn
+            .exec(|conn| Ok(conn.execute("DELETE FROM meta", []).map(|_| ())?))
     }
 
     pub fn get(&self, package: &package::Id) -> Result<Meta, Error> {
         self.conn.exec(|conn| {
-            let meta = model::meta::table
-                .select(model::Meta::as_select())
-                .find(package.to_string())
-                .first::<model::Meta>(conn)?;
-            let licenses = model::License::belonging_to(&meta)
-                .select(model::meta_licenses::license)
-                .load::<String>(conn)?;
-            let dependencies = model::Dependency::belonging_to(&meta)
-                .select(model::Dependency::as_select())
-                .load_iter(conn)?
-                .map(|d| Ok(d?.dependency))
-                .collect::<Result<_, Error>>()?;
-            let providers = model::Provider::belonging_to(&meta)
-                .select(model::Provider::as_select())
-                .load_iter(conn)?
-                .map(|p| Ok(p?.provider))
-                .collect::<Result<_, Error>>()?;
-            let conflicts = model::Conflict::belonging_to(&meta)
-                .select(model::Conflict::as_select())
-                .load_iter(conn)?
-                .map(|p| Ok(p?.conflict))
-                .collect::<Result<_, Error>>()?;
-
-            Ok(Meta {
-                name: meta.name,
-                version_identifier: meta.version_identifier,
-                source_release: meta.source_release as u64,
-                build_release: meta.build_release as u64,
-                architecture: meta.architecture,
-                summary: meta.summary,
-                description: meta.description,
-                source_id: meta.source_id,
-                homepage: meta.homepage,
-                licenses,
-                dependencies,
-                providers,
-                conflicts,
-                uri: meta.uri,
-                hash: meta.hash,
-                download_size: meta.download_size.map(|size| size as u64),
-            })
+            let query = format!("{META_QUERY} WHERE m.package = ? GROUP BY m.package");
+            let mut stmt = conn.prepare(&query)?;
+            stmt.query_one([package.as_str()], |row| row.try_into())
+                .map_err(Error::from)
         })
     }
 
     pub fn provider_packages(&self, provider: &Provider) -> Result<Vec<package::Id>, Error> {
         self.conn.exec(|conn| {
-            model::meta_providers::table
-                .select(model::meta_providers::package)
-                .distinct()
-                .filter(model::meta_providers::provider.eq(provider.to_string()))
-                .load_iter::<AStr, _>(conn)?
-                .map(|result| {
-                    let id = result?;
-                    Ok(id.into())
-                })
-                .collect()
+            let mut stmt = conn.prepare("SELECT package FROM meta_providers WHERE provider = ?")?;
+            stmt.query_and_then([provider.to_string()], |row| {
+                Ok(package::Id::from(row.get::<_, String>(0)?))
+            })?
+            .collect()
         })
     }
 
-    pub fn query(&self, filter: Option<Filter<'_>>) -> Result<Vec<(package::Id, Meta)>, Error> {
+    pub fn query(&self, filter: Filter<'_>) -> Result<Vec<(package::Id, Meta)>, Error> {
         self.conn.exec(|conn| {
-            let map_row = |result| {
-                let meta: model::Meta = result?;
+            let (where_, having, params) = match &filter {
+                // These filters operate on the one-to-many relationships of of the meta table,
+                // so they use the HAVING clause.
+                Filter::Provider(provider) => ("", "HAVING SUM(mp.provider = ?) > 0", [provider.to_string()]),
+                Filter::Dependency(dependency) => ("", "HAVING SUM(md.dependency = ?) > 0", [dependency.to_string()]),
 
-                Ok((
-                    package::Id::from(AStr::from(meta.package)),
-                    Meta {
-                        name: meta.name,
-                        version_identifier: meta.version_identifier,
-                        source_release: meta.source_release as u64,
-                        build_release: meta.build_release as u64,
-                        architecture: meta.architecture,
-                        summary: meta.summary,
-                        description: meta.description,
-                        source_id: meta.source_id,
-                        homepage: meta.homepage,
-                        licenses: Default::default(),
-                        dependencies: Default::default(),
-                        providers: Default::default(),
-                        conflicts: Default::default(),
-                        uri: meta.uri,
-                        hash: meta.hash,
-                        download_size: meta.download_size.map(|size| size as u64),
-                    },
-                ))
+                // These filters operate directly on the meta table,
+                // so they use the WHERE clause.
+                Filter::Name(name) => ("WHERE name = ?", "", [name.to_string()]),
+                Filter::Keyword(keyword) => (
+                    "WHERE name LIKE concat('%', ?1, '%') OR summary LIKE concat('%', ?1, '%')",
+                    "",
+                    [keyword.to_string()],
+                ),
+
+                Filter::All => ("", "", ["".to_string()]),
             };
 
-            let mut entries: BTreeMap<package::Id, Meta> = match &filter {
-                Some(Filter::Provider(provider)) => model::meta::table
-                    .select(model::Meta::as_select())
-                    .inner_join(model::meta_providers::table)
-                    .filter(model::meta_providers::provider.eq(provider.to_string()))
-                    .load_iter::<model::Meta, _>(conn)?,
-                Some(Filter::Dependency(dependency)) => model::meta::table
-                    .select(model::Meta::as_select())
-                    .inner_join(model::meta_dependencies::table)
-                    .filter(model::meta_dependencies::dependency.eq(dependency.to_string()))
-                    .load_iter::<model::Meta, _>(conn)?,
-                Some(Filter::Name(name)) => model::meta::table
-                    .select(model::Meta::as_select())
-                    .filter(model::meta::name.eq(name.to_string()))
-                    .load_iter::<model::Meta, _>(conn)?,
-                Some(Filter::Keyword(keyword)) => {
-                    let pattern = format!("%{keyword}%");
-                    model::meta::table
-                        .select(model::Meta::as_select())
-                        .filter(
-                            model::meta::name
-                                .like(pattern.clone())
-                                .or(model::meta::summary.like(pattern)),
-                        )
-                        .load_iter::<model::Meta, _>(conn)?
-                }
-                None => model::meta::table
-                    .select(model::Meta::as_select())
-                    .load_iter::<model::Meta, _>(conn)?,
+            let query = format!("{META_QUERY} {where_} GROUP BY m.package {having}");
+
+            let mut stmt = conn.prepare(&query)?;
+            let mut rows = if let Filter::All = filter {
+                stmt.query([])
+            } else {
+                stmt.query(params)
+            }?;
+
+            let mut metas = Vec::new();
+            while let Some(row) = rows.next()? {
+                metas.push((row.get::<_, String>("package")?.into(), row.try_into()?));
             }
-            .map(map_row)
-            .collect::<Result<_, Error>>()?;
-
-            let package_ids = entries
-                .keys()
-                .map(|id| model::PackageId { id: id.to_string() })
-                .collect::<Vec<_>>();
-
-            for chunk in package_ids.chunks(MAX_VARIABLE_NUMBER) {
-                // Add licenses
-                model::License::belonging_to(chunk)
-                    .load_iter::<model::License, _>(conn)?
-                    .try_for_each::<_, Result<_, Error>>(|result| {
-                        let row = result?;
-                        if let Some(meta) = entries.get_mut(row.package.as_str()) {
-                            meta.licenses.push(row.license);
-                        }
-                        Ok(())
-                    })?;
-
-                // Add dependencies
-                model::Dependency::belonging_to(chunk)
-                    .load_iter::<model::Dependency, _>(conn)?
-                    .try_for_each::<_, Result<_, Error>>(|result| {
-                        let row = result?;
-                        if let Some(meta) = entries.get_mut(row.package.as_str()) {
-                            meta.dependencies.insert(row.dependency);
-                        }
-                        Ok(())
-                    })?;
-
-                // Add providers
-                model::Provider::belonging_to(chunk)
-                    .load_iter::<model::Provider, _>(conn)?
-                    .try_for_each::<_, Result<_, Error>>(|result| {
-                        let row = result?;
-                        if let Some(meta) = entries.get_mut(row.package.as_str()) {
-                            meta.providers.insert(row.provider);
-                        }
-                        Ok(())
-                    })?;
-
-                // Add conflicts
-                model::Conflict::belonging_to(chunk)
-                    .load_iter::<model::Conflict, _>(conn)?
-                    .try_for_each::<_, Result<_, Error>>(|result| {
-                        let row = result?;
-                        if let Some(meta) = entries.get_mut(row.package.as_str()) {
-                            meta.conflicts.insert(row.conflict);
-                        }
-                        Ok(())
-                    })?;
-            }
-
-            Ok(entries.into_iter().collect())
+            Ok(metas)
         })
     }
 
     pub fn package_ids(&self) -> Result<BTreeSet<package::Id>, Error> {
         self.conn.exec(|conn| {
-            Ok(model::meta::table
-                .select(model::meta::package)
-                .distinct()
-                .load_iter::<AStr, _>(conn)?
-                .map(|result| result.map(package::Id::from))
-                .collect::<Result<_, _>>()?)
+            let mut stmt = conn.prepare("SELECT package FROM meta")?;
+            stmt.query_and_then([], |row| {
+                let id = row.get::<_, String>(0)?.into();
+                Ok(id)
+            })?
+            .collect()
         })
     }
 
     pub fn file_hashes(&self) -> Result<BTreeSet<String>, Error> {
         self.conn.exec(|conn| {
-            Ok(model::meta::table
-                .select(model::meta::hash.assume_not_null())
-                .filter(model::meta::hash.is_not_null())
-                .distinct()
-                .load_iter::<String, _>(conn)?
-                .collect::<Result<_, _>>()?)
+            let mut stmt = conn.prepare("SELECT hash FROM meta WHERE hash IS NOT NULL")?;
+            stmt.query_and_then([], |row| Ok(row.get::<_, String>(0)?))?.collect()
         })
     }
 
-    pub fn add(&self, id: package::Id, meta: Meta) -> Result<(), Error> {
+    pub fn add(&mut self, id: package::Id, meta: Meta) -> Result<(), Error> {
         self.batch_add(vec![(id, meta)])
     }
 
-    pub fn batch_add(&self, packages: Vec<(package::Id, Meta)>) -> Result<(), Error> {
-        self.conn.exclusive_tx(|tx| {
-            let ids = packages.iter().map(|(id, _)| id.as_str()).collect::<Vec<_>>();
-            let entries = packages
-                .iter()
-                .map(|(package, meta)| model::NewMeta {
-                    package: package.as_str(),
-                    name: meta.name.as_str(),
-                    version_identifier: &meta.version_identifier,
-                    source_release: meta.source_release as i32,
-                    build_release: meta.build_release as i32,
-                    architecture: &meta.architecture,
-                    summary: &meta.summary,
-                    description: &meta.description,
-                    source_id: &meta.source_id,
-                    homepage: &meta.homepage,
-                    uri: meta.uri.as_deref(),
-                    hash: meta.hash.as_deref(),
-                    download_size: meta.download_size.map(|size| size as i64),
-                })
-                .collect::<Vec<_>>();
-            let licenses = packages
-                .iter()
-                .flat_map(|(package, meta)| {
-                    meta.licenses.iter().map(|license| {
-                        (
-                            model::meta_licenses::package.eq(package.as_str()),
-                            model::meta_licenses::license.eq(license),
-                        )
-                    })
-                })
-                .collect::<Vec<_>>();
-            let dependencies = packages
-                .iter()
-                .flat_map(|(package, meta)| {
-                    meta.dependencies.iter().map(|dependency| {
-                        (
-                            model::meta_dependencies::package.eq(package.as_str()),
-                            model::meta_dependencies::dependency.eq(dependency.to_string()),
-                        )
-                    })
-                })
-                .collect::<Vec<_>>();
-            let providers = packages
-                .iter()
-                .flat_map(|(package, meta)| {
-                    meta.providers.iter().map(|provider| {
-                        (
-                            model::meta_providers::package.eq(package.as_str()),
-                            model::meta_providers::provider.eq(provider.to_string()),
-                        )
-                    })
-                })
-                .collect::<Vec<_>>();
-            let conflicts = packages
-                .iter()
-                .flat_map(|(package, meta)| {
-                    meta.conflicts.iter().map(|conflict| {
-                        (
-                            model::meta_conflicts::package.eq(package.as_str()),
-                            model::meta_conflicts::conflict.eq(conflict.to_string()),
-                        )
-                    })
-                })
-                .collect::<Vec<_>>();
+    pub fn batch_add(&mut self, packages: Vec<(package::Id, Meta)>) -> Result<(), Error> {
+        self.conn.exec_mut(|conn| {
+            let tx = conn.transaction()?;
+            {
+                let mut meta = tx.prepare(indoc! {"
+                    INSERT OR REPLACE
+                    INTO meta
+                        (package, name, version_identifier, source_release, build_release,
+                        architecture, summary, description, source_id, homepage, uri,
+                        hash, download_size)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                "})?;
+                let mut licenses = tx.prepare("INSERT INTO meta_licenses (package, license) VALUES (?, ?)")?;
+                let mut dependencies =
+                    tx.prepare("INSERT INTO meta_dependencies (package, dependency) VALUES (?, ?)")?;
+                let mut providers = tx.prepare("INSERT INTO meta_providers (package, provider) VALUES (?, ?)")?;
+                let mut conflicts = tx.prepare("INSERT INTO meta_conflicts (package, conflict) VALUES (?, ?)")?;
 
-            batch_remove_impl(&ids, tx)?;
-
-            for chunk in entries.chunks(MAX_VARIABLE_NUMBER / 13) {
-                diesel::insert_into(model::meta::table).values(chunk).execute(tx)?;
+                for (id, val) in packages.iter() {
+                    meta.execute((
+                        id.to_string(),
+                        val.name.to_string(),
+                        &val.version_identifier,
+                        val.source_release as i32,
+                        val.build_release as i32,
+                        &val.architecture,
+                        &val.summary,
+                        &val.description,
+                        &val.source_id,
+                        &val.homepage,
+                        val.uri.as_deref(),
+                        val.hash.as_deref(),
+                        val.download_size.map(|size| size as i64),
+                    ))?;
+                    for license in &val.licenses {
+                        licenses.execute((id.to_string(), license))?;
+                    }
+                    for dep in &val.dependencies {
+                        dependencies.execute((id.to_string(), dep.to_string()))?;
+                    }
+                    for prov in &val.providers {
+                        providers.execute((id.to_string(), prov.to_string()))?;
+                    }
+                    for conf in &val.conflicts {
+                        conflicts.execute((id.to_string(), conf.to_string()))?;
+                    }
+                }
             }
-            for chunk in licenses.chunks(MAX_VARIABLE_NUMBER / 2) {
-                diesel::insert_or_ignore_into(model::meta_licenses::table)
-                    .values(chunk)
-                    .execute(tx)?;
-            }
-            for chunk in dependencies.chunks(MAX_VARIABLE_NUMBER / 2) {
-                diesel::insert_or_ignore_into(model::meta_dependencies::table)
-                    .values(chunk)
-                    .execute(tx)?;
-            }
-            for chunk in providers.chunks(MAX_VARIABLE_NUMBER / 2) {
-                diesel::insert_or_ignore_into(model::meta_providers::table)
-                    .values(chunk)
-                    .execute(tx)?;
-            }
-            for chunk in conflicts.chunks(MAX_VARIABLE_NUMBER / 2) {
-                diesel::insert_or_ignore_into(model::meta_conflicts::table)
-                    .values(chunk)
-                    .execute(tx)?;
-            }
-
-            Ok(())
+            Ok(tx.commit()?)
         })
     }
 
-    pub fn remove(&self, package: &package::Id) -> Result<(), Error> {
-        self.batch_remove(Some(package))
+    pub fn remove(&mut self, package: &package::Id) -> Result<(), Error> {
+        self.batch_remove(iter::once(package))
     }
 
-    pub fn batch_remove<'a>(&self, packages: impl IntoIterator<Item = &'a package::Id>) -> Result<(), Error> {
-        self.conn.exclusive_tx(|tx| {
-            let packages = packages.into_iter().map(package::Id::as_str).collect::<Vec<_>>();
-            batch_remove_impl(&packages, tx)?;
-            Ok(())
+    pub fn batch_remove<'a>(&mut self, packages: impl IntoIterator<Item = &'a package::Id>) -> Result<(), Error> {
+        self.conn.exec_mut(|conn| {
+            let tx = conn.transaction()?;
+            {
+                let mut stmt = tx.prepare("DELETE FROM meta WHERE package = ?")?;
+                for package in packages {
+                    stmt.execute((package.to_string(),))?;
+                }
+            }
+            Ok(tx.commit()?)
         })
     }
 }
 
-fn batch_remove_impl(packages: &[&str], tx: &mut SqliteConnection) -> Result<(), Error> {
-    for chunk in packages.chunks(MAX_VARIABLE_NUMBER) {
-        diesel::delete(model::meta::table.filter(model::meta::package.eq_any(chunk))).execute(tx)?;
-    }
-    Ok(())
-}
-
-mod model {
-    use diesel::{
-        Selectable,
-        associations::{Associations, Identifiable},
-        deserialize::Queryable,
-        prelude::Insertable,
-    };
-
-    pub use crate::db::meta::schema::{meta, meta_conflicts, meta_dependencies, meta_licenses, meta_providers};
-    use crate::package;
-
-    #[derive(Queryable, Selectable, Identifiable)]
-    #[diesel(table_name = meta)]
-    #[diesel(primary_key(package))]
-    pub struct Meta {
-        pub package: String,
-        #[diesel(deserialize_as = String)]
-        pub name: package::Name,
-        pub version_identifier: String,
-        pub source_release: i32,
-        pub build_release: i32,
-        pub architecture: String,
-        pub summary: String,
-        pub description: String,
-        pub source_id: String,
-        pub homepage: String,
-        pub uri: Option<String>,
-        pub hash: Option<String>,
-        pub download_size: Option<i64>,
-    }
-
-    #[derive(Queryable, Selectable, Identifiable)]
-    #[diesel(table_name = meta)]
-    #[diesel(primary_key(package))]
-    pub struct PackageId {
-        #[diesel(column_name = "package")]
-        pub id: String,
-    }
-
-    #[derive(Queryable, Selectable, Identifiable, Associations)]
-    #[diesel(table_name = meta_licenses)]
-    #[diesel(primary_key(package, license))]
-    #[diesel(belongs_to(Meta, foreign_key = package))]
-    #[diesel(belongs_to(PackageId, foreign_key = package))]
-    pub struct License {
-        pub package: String,
-        pub license: String,
-    }
-
-    #[derive(Queryable, Selectable, Identifiable, Associations)]
-    #[diesel(table_name = meta_dependencies)]
-    #[diesel(primary_key(package, dependency))]
-    #[diesel(belongs_to(Meta, foreign_key = package))]
-    #[diesel(belongs_to(PackageId, foreign_key = package))]
-    pub struct Dependency {
-        pub package: String,
-        #[diesel(deserialize_as = String)]
-        pub dependency: crate::Dependency,
-    }
-
-    #[derive(Queryable, Selectable, Identifiable, Associations)]
-    #[diesel(table_name = meta_providers)]
-    #[diesel(primary_key(package, provider))]
-    #[diesel(belongs_to(Meta, foreign_key = package))]
-    #[diesel(belongs_to(PackageId, foreign_key = package))]
-    pub struct Provider {
-        pub package: String,
-        #[diesel(deserialize_as = String)]
-        pub provider: crate::Provider,
-    }
-
-    #[derive(Queryable, Selectable, Identifiable, Associations)]
-    #[diesel(table_name = meta_conflicts)]
-    #[diesel(primary_key(package, conflict))]
-    #[diesel(belongs_to(Meta, foreign_key = package))]
-    #[diesel(belongs_to(PackageId, foreign_key = package))]
-    pub struct Conflict {
-        pub package: String,
-        #[diesel(deserialize_as = String)]
-        pub conflict: crate::Provider,
-    }
-
-    #[derive(Insertable)]
-    #[diesel(table_name = meta)]
-    pub struct NewMeta<'a> {
-        pub package: &'a str,
-        pub name: &'a str,
-        pub version_identifier: &'a str,
-        pub source_release: i32,
-        pub build_release: i32,
-        pub architecture: &'a str,
-        pub summary: &'a str,
-        pub description: &'a str,
-        pub source_id: &'a str,
-        pub homepage: &'a str,
-        pub uri: Option<&'a str>,
-        pub hash: Option<&'a str>,
-        pub download_size: Option<i64>,
-    }
-}
+const META_QUERY: &str = indoc! {"
+    SELECT
+        m.*,
+        json_group_array(DISTINCT ml.license)        AS licenses,
+        json_group_array(DISTINCT md.dependency)
+            FILTER (WHERE md.dependency IS NOT NULL) AS dependencies,
+        json_group_array(DISTINCT mp.provider)       AS providers,
+        json_group_array(DISTINCT mc.conflict)
+            FILTER (WHERE mc.conflict IS NOT NULL)   AS conflicts
+    FROM meta m
+    JOIN meta_licenses ml ON m.package = ml.package
+    LEFT JOIN meta_dependencies md ON m.package = md.package
+    JOIN meta_providers mp ON m.package = mp.package
+    LEFT JOIN meta_conflicts mc ON m.package = mc.package
+"};
 
 #[cfg(test)]
 mod test {
@@ -488,12 +226,12 @@ mod test {
     #[test]
     fn db_wipes_all_entries() -> Result<(), Error> {
         let entries = all_entries().take(10).collect::<Vec<_>>();
-        let db = Database::new(":memory:")?;
+        let mut db = Database::new(":memory:")?;
         db.batch_add(entries.clone())?;
 
-        assert!(!db.query(None)?.is_empty());
+        assert!(!db.query(Filter::All)?.is_empty());
         db.wipe()?;
-        assert!(db.query(None)?.is_empty());
+        assert!(db.query(Filter::All)?.is_empty());
         Ok(())
     }
 
@@ -533,7 +271,7 @@ mod test {
             })
             .sorted_by(|(id1, _), (id2, _)| id1.cmp(&id2));
 
-        let mut entries = SHARED_DB.query(Some(Filter::Provider(common_provider())))?;
+        let mut entries = SHARED_DB.query(Filter::Provider(common_provider()))?;
         entries.sort_by(|(id1, _), (id2, _)| id1.cmp(&id2));
 
         itertools::assert_equal(entries.into_iter(), expected_entries);
@@ -557,7 +295,7 @@ mod test {
             })
             .sorted_by(|(id1, _), (id2, _)| id1.cmp(&id2));
 
-        let mut entries = SHARED_DB.query(Some(Filter::Dependency(dependency)))?;
+        let mut entries = SHARED_DB.query(Filter::Dependency(dependency))?;
         entries.sort_by(|(id1, _), (id2, _)| id1.cmp(&id2));
 
         itertools::assert_equal(entries.into_iter(), expected_entries);
@@ -568,10 +306,7 @@ mod test {
     fn db_queries_by_name() -> Result<(), Error> {
         let mut expected_entries = all_entries().nth((NUM_ENTRIES / 2) as usize).unwrap();
         expected_entries.1.licenses.sort(); // FIXME: See db_gets_meta_of_package_id().
-        let meta = SHARED_DB.query(Some(Filter::Name(package::Name::from(format!(
-            "Name {}",
-            NUM_ENTRIES / 2
-        )))))?;
+        let meta = SHARED_DB.query(Filter::Name(package::Name::from(format!("Name {}", NUM_ENTRIES / 2))))?;
         itertools::assert_equal(meta.into_iter(), iter::once(expected_entries));
         Ok(())
     }
@@ -587,7 +322,7 @@ mod test {
                     (id, meta)
                 })
                 .sorted_by(|(id1, _), (id2, _)| id1.cmp(&id2));
-            let mut entries = SHARED_DB.query(Some(Filter::Keyword("Summary")))?;
+            let mut entries = SHARED_DB.query(Filter::Keyword("Summary"))?;
             entries.sort_by(|(id1, _), (id2, _)| id1.cmp(&id2));
             itertools::assert_equal(entries.into_iter(), expected_entries);
         }
@@ -603,7 +338,7 @@ mod test {
                     }
                 })
                 .sorted_by(|(id1, _), (id2, _)| id1.cmp(&id2));
-            let mut entries = SHARED_DB.query(Some(Filter::Keyword("Name 10")))?;
+            let mut entries = SHARED_DB.query(Filter::Keyword("Name 10"))?;
             entries.sort_by(|(id1, _), (id2, _)| id1.cmp(&id2));
             itertools::assert_equal(entries.into_iter(), expected_entries);
         }
@@ -619,7 +354,7 @@ mod test {
                 (id, meta)
             })
             .sorted_by(|(id1, _), (id2, _)| id1.cmp(id2));
-        let mut entries = SHARED_DB.query(None)?;
+        let mut entries = SHARED_DB.query(Filter::All)?;
         entries.sort_by(|(id1, _), (id2, _)| id1.cmp(id2));
         itertools::assert_equal(entries.into_iter(), expected_entries);
         Ok(())
@@ -647,20 +382,20 @@ mod test {
     fn db_adds_one_entry() -> Result<(), Error> {
         let (expected_id, mut expected_meta) = all_entries().next().unwrap();
         expected_meta.licenses.sort(); // FIXME: See db_gets_meta_of_package_id().
-        let db = Database::new(":memory:")?;
+        let mut db = Database::new(":memory:")?;
         db.add(expected_id.clone(), expected_meta.clone())?;
 
-        let entries = db.query(None)?;
+        let entries = db.query(Filter::All)?;
         itertools::assert_equal(entries.into_iter(), iter::once((expected_id, expected_meta)));
         Ok(())
     }
 
     #[test]
     fn db_adds_multiple_entries() -> Result<(), Error> {
-        let db = Database::new(":memory:")?;
+        let mut db = Database::new(":memory:")?;
         db.batch_add(all_entries().take((NUM_ENTRIES / 2) as usize).collect())?;
 
-        let mut entries = db.query(None)?;
+        let mut entries = db.query(Filter::All)?;
         entries.sort_by(|(id1, _), (id2, _)| id1.cmp(id2));
 
         let expected_entries = all_entries()
@@ -684,12 +419,12 @@ mod test {
             })
             .sorted_by(|(id1, _), (id2, _)| id1.cmp(id2))
             .collect::<Vec<_>>();
-        let db = Database::new(":memory:")?;
+        let mut db = Database::new(":memory:")?;
         db.batch_add(all_entries.clone())?;
 
         db.remove(&all_entries.last().unwrap().0)?;
 
-        let mut entries = db.query(None)?;
+        let mut entries = db.query(Filter::All)?;
         entries.sort_by(|(id1, _), (id2, _)| id1.cmp(id2));
         itertools::assert_equal(entries.into_iter(), all_entries.into_iter().take(9));
         Ok(())
@@ -705,12 +440,12 @@ mod test {
             })
             .sorted_by(|(id1, _), (id2, _)| id1.cmp(id2))
             .collect::<Vec<_>>();
-        let db = Database::new(":memory:")?;
+        let mut db = Database::new(":memory:")?;
         db.batch_add(all_entries.clone())?;
 
         db.batch_remove(&all_entries.iter().take(5).map(|(id, _)| id.clone()).collect::<Vec<_>>())?;
 
-        let mut entries = db.query(None)?;
+        let mut entries = db.query(Filter::All)?;
         entries.sort_by(|(id1, _), (id2, _)| id1.cmp(id2));
         itertools::assert_equal(entries.into_iter(), all_entries.into_iter().skip(5));
         Ok(())
@@ -720,7 +455,7 @@ mod test {
 
     static SHARED_DB: LazyLock<Database> = LazyLock::new(|| {
         let entries = all_entries().collect::<Vec<_>>();
-        let db = Database::new(":memory:").unwrap();
+        let mut db = Database::new(":memory:").unwrap();
         db.batch_add(entries).unwrap();
         db
     });
