@@ -80,7 +80,12 @@ reqwest = { version = "0.13.2", default-features = false, features = [
     "blocking",
     "json",
 ] }
-rusqlite = { version = "0.39.0", features = ["bundled"] }
+rusqlite = { version = "0.39.0", features = [
+    "array",
+    "bundled",
+    "chrono",
+    "limits",
+] }
 serde = { version = "1.0.223", features = ["derive"] }
 serde_core = "1.0.223"
 serde_json = "1.0.145"
