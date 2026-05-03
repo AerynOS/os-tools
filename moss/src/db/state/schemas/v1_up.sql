@@ -1,8 +1,6 @@
 -- SPDX-FileCopyrightText: 2024 AerynOS Developers
 -- SPDX-License-Identifier: MPL-2.0
 
--- Your SQL goes here
-
 CREATE TABLE IF NOT EXISTS state (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     type TEXT NOT NULL,
