@@ -100,7 +100,7 @@ async fn write_to_file<T: AsyncRead + Unpin>(reader: &mut T, to: &Path) -> Resul
 }
 
 /// Fetch a resource at the provided [`Url`] and return an async reader over its bytes
-async fn fetch(url: Url) -> Result<Box<dyn AsyncRead + Unpin>, Error> {
+async fn fetch(url: Url) -> Result<Box<dyn AsyncRead + Unpin + Send>, Error> {
     if let Some(path) = &url.to_file_path().ok() {
         Ok(Box::new(BufReader::with_capacity(
             environment::FILE_READ_BUFFER_SIZE,
