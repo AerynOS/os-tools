@@ -206,35 +206,33 @@ pub fn synchronize(client: &Client, state: &State) -> Result<(), Error> {
     // pipe all of our entries into blsforme
     let mut entries = all_kernels
         .iter()
-        .flat_map(|(kernels, state_id)| {
-            kernels
-                .iter()
-                .filter_map(|k| {
-                    let sysroot = if state.id == *state_id {
-                        root.clone()
-                    } else {
-                        client.installation.root_path(state_id.to_string()).to_owned()
-                    };
+        .flat_map(|&(ref kernels, state_id)| {
+            let rootref = &root;
+            kernels.iter().filter_map(move |k| {
+                let sysroot = if state.id == state_id {
+                    rootref.clone()
+                } else {
+                    client.installation.root_path(state_id.to_string()).to_owned()
+                };
 
-                    if !sysroot.exists() {
-                        return None;
-                    }
+                if !sysroot.exists() {
+                    return None;
+                }
 
-                    let local_schema = os_schema_for_root(&sysroot).ok();
-                    let entry = Entry::new(k)
-                        .with_cmdline(CmdlineEntry {
-                            name: "---fstx---".to_owned(),
-                            snippet: format!("moss.fstx={state_id}"),
-                        })
-                        .with_state_id(i32::from(*state_id))
-                        .with_sysroot(sysroot);
+                let local_schema = os_schema_for_root(&sysroot).ok();
+                let entry = Entry::new(k)
+                    .with_cmdline(CmdlineEntry {
+                        name: "---fstx---".to_owned(),
+                        snippet: format!("moss.fstx={state_id}"),
+                    })
+                    .with_state_id(i32::from(state_id))
+                    .with_sysroot(sysroot);
 
-                    match local_schema {
-                        Some(schema) => Some(entry.with_schema(schema)),
-                        None => Some(entry),
-                    }
-                })
-                .collect::<Vec<_>>()
+                match local_schema {
+                    Some(schema) => Some(entry.with_schema(schema)),
+                    None => Some(entry),
+                }
+            })
         })
         .collect::<Vec<_>>();
 
@@ -243,6 +241,7 @@ pub fn synchronize(client: &Client, state: &State) -> Result<(), Error> {
             log::warn!("Failed to load cmdline snippets: {e}");
         }
     }
+
     // no usable entries, lets get out of here.
     if entries.is_empty() {
         return Ok(());
