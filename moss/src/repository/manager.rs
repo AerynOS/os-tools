@@ -16,10 +16,13 @@ use xxhash_rust::xxh3::xxh3_64;
 
 use tui::{MultiProgress, ProgressBar, ProgressStyle, Styled};
 
-use crate::db::meta;
-use crate::repository::{self, Format, Repository, format};
-use crate::{Installation, package, request};
-use crate::{environment, runtime};
+use crate::{
+    Installation,
+    db::meta,
+    environment, package,
+    repository::{self, Format, Repository, format},
+    runtime,
+};
 
 enum Source {
     System(config::Manager),
@@ -443,40 +446,23 @@ async fn resolve_index_from_root(
     out_dir: &Path,
     source: &repository::RootIndexSource,
 ) -> Result<Url, Error> {
-    let root_index_uri = source.uri();
-
-    let root_index = request::download_json::<format::RootIndex>(root_index_uri.clone())
-        .await
-        .map_err(|err| Error::FetchRootIndex(err, root_index_uri.clone()))?;
-
-    let (history_ident, history_meta) = root_index
-        .resolve_version_to_history(&source.version)
-        .ok_or_else(|| Error::MissingRootIndexVersion(source.version.clone()))?;
-
-    if matches!(history_meta.format, Format::Unsupported(_)) {
-        let upgrade_via_index_uri = root_index
-            .formats
-            .v0
-            .upgrade_via
-            .as_ref()
-            .map(|version| {
-                root_index
-                    .resolve_version_to_history(version)
-                    .ok_or_else(|| Error::MissingRootIndexVersion(version.clone()))
-            })
-            .transpose()?
-            .map(|(ident, _)| source.history_index_uri(ident));
-
-        return Err(Error::UnsupportedRepos(vec![UnsupportedRepoFormat {
-            repository: state.clone(),
+    let index_uri = match source.resolve_history_index_uri().await? {
+        repository::ResolvedHistoryIndexUri::Supported(uri) => uri,
+        repository::ResolvedHistoryIndexUri::Unsupported {
+            format,
+            version,
             root_index_uri,
             upgrade_via_index_uri,
-            version: source.version.clone(),
-            format: history_meta.format.clone(),
-        }]));
-    }
-
-    let index_uri = source.history_index_uri(history_ident);
+        } => {
+            return Err(Error::UnsupportedRepos(vec![UnsupportedRepoFormat {
+                repository: state.clone(),
+                root_index_uri,
+                upgrade_via_index_uri,
+                version,
+                format,
+            }]));
+        }
+    };
 
     fs_err::tokio::write(out_dir.join("index-uri"), index_uri.as_str().as_bytes())
         .await
@@ -509,8 +495,8 @@ pub enum Error {
     SaveConfig(#[source] config::SaveError),
     #[error("unknown repo")]
     UnknownRepo(repository::Id),
-    #[error("fetch & decode root index file: {1}")]
-    FetchRootIndex(#[source] request::Error, Url),
+    #[error("resolve history index uri from root index")]
+    ResolveHistoryIndexUri(#[from] repository::ResolveHistoryIndexUriError),
     #[error("root index doesn't have version identifier {0}")]
     MissingRootIndexVersion(format::ScopedIdentifier),
     #[error("read cached index uri")]
