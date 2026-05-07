@@ -8,17 +8,21 @@ use std::time::Duration;
 
 use astr::AStr;
 use fs_err::{self as fs, File};
-use futures_util::{StreamExt, TryStreamExt, stream};
+use futures_util::{StreamExt, stream};
 use stone::{StoneDecodedPayload, StonePayloadMetaTag, StoneReadError};
 use thiserror::Error;
+use url::Url;
 use xxhash_rust::xxh3::xxh3_64;
 
 use tui::{MultiProgress, ProgressBar, ProgressStyle, Styled};
 
-use crate::db::meta;
-use crate::repository::{self, Repository};
-use crate::{Installation, package};
-use crate::{environment, runtime};
+use crate::{
+    Installation,
+    db::meta,
+    environment, package,
+    repository::{self, Format, Repository, format},
+    runtime,
+};
 
 enum Source {
     System(config::Manager),
@@ -88,7 +92,14 @@ impl Manager {
             .map(|(id, repository)| {
                 let db = open_meta_db(source.identifier(), &repository, &installation)?;
 
-                Ok((id.clone(), repository::Cached { id, repository, db }))
+                let index_uri = match &repository.source {
+                    repository::Source::DirectIndex(uri) => Some(uri.clone()),
+                    repository::Source::RootIndex(_) => {
+                        load_cached_index_uri(source.identifier(), &repository, &installation)?
+                    }
+                };
+
+                Ok((id.clone(), repository::Cached::new(id, repository, db, index_uri)))
             })
             .collect::<Result<_, Error>>()?;
 
@@ -115,8 +126,15 @@ impl Manager {
 
         let db = open_meta_db(self.source.identifier(), &repository, &self.installation)?;
 
+        let index_uri = match &repository.source {
+            repository::Source::DirectIndex(uri) => Some(uri.clone()),
+            repository::Source::RootIndex(_) => {
+                load_cached_index_uri(self.source.identifier(), &repository, &self.installation)?
+            }
+        };
+
         self.repositories
-            .insert(id.clone(), repository::Cached { id, repository, db });
+            .insert(id.clone(), repository::Cached::new(id, repository, db, index_uri));
 
         Ok(())
     }
@@ -137,7 +155,7 @@ impl Manager {
 
     /// Refresh all [`Repository`]'s by fetching it's latest index
     /// file and updating it's associated meta database
-    pub async fn refresh_all(&mut self) -> Result<(), Error> {
+    pub async fn refresh_all(&self) -> Result<(), Error> {
         let mpb = MultiProgress::new();
 
         // Fetch index files asynchronously and then
@@ -162,7 +180,16 @@ impl Manager {
                 Ok(())
             })
             .buffer_unordered(environment::MAX_NETWORK_CONCURRENCY)
-            .try_collect()
+            .fold(Ok(()), |acc, result| async {
+                match (acc, result) {
+                    (Ok(_), Ok(_)) => Ok(()),
+                    (Err(err), Ok(_)) => Err(err),
+                    (Err(Error::UnsupportedRepos(a)), Err(Error::UnsupportedRepos(b))) => {
+                        Err(Error::UnsupportedRepos(a.into_iter().chain(b).collect()))
+                    }
+                    (_, Err(err)) => Err(err),
+                }
+            })
             .await
     }
 
@@ -212,7 +239,16 @@ impl Manager {
                 Ok(()) as Result<_, Error>
             })
             .buffer_unordered(environment::MAX_NETWORK_CONCURRENCY)
-            .try_collect::<()>()
+            .fold(Ok(()), |acc, result| async {
+                match (acc, result) {
+                    (Ok(_), Ok(_)) => Ok(()),
+                    (Err(err), Ok(_)) => Err(err),
+                    (Err(Error::UnsupportedRepos(a)), Err(Error::UnsupportedRepos(b))) => {
+                        Err(Error::UnsupportedRepos(a.into_iter().chain(b).collect()))
+                    }
+                    (_, Err(err)) => Err(err),
+                }
+            })
             .await?;
 
         Ok(uninitialized.len())
@@ -290,7 +326,21 @@ impl Manager {
 
 /// Directory for the repo cached data (db & stone index), hashed by identifier & repo URI
 fn cache_dir(identifier: &str, repo: &Repository, installation: &Installation) -> PathBuf {
-    let hash = format!("{:02x}", xxh3_64(format!("{identifier}-{}", repo.uri).as_bytes()));
+    let hash = match &repo.source {
+        repository::Source::DirectIndex(uri) => {
+            format!("{:02x}", xxh3_64(format!("{identifier}-{uri}").as_bytes()))
+        }
+        repository::Source::RootIndex(repository::RootIndexSource {
+            base_uri,
+            channel,
+            version,
+            arch,
+        }) => format!(
+            "{:02x}",
+            xxh3_64(format!("{identifier}-{base_uri}-{channel}-{version}-{arch}").as_bytes())
+        ),
+    };
+
     installation.repo_path(hash)
 }
 
@@ -306,6 +356,24 @@ fn open_meta_db(identifier: &str, repo: &Repository, installation: &Installation
     Ok(db)
 }
 
+fn load_cached_index_uri(
+    identifier: &str,
+    repo: &Repository,
+    installation: &Installation,
+) -> Result<Option<Url>, Error> {
+    let dir = cache_dir(identifier, repo, installation);
+
+    let path = dir.join("index-uri");
+
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let content = fs_err::read_to_string(path).map_err(Error::ReadCachedIndexUri)?;
+
+    content.parse().map_err(Error::ParseCachedIndexUri).map(Some)
+}
+
 /// Fetches a stone index file from the repository URL
 /// and saves it to the repo installation path
 async fn fetch_index(
@@ -319,10 +387,15 @@ async fn fetch_index(
         .await
         .map_err(Error::CreateDir)?;
 
+    let index_uri = match &state.repository.source {
+        repository::Source::DirectIndex(uri) => uri.clone(),
+        repository::Source::RootIndex(source) => resolve_index_from_root(state, &out_dir, source).await?,
+    };
+
     let out_path = out_dir.join("stone.index");
 
     // Fetch index & write to `out_path`
-    repository::fetch_index(state.repository.uri.clone(), &out_path).await?;
+    repository::fetch_index(index_uri, &out_path).await?;
 
     Ok(out_path)
 }
@@ -368,6 +441,38 @@ fn update_meta_db(state: &repository::Cached, index_path: &Path) -> Result<(), E
     Ok(())
 }
 
+async fn resolve_index_from_root(
+    state: &repository::Cached,
+    out_dir: &Path,
+    source: &repository::RootIndexSource,
+) -> Result<Url, Error> {
+    let index_uri = match source.resolve_history_index_uri().await? {
+        repository::ResolvedHistoryIndexUri::Supported(uri) => uri,
+        repository::ResolvedHistoryIndexUri::Unsupported {
+            format,
+            version,
+            root_index_uri,
+            upgrade_via_index_uri,
+        } => {
+            return Err(Error::UnsupportedRepos(vec![UnsupportedRepoFormat {
+                repository: state.clone(),
+                root_index_uri,
+                upgrade_via_index_uri,
+                version,
+                format,
+            }]));
+        }
+    };
+
+    fs_err::tokio::write(out_dir.join("index-uri"), index_uri.as_str().as_bytes())
+        .await
+        .map_err(Error::WriteCachedIndexUri)?;
+
+    state.set_index_uri(index_uri.clone());
+
+    Ok(index_uri)
+}
+
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("Can't modify repos when using explicit configs")]
@@ -390,6 +495,18 @@ pub enum Error {
     SaveConfig(#[source] config::SaveError),
     #[error("unknown repo")]
     UnknownRepo(repository::Id),
+    #[error("resolve history index uri from root index")]
+    ResolveHistoryIndexUri(#[from] repository::ResolveHistoryIndexUriError),
+    #[error("root index doesn't have version identifier {0}")]
+    MissingRootIndexVersion(format::ScopedIdentifier),
+    #[error("read cached index uri")]
+    ReadCachedIndexUri(#[source] io::Error),
+    #[error("write cached index uri")]
+    WriteCachedIndexUri(#[source] io::Error),
+    #[error("parse cached index uri")]
+    ParseCachedIndexUri(#[source] url::ParseError),
+    #[error("one or more repositories has an unsupported format")]
+    UnsupportedRepos(Vec<UnsupportedRepoFormat>),
 }
 
 impl From<package::MissingMetaFieldError> for Error {
@@ -402,4 +519,13 @@ impl From<package::MissingMetaFieldError> for Error {
 pub enum Removal {
     NotFound,
     ConfigDeleted(bool),
+}
+
+#[derive(Debug, Clone)]
+pub struct UnsupportedRepoFormat {
+    pub repository: repository::Cached,
+    pub root_index_uri: Url,
+    pub upgrade_via_index_uri: Option<Url>,
+    pub version: format::ScopedIdentifier,
+    pub format: Format,
 }

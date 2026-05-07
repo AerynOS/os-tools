@@ -69,9 +69,81 @@ fn decode_repository(node: &KdlNode) -> Result<(repository::Id, Repository), Err
             ))
         })
         .transpose()?
-        .ok_or(Error::MissingValue("uri", "repository", name.to_owned()))?
-        .parse()
-        .map_err(|err| Error::ParseRepositoryUri(err, name.to_owned()))?;
+        .map(|uri| {
+            uri.parse()
+                .map_err(|err| Error::ParseRepositoryUri(err, name.to_owned()))
+        })
+        .transpose()?;
+
+    let source = if let Some(uri) = uri {
+        repository::Source::DirectIndex(uri)
+    } else {
+        let base_uri = get_child_value(node, "base-uri")
+            .map(|value| {
+                value.as_string().ok_or(Error::InvalidNodeValue(
+                    "repository",
+                    name.to_owned(),
+                    "base-uri",
+                    "string",
+                    value.to_string(),
+                ))
+            })
+            .transpose()?
+            .ok_or(Error::MissingValue("base-uri", "repository", name.to_owned()))?
+            .parse()
+            .map_err(|err| Error::ParseRepositoryUri(err, name.to_owned()))?;
+
+        let channel = get_child_value(node, "channel")
+            .map(|value| {
+                value.as_string().ok_or(Error::InvalidNodeValue(
+                    "repository",
+                    name.to_owned(),
+                    "channel",
+                    "string",
+                    value.to_string(),
+                ))
+            })
+            .transpose()?
+            .unwrap_or(repository::DEFAULT_CHANNEL)
+            .try_into()
+            .map_err(|err| Error::ParseRepositoryChannel(err, name.to_owned()))?;
+
+        let version = get_child_value(node, "version")
+            .map(|value| {
+                value.as_string().ok_or(Error::InvalidNodeValue(
+                    "repository",
+                    name.to_owned(),
+                    "version",
+                    "string",
+                    value.to_string(),
+                ))
+            })
+            .transpose()?
+            .ok_or(Error::MissingValue("version", "repository", name.to_owned()))?
+            .parse()
+            .map_err(|err| Error::ParseRepositoryVersion(err, name.to_owned()))?;
+
+        let arch = get_child_value(node, "arch")
+            .map(|value| {
+                value.as_string().ok_or(Error::InvalidNodeValue(
+                    "repository",
+                    name.to_owned(),
+                    "arch",
+                    "string",
+                    value.to_string(),
+                ))
+            })
+            .transpose()?
+            .unwrap_or(repository::DEFAULT_ARCH);
+
+        repository::Source::RootIndex(repository::RootIndexSource {
+            base_uri,
+            channel,
+            version,
+            arch: arch.to_owned(),
+        })
+    };
+
     let enabled = get_child_value(node, "enabled")
         .map(|value| {
             value.as_bool().ok_or(Error::InvalidNodeValue(
@@ -104,7 +176,7 @@ fn decode_repository(node: &KdlNode) -> Result<(repository::Id, Repository), Err
         id,
         Repository {
             description: description.to_owned(),
-            uri,
+            source,
             priority,
             active: enabled,
         },
@@ -131,6 +203,13 @@ pub enum Error {
     ParseProvider(#[source] dependency::ParseError),
     #[error("parse uri for repository {1}")]
     ParseRepositoryUri(#[source] url::ParseError, String),
+    #[error("parse channel for repository {1}")]
+    ParseRepositoryChannel(#[source] repository::format::identifier::InvalidIdentifierError, String),
+    #[error("parse version for repository {1}")]
+    ParseRepositoryVersion(
+        #[source] repository::format::identifier::ParseScopedIdentifierError,
+        String,
+    ),
     #[error("parse priority for repository {1}")]
     ParseRepositoryPriority(#[source] std::num::TryFromIntError, String),
 }
@@ -145,7 +224,8 @@ mod test {
             repositories {
                 volatile {
                     description "where the build infra lands freshly built packages"
-                    uri "https://infratest.aerynos.dev/vessel/volatile/x86_64/stone.index"
+                    base-uri "https://build.aerynos.dev/"
+                    version "stream/volatile"
                     priority 10
                 }
                 local {

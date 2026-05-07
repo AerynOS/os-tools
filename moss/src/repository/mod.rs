@@ -3,7 +3,9 @@
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 
+use arc_swap::ArcSwap;
 use derive_more::{Debug, Display, From, Into};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -14,9 +16,14 @@ use config::Config;
 
 use crate::{db::meta, request};
 
+pub use self::format::Format;
 pub use self::manager::Manager;
 
+pub mod format;
 pub mod manager;
+
+pub const DEFAULT_CHANNEL: &str = "main";
+pub const DEFAULT_ARCH: &str = "x86_64";
 
 /// A unique [`Repository`] identifier
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Ord, PartialOrd, From, Display)]
@@ -39,7 +46,8 @@ impl Id {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Repository {
     pub description: String,
-    pub uri: Url,
+    #[serde(flatten)]
+    pub source: Source,
     pub priority: Priority,
     #[serde(default = "default_as_true")]
     pub active: bool,
@@ -56,10 +64,34 @@ pub struct Cached {
     pub id: Id,
     pub repository: Repository,
     pub db: meta::Database,
+    index_uri: Arc<ArcSwap<Option<Url>>>,
+}
+
+impl Cached {
+    pub fn new(id: Id, repository: Repository, db: meta::Database, index_uri: Option<Url>) -> Self {
+        Self {
+            id,
+            repository,
+            db,
+            index_uri: Arc::new(ArcSwap::new(Arc::new(index_uri))),
+        }
+    }
+
+    /// Resolved index uri from a repository [`Source`]
+    ///
+    /// Is `None` if the [`Source`] has not yet been resolved,
+    /// in the case of a `root-index` source
+    pub fn index_uri(&self) -> Option<Url> {
+        self.index_uri.load().as_ref().clone()
+    }
+
+    fn set_index_uri(&self, uri: Url) {
+        self.index_uri.swap(Arc::new(Some(uri)));
+    }
 }
 
 /// The selection priority of a [`Repository`]
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Display, Into)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Display, From, Into)]
 pub struct Priority(u64);
 
 impl Priority {
@@ -147,4 +179,135 @@ pub enum FetchError {
     Request(#[from] request::Error),
     #[error("io")]
     Io(#[from] io::Error),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum Source {
+    #[serde(rename = "uri")]
+    DirectIndex(Url),
+    #[serde(untagged)]
+    RootIndex(RootIndexSource),
+}
+
+impl Source {
+    pub fn direct_index(&self) -> Option<&Url> {
+        if let Self::DirectIndex(url) = self {
+            Some(url)
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RootIndexSource {
+    pub base_uri: Url,
+    #[serde(default = "default_channel")]
+    pub channel: format::Identifier,
+    pub version: format::ScopedIdentifier,
+    #[serde(default = "default_arch")]
+    pub arch: String,
+}
+
+impl RootIndexSource {
+    pub fn uri(&self) -> Url {
+        let mut uri = self.base_uri.clone();
+        let mut path = uri.path().to_owned();
+
+        if !path.ends_with('/') {
+            path.push('/');
+        }
+
+        path.push_str(self.channel.as_ref());
+        path.push('/');
+        path.push_str("moss-root.json");
+
+        uri.set_path(&path);
+
+        uri
+    }
+
+    pub fn history_index_uri(&self, ident: &format::Identifier) -> Url {
+        let mut uri = self.base_uri.clone();
+        let mut path = uri.path().to_owned();
+
+        if !path.ends_with('/') {
+            path.push('/');
+        }
+
+        path.push_str(self.channel.as_ref());
+        path.push_str("/history/");
+        path.push_str(ident.as_ref());
+        path.push('/');
+        path.push_str(&self.arch);
+        path.push_str("/stone.index");
+
+        uri.set_path(&path);
+
+        uri
+    }
+
+    pub async fn resolve_history_index_uri(&self) -> Result<ResolvedHistoryIndexUri, ResolveHistoryIndexUriError> {
+        let root_index_uri = self.uri();
+
+        let root_index = request::download_json::<format::RootIndex>(root_index_uri.clone())
+            .await
+            .map_err(|err| ResolveHistoryIndexUriError::FetchRootIndex(err, root_index_uri.clone()))?;
+
+        let (history_ident, history_meta) = root_index
+            .resolve_version_to_history(&self.version)
+            .ok_or_else(|| ResolveHistoryIndexUriError::MissingRootIndexVersion(self.version.clone()))?;
+
+        if matches!(history_meta.format, Format::Unsupported(_)) {
+            let upgrade_via_index_uri = root_index
+                .formats
+                .v0
+                .upgrade_via
+                .as_ref()
+                .map(|version| {
+                    root_index
+                        .resolve_version_to_history(version)
+                        .ok_or_else(|| ResolveHistoryIndexUriError::MissingRootIndexVersion(version.clone()))
+                })
+                .transpose()?
+                .map(|(ident, _)| self.history_index_uri(ident));
+
+            return Ok(ResolvedHistoryIndexUri::Unsupported {
+                root_index_uri,
+                upgrade_via_index_uri,
+                version: self.version.clone(),
+                format: history_meta.format.clone(),
+            });
+        }
+
+        Ok(ResolvedHistoryIndexUri::Supported(
+            self.history_index_uri(history_ident),
+        ))
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum ResolveHistoryIndexUriError {
+    #[error("fetch & decode root index file: {1}")]
+    FetchRootIndex(#[source] request::Error, Url),
+    #[error("root index doesn't have version identifier {0}")]
+    MissingRootIndexVersion(format::ScopedIdentifier),
+}
+
+pub enum ResolvedHistoryIndexUri {
+    Supported(Url),
+    Unsupported {
+        format: Format,
+        version: format::ScopedIdentifier,
+        root_index_uri: Url,
+        upgrade_via_index_uri: Option<Url>,
+    },
+}
+
+fn default_channel() -> format::Identifier {
+    DEFAULT_CHANNEL.try_into().expect("valid identifier")
+}
+
+fn default_arch() -> String {
+    DEFAULT_ARCH.to_owned()
 }

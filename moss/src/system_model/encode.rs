@@ -28,9 +28,39 @@ fn encode_repositories<'a>(repositories: impl IntoIterator<Item = (&'a repositor
                 push_value(description, repo.description.clone());
             });
 
-            push_child(repo_node, "uri", |uri| {
-                push_value(uri, repo.uri.to_string());
-            });
+            match &repo.source {
+                repository::Source::DirectIndex(uri) => {
+                    push_child(repo_node, "uri", |uri_node| {
+                        push_value(uri_node, uri.to_string());
+                    });
+                }
+                repository::Source::RootIndex(repository::RootIndexSource {
+                    base_uri,
+                    channel,
+                    version,
+                    arch,
+                }) => {
+                    push_child(repo_node, "base-uri", |uri_node| {
+                        push_value(uri_node, base_uri.to_string());
+                    });
+
+                    if channel.as_ref() != repository::DEFAULT_CHANNEL {
+                        push_child(repo_node, "channel", |channel_node| {
+                            push_value(channel_node, channel.to_string());
+                        });
+                    }
+
+                    push_child(repo_node, "version", |version_node| {
+                        push_value(version_node, version.to_string());
+                    });
+
+                    if arch != repository::DEFAULT_ARCH {
+                        push_child(repo_node, "arch", |arch_node| {
+                            push_value(arch_node, arch.clone());
+                        });
+                    }
+                }
+            }
 
             push_child(repo_node, "priority", |priority| {
                 push_value(priority, i128::from(u64::from(repo.priority)));
@@ -89,6 +119,14 @@ mod test {
     #[test]
     fn test_encode() {
         let expected = r#"repositories {
+    bar {
+        description testing
+        base-uri "https://test.dev/"
+        channel testing
+        version "tag/test-this"
+        arch aarch64
+        priority 10
+    }
     disabled {
         description disabled
         uri "https://test2.dev/index.stone"
@@ -97,7 +135,8 @@ mod test {
     }
     foo {
         description test
-        uri "https://test.dev/index.stone"
+        base-uri "https://test.dev/"
+        version "stream/unstable"
         priority 1
     }
 }
@@ -112,11 +151,16 @@ packages {
 
         let repos = repository::Map::from_iter([
             (
-                repository::Id::new("foo"),
+                repository::Id::new("bar"),
                 Repository {
-                    description: "test".to_owned(),
-                    uri: "https://test.dev/index.stone".parse().unwrap(),
-                    priority: repository::Priority::new(1),
+                    description: "testing".to_owned(),
+                    source: repository::Source::RootIndex(repository::RootIndexSource {
+                        base_uri: "https://test.dev".parse().unwrap(),
+                        channel: "testing".try_into().unwrap(),
+                        version: "tag/test-this".parse().unwrap(),
+                        arch: "aarch64".to_owned(),
+                    }),
+                    priority: repository::Priority::new(10),
                     active: true,
                 },
             ),
@@ -124,9 +168,23 @@ packages {
                 repository::Id::new("disabled"),
                 Repository {
                     description: "disabled".to_owned(),
-                    uri: "https://test2.dev/index.stone".parse().unwrap(),
+                    source: repository::Source::DirectIndex("https://test2.dev/index.stone".parse().unwrap()),
                     priority: repository::Priority::new(2),
                     active: false,
+                },
+            ),
+            (
+                repository::Id::new("foo"),
+                Repository {
+                    description: "test".to_owned(),
+                    source: repository::Source::RootIndex(repository::RootIndexSource {
+                        base_uri: "https://test.dev".parse().unwrap(),
+                        channel: "main".try_into().unwrap(),
+                        version: "stream/unstable".parse().unwrap(),
+                        arch: repository::DEFAULT_ARCH.to_owned(),
+                    }),
+                    priority: repository::Priority::new(1),
+                    active: true,
                 },
             ),
         ]);

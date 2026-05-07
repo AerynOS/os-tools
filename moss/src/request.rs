@@ -11,8 +11,9 @@ use std::{
 
 use fs_err::tokio::{self as fs, File};
 use futures_util::TryStreamExt;
+use serde::de::DeserializeOwned;
 use thiserror::Error;
-use tokio::io::{AsyncRead, AsyncWriteExt, BufReader};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWriteExt, BufReader};
 use url::Url;
 
 use crate::{environment, util::Sha256Wrapper};
@@ -35,6 +36,17 @@ pub async fn download(url: Url, to: &Path) -> Result<(), Error> {
     let mut reader = fetch(url).await?;
 
     write_to_file(&mut reader, to).await
+}
+
+/// Downloads the supplied resource as JSON and decodes it into the return type
+pub async fn download_json<T: DeserializeOwned>(url: Url) -> Result<T, Error> {
+    let mut reader = fetch(url).await?;
+
+    let mut bytes = vec![];
+
+    reader.read_to_end(&mut bytes).await?;
+
+    Ok(serde_json::from_slice(&bytes)?)
 }
 
 /// Downloads a file to the provided path & returns it's sha256 hash
@@ -88,7 +100,7 @@ async fn write_to_file<T: AsyncRead + Unpin>(reader: &mut T, to: &Path) -> Resul
 }
 
 /// Fetch a resource at the provided [`Url`] and return an async reader over its bytes
-async fn fetch(url: Url) -> Result<Box<dyn AsyncRead + Unpin>, Error> {
+async fn fetch(url: Url) -> Result<Box<dyn AsyncRead + Unpin + Send>, Error> {
     if let Some(path) = &url.to_file_path().ok() {
         Ok(Box::new(BufReader::with_capacity(
             environment::FILE_READ_BUFFER_SIZE,
@@ -115,6 +127,8 @@ pub enum Error {
     Fetch(#[from] reqwest::Error),
     #[error("io")]
     Read(#[from] io::Error),
+    #[error("decode json")]
+    DecodeJson(#[from] serde_json::Error),
 }
 
 #[derive(Debug, Clone, Copy)]

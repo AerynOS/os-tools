@@ -24,6 +24,8 @@ impl Repository {
     }
 
     pub fn package(&self, id: &package::Id) -> Option<Package> {
+        let index_uri = self.active.index_uri()?;
+
         let result = self.active.db.get(id);
 
         match result {
@@ -34,7 +36,7 @@ impl Repository {
                     // a new type help here?
                     uri: meta
                         .uri
-                        .and_then(|relative| self.active.repository.uri.join(&relative).ok())
+                        .and_then(|relative| index_uri.join(&relative).ok())
                         .map(|url| url.to_string()),
                     ..meta
                 },
