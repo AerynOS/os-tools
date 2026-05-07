@@ -247,6 +247,62 @@ impl RootIndexSource {
 
         uri
     }
+
+    pub async fn resolve_history_index_uri(&self) -> Result<ResolvedHistoryIndexUri, ResolveHistoryIndexUriError> {
+        let root_index_uri = self.uri();
+
+        let root_index = request::download_json::<format::RootIndex>(root_index_uri.clone())
+            .await
+            .map_err(|err| ResolveHistoryIndexUriError::FetchRootIndex(err, root_index_uri.clone()))?;
+
+        let (history_ident, history_meta) = root_index
+            .resolve_version_to_history(&self.version)
+            .ok_or_else(|| ResolveHistoryIndexUriError::MissingRootIndexVersion(self.version.clone()))?;
+
+        if matches!(history_meta.format, Format::Unsupported(_)) {
+            let upgrade_via_index_uri = root_index
+                .formats
+                .v0
+                .upgrade_via
+                .as_ref()
+                .map(|version| {
+                    root_index
+                        .resolve_version_to_history(version)
+                        .ok_or_else(|| ResolveHistoryIndexUriError::MissingRootIndexVersion(version.clone()))
+                })
+                .transpose()?
+                .map(|(ident, _)| self.history_index_uri(ident));
+
+            return Ok(ResolvedHistoryIndexUri::Unsupported {
+                root_index_uri,
+                upgrade_via_index_uri,
+                version: self.version.clone(),
+                format: history_meta.format.clone(),
+            });
+        }
+
+        Ok(ResolvedHistoryIndexUri::Supported(
+            self.history_index_uri(history_ident),
+        ))
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum ResolveHistoryIndexUriError {
+    #[error("fetch & decode root index file: {1}")]
+    FetchRootIndex(#[source] request::Error, Url),
+    #[error("root index doesn't have version identifier {0}")]
+    MissingRootIndexVersion(format::ScopedIdentifier),
+}
+
+pub enum ResolvedHistoryIndexUri {
+    Supported(Url),
+    Unsupported {
+        format: Format,
+        version: format::ScopedIdentifier,
+        root_index_uri: Url,
+        upgrade_via_index_uri: Option<Url>,
+    },
 }
 
 fn default_channel() -> format::Identifier {
