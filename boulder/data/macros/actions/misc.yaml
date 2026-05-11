@@ -60,6 +60,51 @@ actions:
         command: |
             install -Dm00644
 
+    - install_licenses:
+        description: Macro to find and install one or more license files to a default location
+        example: |
+            # Automatically look for COPY* and LICEN* files and install them.
+            # Note that this can be very useful when chrooting into a build in the install phase
+            # and calling the function 'a_install_licenses'.
+            %install_licenses
+
+            # Override automatically found license files and manually install specific licenses.
+            %install_licenses SPECIFIC_LICENSE1 SPECIFIC_LICENSE2
+        command: |
+           function install_licenses() {
+                shopt -s failglob
+
+                local args=("$@")
+                local license_files=()
+                if [[ "${#args[@]}" -gt 0 ]]
+                then
+                    license_files+=("${args[@]}")
+                else
+                    local _license_files_found=()
+                    _license_files_found+=($(find -name 'COPY*' -print 2>/dev/null))
+                    _license_files_found+=($(find -name 'LICEN*' -print 2>/dev/null))
+                    license_files+=("${_license_files_found[@]}")
+                fi
+
+                local license_dir="%(installroot)%(datadir)/licenses/%(name)"
+                [[ -d "${license_dir}" ]] || %install_dir "${license_dir}"
+
+                local _interactive_shell=
+                [[ $- == *i* ]] && _interactive_shell="yes"
+                for license_file in "${license_files[@]}"
+                do
+                    [[ -f "${license_file}" ]] || \
+                        { echo "ERROR: license file ${license_file} not found?!" && exit 1 ; }
+                    %install_file "${license_file}" -t "${license_dir}"/
+                    [[ -z "${_interactive_shell}" ]] || \
+                        echo "Installed license file ${license_file} as ${license_dir}/$(basename ${license_file})"
+                done
+
+                [[ "${#license_files[@]}" -gt 0 ]] || \
+                    { echo "ERROR: No license files found/installed?!" && exit 1 ; }
+           }
+           install_licenses
+
     - patch:
         description: Patch the upstream sources using an input patch file.
         example: |
