@@ -13,8 +13,6 @@ use stable_deref_trait::StableDeref;
 use triomphe::{Arc, HeaderWithLength};
 
 mod cow;
-#[cfg(feature = "diesel")]
-mod diesel;
 
 pub use self::cow::CowAStr;
 

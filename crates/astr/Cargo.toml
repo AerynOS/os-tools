@@ -9,13 +9,10 @@ rust-version.workspace = true
 
 [features]
 default = []
-diesel = ["dep:diesel"]
 
 [dependencies]
 stable_deref_trait = "1.2.1"
 triomphe.workspace = true
-
-diesel = { workspace = true, optional = true }
 
 [lints]
 workspace = true
