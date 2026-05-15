@@ -35,7 +35,7 @@ pub enum Error {
     SdBoot(#[from] systemd_boot::interface::Error),
 
     #[error("layoutdb")]
-    Client(#[from] db::layout::Error),
+    Client(#[from] db::Error),
 
     #[error("io")]
     IO(#[from] io::Error),
@@ -77,13 +77,11 @@ fn kernel_files_from_state<'a>(
 
     for (_, path) in layouts.iter() {
         match &path.file {
-            StonePayloadLayoutFile::Regular(_, target) => {
-                if pattern.match_path(target).is_some() {
-                    kernel_entries.push(KernelCandidate {
-                        path: PathBuf::from("usr").join(target),
-                        _layout: path.to_owned(),
-                    });
-                }
+            StonePayloadLayoutFile::Regular(_, target) if pattern.match_path(target).is_some() => {
+                kernel_entries.push(KernelCandidate {
+                    path: PathBuf::from("usr").join(target),
+                    _layout: path.to_owned(),
+                });
             }
             StonePayloadLayoutFile::Symlink(_, target) if pattern.match_path(target).is_some() => {
                 kernel_entries.push(KernelCandidate {
