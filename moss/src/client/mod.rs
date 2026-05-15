@@ -217,7 +217,7 @@ impl Client {
     ///
     /// This allows automatic removal of unused states (and their associated assets)
     /// from the disk, acting as a garbage collection facility.
-    pub fn prune_states(&self, strategy: prune::Strategy<'_>, yes: bool) -> Result<(), Error> {
+    pub fn prune_states(&mut self, strategy: prune::Strategy<'_>, yes: bool) -> Result<(), Error> {
         if self.scope.is_ephemeral() {
             return Err(Error::EphemeralProhibitedOperation);
         }
@@ -231,15 +231,15 @@ impl Client {
     ///
     /// This will remove all downloaded stones & unpacked asset data for packages not
     /// in that set.
-    pub fn prune_cache(&self) -> Result<usize, Error> {
+    pub fn prune_cache(&mut self) -> Result<usize, Error> {
         if self.scope.is_ephemeral() {
             return Err(Error::EphemeralProhibitedOperation);
         }
 
         prune_cache(
-            &self.state_db,
-            &self.install_db,
-            &self.layout_db,
+            &mut self.state_db,
+            &mut self.install_db,
+            &mut self.layout_db,
             &self.installation,
             &self.repositories,
         )
@@ -348,7 +348,7 @@ impl Client {
     /// Then blit the filesystem, promote it, finally archiving the active ID
     ///
     /// Returns `None` if the client is ephemeral
-    pub fn new_state(&self, selections: &[Selection], summary: impl ToString) -> Result<Option<State>, Error> {
+    pub fn new_state(&mut self, selections: &[Selection], summary: impl ToString) -> Result<Option<State>, Error> {
         let _guard = signal::ignore([Signal::SIGINT])?;
         let _fd = signal::inhibit(
             vec!["shutdown", "sleep", "idle", "handle-lid-switch"],
@@ -726,8 +726,8 @@ impl Client {
 
         // Add layouts & packages to DBs
         runtime::unblock({
-            let layout_db = self.layout_db.clone();
-            let install_db = self.install_db.clone();
+            let mut layout_db = self.layout_db.clone();
+            let mut install_db = self.install_db.clone();
             move || {
                 total_progress.set_position(0);
                 total_progress.set_length(2);

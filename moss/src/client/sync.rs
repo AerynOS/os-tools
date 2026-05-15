@@ -20,7 +20,7 @@ use crate::{
     system_model,
 };
 
-pub fn sync(client: &Client, import: Option<&Path>, yes: bool, simulate: bool) -> Result<Timing, Error> {
+pub fn sync(client: &mut Client, import: Option<&Path>, yes: bool, simulate: bool) -> Result<Timing, Error> {
     let mut timing = Timing::default();
     let mut instant = Instant::now();
 
