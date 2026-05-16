@@ -44,6 +44,26 @@ pub struct VersionPattern {
     pub priority: u8,
 }
 
+struct VcsProvider {
+    host: &'static str,
+    path_contains: &'static str,
+}
+
+const VCS_PROVIDERS: &[VcsProvider] = &[
+    VcsProvider {
+        host: "github.com",
+        path_contains: "archive/refs/tags/",
+    },
+    VcsProvider {
+        host: "gitlab.com",
+        path_contains: "repository/archive.tar.gz",
+    },
+    VcsProvider {
+        host: "codeberg.org",
+        path_contains: "/archive/",
+    },
+];
+
 impl VersionPattern {
     /// Creates a new version pattern
     ///
@@ -211,46 +231,28 @@ impl VersionExtractor {
         Err(VersionError::InvalidVersion { path: path.to_owned() })
     }
 
-    /// Attempts to extract version info from GitHub/GitLab URLs
+    /// Attempts to extract version info from URLs from known VCS providers
     fn try_extract_vcs_url(&self, path: &str) -> Option<Result<Extraction, VersionError>> {
-        if !path.contains("github.com") && !path.contains("gitlab.com") && !path.contains("codeberg.org") {
+        if !VCS_PROVIDERS.iter().any(|p| path.contains(p.host)) {
             return None;
         }
 
         let url = Url::parse(path).ok()?;
+        let host = url.host_str()?;
 
-        match url.host_str() {
-            Some("github.com") if url.path().contains("archive/refs/tags/") => {
-                let parts: Vec<&str> = url.path().split('/').collect();
-                let project = parts.get(2)?;
-                let asset = parts.last()?;
-                let faux = format!("{project}-{asset}");
-                Some(self.extract(&faux).map(|matched| Extraction {
-                    name: project.to_string(),
-                    ..matched
-                }))
-            }
-            Some("gitlab.com") if url.path().contains("repository/archive.tar.gz") => {
-                let parts: Vec<&str> = url.path().split('/').collect();
-                let project = parts.get(2)?;
-                let faux = format!("{project}-archive.tar.gz");
-                Some(self.extract(&faux).map(|matched| Extraction {
-                    name: project.to_string(),
-                    ..matched
-                }))
-            }
-            Some("codeberg.org") if url.path().contains("/archive/") => {
-                let parts: Vec<&str> = url.path().split('/').collect();
-                let project = parts.get(2)?;
-                let asset = parts.last()?;
-                let faux = format!("{project}-{asset}");
-                Some(self.extract(&faux).map(|matched| Extraction {
-                    name: project.to_string(),
-                    ..matched
-                }))
-            }
-            _ => None,
-        }
+        let _provider = VCS_PROVIDERS
+            .iter()
+            .find(|p| p.host == host && url.path().contains(p.path_contains))?;
+
+        let parts: Vec<&str> = url.path().split('/').collect();
+        let project = parts.get(2)?;
+        let asset = parts.last()?;
+        let faux = format!("{project}-{asset}");
+
+        Some(self.extract(&faux).map(|matched| Extraction {
+            name: project.to_string(),
+            ..matched
+        }))
     }
 }
 
