@@ -56,7 +56,7 @@ const VCS_PROVIDERS: &[VcsProvider] = &[
     },
     VcsProvider {
         host: "gitlab.com",
-        path_contains: "repository/archive.tar.gz",
+        path_contains: "/-/archive/",
     },
     VcsProvider {
         host: "codeberg.org",
@@ -391,6 +391,22 @@ mod tests {
                 Extraction {
                     version: "1.2.1".to_string(),
                     name: "gram".to_string(),
+                    release_series: None,
+                },
+            ),
+            (
+                "https://gitlab.com/serebit/wraith-master/-/archive/v1.2.1/wraith-master-v1.2.1.tar.gz",
+                Extraction {
+                    version: "1.2.1".to_string(),
+                    name: "wraith-master".to_string(),
+                    release_series: None,
+                },
+            ),
+            (
+                "https://gitlab.com/flightgear/flightgear/-/archive/2024.1.5/flightgear-2024.1.5.tar.gz?ref_type=tags",
+                Extraction {
+                    version: "2024.1.5".to_string(),
+                    name: "flightgear".to_string(),
                     release_series: None,
                 },
             ),
