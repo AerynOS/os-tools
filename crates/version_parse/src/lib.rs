@@ -213,7 +213,7 @@ impl VersionExtractor {
 
     /// Attempts to extract version info from GitHub/GitLab URLs
     fn try_extract_vcs_url(&self, path: &str) -> Option<Result<Extraction, VersionError>> {
-        if !path.contains("github.com") && !path.contains("gitlab.com") {
+        if !path.contains("github.com") && !path.contains("gitlab.com") && !path.contains("codeberg.org") {
             return None;
         }
 
@@ -234,6 +234,16 @@ impl VersionExtractor {
                 let parts: Vec<&str> = url.path().split('/').collect();
                 let project = parts.get(2)?;
                 let faux = format!("{project}-archive.tar.gz");
+                Some(self.extract(&faux).map(|matched| Extraction {
+                    name: project.to_string(),
+                    ..matched
+                }))
+            }
+            Some("codeberg.org") if url.path().contains("/archive/") => {
+                let parts: Vec<&str> = url.path().split('/').collect();
+                let project = parts.get(2)?;
+                let asset = parts.last()?;
+                let faux = format!("{project}-{asset}");
                 Some(self.extract(&faux).map(|matched| Extraction {
                     name: project.to_string(),
                     ..matched
@@ -371,6 +381,14 @@ mod tests {
                 Extraction {
                     version: "1.0.0-alpha.6".to_string(),
                     name: "cosmic-applets".to_string(),
+                    release_series: None,
+                },
+            ),
+            (
+                "https://codeberg.org/GramEditor/gram/archive/1.2.1.tar.gz",
+                Extraction {
+                    version: "1.2.1".to_string(),
+                    name: "gram".to_string(),
                     release_series: None,
                 },
             ),
