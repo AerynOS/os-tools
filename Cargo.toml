@@ -29,11 +29,6 @@ derive_more = { version = "2.0.1", features = [
     "into",
 ] }
 dialoguer = "0.12.0"
-diesel = { version = "2.2.1", features = [
-    "sqlite",
-    "returning_clauses_for_sqlite_3_35",
-] }
-diesel_migrations = "2.2.0"
 dirs = "6.0.0"
 elf = "0.8.0"
 ent_core = { git = "https://github.com/AerynOS/ent.git", rev = "fdb389a2ee49da8cc753dd32dc5ab8f8e9aebb04" }
@@ -79,6 +74,7 @@ reqwest = { version = "0.13.2", default-features = false, features = [
     "blocking",
     "json",
 ] }
+rusqlite = { version = "0.39.0", features = ["array", "bundled", "chrono"] }
 serde = { version = "1.0.223", features = ["derive"] }
 serde_core = "1.0.223"
 serde_json = "1.0.145"
@@ -137,7 +133,7 @@ literal_string_with_formatting_args = "allow"
 [profile.dev]
 # makes linking faster, enables everything needed for backtraces
 # for attaching an interactive debugger, use another profile
-debug = "line-tables-only"
+#debug = "line-tables-only"
 
 [profile.release]
 lto = "thin"
