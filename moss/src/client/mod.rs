@@ -71,6 +71,7 @@ pub struct ClientBuilder {
     client_name: String,
     installation: Installation,
     repositories: Option<repository::Map>,
+    system_model_path: Option<PathBuf>,
     blit_root: Option<PathBuf>,
 }
 
@@ -81,6 +82,7 @@ impl ClientBuilder {
             client_name: client_name.to_string(),
             installation,
             repositories: None,
+            system_model_path: None,
             blit_root: None,
         }
     }
@@ -88,6 +90,12 @@ impl ClientBuilder {
     /// Set the repositories
     pub fn repositories(mut self, repositories: repository::Map) -> ClientBuilder {
         self.repositories = Some(repositories);
+        self
+    }
+
+    /// Set system model path
+    pub fn system_model_path(mut self, path: impl Into<PathBuf>) -> ClientBuilder {
+        self.system_model_path = Some(path.into());
         self
     }
 
@@ -106,7 +114,12 @@ impl ClientBuilder {
 
     /// Build the [`Client`]
     pub fn build(self) -> Result<Client, Error> {
-        let mut client = Client::build(self.client_name, self.installation, self.repositories)?;
+        let mut client = Client::build(
+            self.client_name,
+            self.installation,
+            self.repositories,
+            self.system_model_path,
+        )?;
         if let Some(blit_root) = self.blit_root {
             client = client.ephemeral(blit_root)?;
         }
@@ -137,16 +150,22 @@ pub struct Client {
 impl Client {
     /// Construct a new Client for the given [`Installation`]
     pub fn new(client_name: impl ToString, installation: Installation) -> Result<Client, Error> {
-        Self::build(client_name.to_string(), installation, None)
+        Self::build(client_name.to_string(), installation, None, None)
     }
 
     /// Build a functioning Client for the given [`Installation`] and repositories
     fn build(
         client_name: String,
-        installation: Installation,
+        mut installation: Installation,
         repositories: Option<repository::Map>,
+        system_model_path: Option<PathBuf>,
     ) -> Result<Client, Error> {
         let name = client_name.to_string();
+
+        if let Some(path) = system_model_path {
+            installation.system_model =
+                Some(system_model::load(&path)?.ok_or(Error::ImportSystemModelDoesntExist(path.to_owned()))?);
+        }
 
         let config = config::Manager::system(&installation.root, "moss");
         let install_db = db::meta::Database::new(installation.db_path("install").to_str().unwrap_or_default())?;
@@ -196,8 +215,8 @@ impl Client {
     }
 
     /// Perform a sync
-    pub fn sync(&mut self, import: Option<&Path>, yes: bool, simulate: bool) -> Result<sync::Timing, Error> {
-        sync(self, import, yes, simulate).map_err(|error| Error::Sync(Box::new(error)))
+    pub fn sync(&mut self, yes: bool, simulate: bool) -> Result<sync::Timing, Error> {
+        sync(self, yes, simulate).map_err(|error| Error::Sync(Box::new(error)))
     }
 
     /// Transition to an ephemeral client that doesn't record state changes
@@ -1500,4 +1519,6 @@ pub enum Error {
     Fetch(#[source] Box<fetch::Error>),
     #[error("sync")]
     Sync(#[source] Box<sync::Error>),
+    #[error("system model doesn't exist at {0:?}")]
+    ImportSystemModelDoesntExist(PathBuf),
 }
