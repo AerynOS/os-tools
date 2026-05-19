@@ -481,6 +481,15 @@ impl Client {
         record_system_model(&self.installation.staging_dir(), system_model)?;
 
         create_root_links(&self.installation.isolation_dir())?;
+
+        // The container running triggers expects /etc to exist
+        let root_etc = self.installation.root.join("etc");
+        fs::create_dir_all(root_etc)?;
+
+        let isolation_etc = self.installation.isolation_dir().join("etc");
+        fs::create_dir_all(isolation_etc)?;
+
+        // Apply transaction triggers
         Self::apply_triggers(TriggerScope::Transaction(&self.installation, &self.scope), &fstree)?;
 
         // Staging is only used with [`Scope::Stateful`]
@@ -513,6 +522,7 @@ impl Client {
         create_root_links(blit_root)?;
         create_root_links(&self.installation.isolation_dir())?;
 
+        // The container running triggers expects /etc to exist
         let etc = blit_root.join("etc");
         fs::create_dir_all(etc)?;
 
