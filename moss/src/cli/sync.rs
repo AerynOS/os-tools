@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 
 use clap::{ArgMatches, CommandFactory, FromArgMatches, Parser};
-use moss::{ClientBuilder, Installation, client::Client, environment, runtime};
+use moss::{Installation, client::Client, environment, runtime};
 use tracing::instrument;
 
 pub use moss::client::Error;
@@ -50,13 +50,13 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     let simulate = command.dry_run;
     let update = command.update;
 
-    let mut client = if let Some(path) = &command.import {
-        ClientBuilder::new(environment::NAME, installation)
-            .system_model_path(path)
-            .build()?
-    } else {
-        Client::new(environment::NAME, installation)?
-    };
+    let mut client_builder = Client::builder(environment::NAME, installation);
+
+    if let Some(path) = &command.import {
+        client_builder = client_builder.system_model_path(path);
+    }
+
+    let mut client = client_builder.build()?;
 
     // Make ephemeral if a blit target was provided
     if let Some(blit_target) = command.blit_target {
