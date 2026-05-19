@@ -63,6 +63,23 @@ impl Git {
         })
     }
 
+    /// Stores the upstream into the storage directory.
+    /// If the upstream was already stored, it is overwritten.
+    pub async fn store_unchecked(&self, storage_dir: &Path, pb: &ProgressBar) -> Result<StoredGit, Error> {
+        self.remove(storage_dir)?;
+        let repo = clone(&self.url, &self.stored_path(storage_dir), pb).await?;
+        let resolved_hash = repo.peel_commit(&self.commit).await?;
+        Ok(StoredGit {
+            name: self.name().to_owned(),
+            was_cached: false,
+            repo,
+            url: self.url.clone(),
+            original_ref: self.commit.to_owned(),
+            resolved_hash,
+            original_index: self.original_index,
+        })
+    }
+
     /// Unconditionally removes the directory, within the storage
     /// directory, that would store the Git repository.
     /// If the directory does not exist, this function returns

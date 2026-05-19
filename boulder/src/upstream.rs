@@ -70,6 +70,16 @@ impl Upstream {
         })
     }
 
+    /// Stores the upstream into the storage directory,
+    /// without checking that verification hashes match.
+    /// This function overwrites already-stored upstreams if any.
+    async fn store_unchecked(&self, storage_dir: &Path, pb: &ProgressBar) -> Result<Stored, Error> {
+        Ok(match self {
+            Upstream::Plain(plain) => Stored::Plain(plain.store_unchecked(storage_dir, pb).await?),
+            Upstream::Git(git) => Stored::Git(git.store_unchecked(storage_dir, pb).await?),
+        })
+    }
+
     /// Unconditionally removes this Upstream's resources within the storage directory.
     /// If the resources do not exist, this function returns successfully
     /// (it is idempotent).

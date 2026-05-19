@@ -38,11 +38,13 @@ impl Plain {
         }
     }
 
-    /// Stores the source archive into the storage directory.
+    /// Fetches and stores the source archive into the storage directory,
+    /// returning an error if the expected hash does not match
+    /// the hash of the just-downloaded archive.
     ///
-    /// If the upstream was already stored and [Self::hash] matches,
+    /// If the archive was already stored and [Self::hash] matches,
     /// no write operation takes place. If the source archive was
-    /// not stored or the hash does not match, it is overwritten.
+    /// stored but the hash does not match, the archive is overwritten.
     pub async fn store(&self, storage_dir: &Path, pb: &ProgressBar) -> Result<StoredPlain, Error> {
         use fs_err::tokio as fs;
 
@@ -68,6 +70,29 @@ impl Plain {
                 got: hash,
             });
         }
+
+        Ok(StoredPlain {
+            name: self.name().to_owned(),
+            path,
+            was_cached: false,
+        })
+    }
+
+    /// Fetches and stores the source archive into the storage directory,
+    /// without checking that the expected hash matches the hash of the just-downloaded
+    /// file.
+    ///
+    /// If the archive was already stored, it is overwritten regardless of
+    /// its hash.
+    pub async fn store_unchecked(&self, storage_dir: &Path, pb: &ProgressBar) -> Result<StoredPlain, Error> {
+        use fs_err::tokio as fs;
+
+        let path = self.stored_path(storage_dir);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(&parent).await?;
+        }
+
+        fetch(self.url.clone(), &path, pb).await?;
 
         Ok(StoredPlain {
             name: self.name().to_owned(),
