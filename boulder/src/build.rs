@@ -163,14 +163,10 @@ impl Builder {
 
         // Prune moss cache, retaining stones from the repos defined
         // by our boulder profile
-        {
-            moss::Client::with_explicit_repositories(
-                "boulder",
-                moss::Installation::open(&self.env.moss_dir, None)?,
-                self.repos.clone(),
-            )?
+        moss::ClientBuilder::new("boulder", moss::Installation::open(&self.env.moss_dir, None)?)
+            .repositories(self.repos.clone())
+            .build()?
             .prune_cache()?;
-        }
 
         Ok(())
     }

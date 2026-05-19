@@ -66,6 +66,54 @@ pub mod extract;
 pub mod index;
 pub mod prune;
 
+/// A builder for [`Client`]
+pub struct ClientBuilder {
+    client_name: String,
+    installation: Installation,
+    repositories: Option<repository::Map>,
+    blit_root: Option<PathBuf>,
+}
+
+impl ClientBuilder {
+    /// Construct a new ClientBuilder for the given [`Installation`]
+    pub fn new(client_name: impl ToString, installation: Installation) -> ClientBuilder {
+        ClientBuilder {
+            client_name: client_name.to_string(),
+            installation,
+            repositories: None,
+            blit_root: None,
+        }
+    }
+
+    /// Set the repositories
+    pub fn repositories(mut self, repositories: repository::Map) -> ClientBuilder {
+        self.repositories = Some(repositories);
+        self
+    }
+
+    /// Set the client to an ephemeral client that doesn't record state changes
+    /// and blits to a different root.
+    ///
+    /// This is useful for installing a root to a container (i.e. Boulder) while
+    /// using a shared cache.
+    ///
+    /// Returns an error on construction if `blit_root` is the same as the installation
+    /// root, since the system client should always be stateful.
+    pub fn ephemeral(mut self, blit_root: impl Into<PathBuf>) -> ClientBuilder {
+        self.blit_root = Some(blit_root.into());
+        self
+    }
+
+    /// Build the [`Client`]
+    pub fn build(self) -> Result<Client, Error> {
+        let mut client = Client::build(self.client_name, self.installation, self.repositories)?;
+        if let Some(blit_root) = self.blit_root {
+            client = client.ephemeral(blit_root)?;
+        }
+        Ok(client)
+    }
+}
+
 /// A Client is a connection to the underlying package management systems
 pub struct Client {
     /// Root that we operate on
@@ -89,25 +137,17 @@ pub struct Client {
 impl Client {
     /// Construct a new Client for the given [`Installation`]
     pub fn new(client_name: impl ToString, installation: Installation) -> Result<Client, Error> {
-        Self::build(client_name, installation, None)
-    }
-
-    /// Construct a new Client with explicitly configured repositories
-    pub fn with_explicit_repositories(
-        client_name: impl ToString,
-        installation: Installation,
-        repositories: repository::Map,
-    ) -> Result<Client, Error> {
-        Self::build(client_name, installation, Some(repositories))
+        Self::build(client_name.to_string(), installation, None)
     }
 
     /// Build a functioning Client for the given [`Installation`] and repositories
     fn build(
-        client_name: impl ToString,
+        client_name: String,
         installation: Installation,
         repositories: Option<repository::Map>,
     ) -> Result<Client, Error> {
         let name = client_name.to_string();
+
         let config = config::Manager::system(&installation.root, "moss");
         let install_db = db::meta::Database::new(installation.db_path("install").to_str().unwrap_or_default())?;
         let state_db = db::state::Database::new(installation.db_path("state").to_str().unwrap_or_default())?;
