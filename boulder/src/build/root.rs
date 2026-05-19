@@ -26,7 +26,7 @@ pub fn populate(
 
     // Create the moss client
     let installation = Installation::open(&builder.env.moss_dir, None)?;
-    let mut moss_client = moss::ClientBuilder::new("boulder", installation)
+    let mut moss_client = moss::Client::builder("boulder", installation)
         .repositories(repositories)
         .ephemeral(rootfs)
         .build()?;

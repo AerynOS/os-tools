@@ -76,17 +76,6 @@ pub struct ClientBuilder {
 }
 
 impl ClientBuilder {
-    /// Construct a new ClientBuilder for the given [`Installation`]
-    pub fn new(client_name: impl ToString, installation: Installation) -> ClientBuilder {
-        ClientBuilder {
-            client_name: client_name.to_string(),
-            installation,
-            repositories: None,
-            system_model_path: None,
-            blit_root: None,
-        }
-    }
-
     /// Set the repositories
     pub fn repositories(mut self, repositories: repository::Map) -> ClientBuilder {
         self.repositories = Some(repositories);
@@ -113,13 +102,42 @@ impl ClientBuilder {
     }
 
     /// Build the [`Client`]
-    pub fn build(self) -> Result<Client, Error> {
-        let mut client = Client::build(
-            self.client_name,
-            self.installation,
-            self.repositories,
-            self.system_model_path,
-        )?;
+    pub fn build(mut self) -> Result<Client, Error> {
+        if let Some(path) = self.system_model_path {
+            self.installation.system_model =
+                Some(system_model::load(&path)?.ok_or(Error::ImportSystemModelDoesntExist(path.to_owned()))?);
+        }
+
+        let config = config::Manager::system(&self.installation.root, "moss");
+        let install_db = db::meta::Database::new(self.installation.db_path("install").to_str().unwrap_or_default())?;
+        let state_db = db::state::Database::new(self.installation.db_path("state").to_str().unwrap_or_default())?;
+        let layout_db = db::layout::Database::new(self.installation.db_path("layout").to_str().unwrap_or_default())?;
+
+        let repositories = if let Some(repos) = self.repositories {
+            repository::Manager::explicit(&self.client_name, repos, self.installation.clone())?
+        } else if let Some(system_model) = &self.installation.system_model {
+            repository::Manager::explicit(
+                &self.client_name,
+                system_model.repositories.clone(),
+                self.installation.clone(),
+            )?
+        } else {
+            repository::Manager::system(config.clone(), self.installation.clone())?
+        };
+
+        let registry = build_registry(&self.installation, &repositories, &install_db, &state_db)?;
+
+        let mut client = Client {
+            config,
+            installation: self.installation,
+            repositories,
+            registry,
+            install_db,
+            state_db,
+            layout_db,
+            scope: Scope::Stateful,
+        };
+
         if let Some(blit_root) = self.blit_root {
             client = client.ephemeral(blit_root)?;
         }
@@ -148,50 +166,20 @@ pub struct Client {
 }
 
 impl Client {
-    /// Construct a new Client for the given [`Installation`]
-    pub fn new(client_name: impl ToString, installation: Installation) -> Result<Client, Error> {
-        Self::build(client_name.to_string(), installation, None, None)
+    /// Construct a new ClientBuilder for the given [`Installation`]
+    pub fn builder(client_name: impl ToString, installation: Installation) -> ClientBuilder {
+        ClientBuilder {
+            client_name: client_name.to_string(),
+            installation,
+            repositories: None,
+            system_model_path: None,
+            blit_root: None,
+        }
     }
 
-    /// Build a functioning Client for the given [`Installation`] and repositories
-    fn build(
-        client_name: String,
-        mut installation: Installation,
-        repositories: Option<repository::Map>,
-        system_model_path: Option<PathBuf>,
-    ) -> Result<Client, Error> {
-        let name = client_name.to_string();
-
-        if let Some(path) = system_model_path {
-            installation.system_model =
-                Some(system_model::load(&path)?.ok_or(Error::ImportSystemModelDoesntExist(path.to_owned()))?);
-        }
-
-        let config = config::Manager::system(&installation.root, "moss");
-        let install_db = db::meta::Database::new(installation.db_path("install").to_str().unwrap_or_default())?;
-        let state_db = db::state::Database::new(installation.db_path("state").to_str().unwrap_or_default())?;
-        let layout_db = db::layout::Database::new(installation.db_path("layout").to_str().unwrap_or_default())?;
-
-        let repositories = if let Some(repos) = repositories {
-            repository::Manager::explicit(&name, repos, installation.clone())?
-        } else if let Some(system_model) = &installation.system_model {
-            repository::Manager::explicit(&name, system_model.repositories.clone(), installation.clone())?
-        } else {
-            repository::Manager::system(config.clone(), installation.clone())?
-        };
-
-        let registry = build_registry(&installation, &repositories, &install_db, &state_db)?;
-
-        Ok(Client {
-            config,
-            installation,
-            repositories,
-            registry,
-            install_db,
-            state_db,
-            layout_db,
-            scope: Scope::Stateful,
-        })
+    /// Construct a new Client for the given [`Installation`]
+    pub fn new(client_name: impl ToString, installation: Installation) -> Result<Client, Error> {
+        Self::builder(client_name.to_string(), installation).build()
     }
 
     /// Returns `true` if this is an ephemeral client
