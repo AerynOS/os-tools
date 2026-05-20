@@ -66,6 +66,85 @@ pub mod extract;
 pub mod index;
 pub mod prune;
 
+/// A builder for [`Client`]
+pub struct ClientBuilder {
+    client_name: String,
+    installation: Installation,
+    repositories: Option<repository::Map>,
+    system_model_path: Option<PathBuf>,
+    blit_root: Option<PathBuf>,
+}
+
+impl ClientBuilder {
+    /// Set the repositories
+    pub fn repositories(mut self, repositories: repository::Map) -> ClientBuilder {
+        self.repositories = Some(repositories);
+        self
+    }
+
+    /// Set system model path
+    pub fn system_model_path(mut self, path: impl Into<PathBuf>) -> ClientBuilder {
+        self.system_model_path = Some(path.into());
+        self
+    }
+
+    /// Set the client to an ephemeral client that doesn't record state changes
+    /// and blits to a different root.
+    ///
+    /// This is useful for installing a root to a container (i.e. Boulder) while
+    /// using a shared cache.
+    ///
+    /// Returns an error on construction if `blit_root` is the same as the installation
+    /// root, since the system client should always be stateful.
+    pub fn ephemeral(mut self, blit_root: impl Into<PathBuf>) -> ClientBuilder {
+        self.blit_root = Some(blit_root.into());
+        self
+    }
+
+    /// Build the [`Client`]
+    pub fn build(mut self) -> Result<Client, Error> {
+        if let Some(path) = self.system_model_path {
+            self.installation.system_model =
+                Some(system_model::load(&path)?.ok_or(Error::ImportSystemModelDoesntExist(path.to_owned()))?);
+        }
+
+        let config = config::Manager::system(&self.installation.root, "moss");
+        let install_db = db::meta::Database::new(self.installation.db_path("install").to_str().unwrap_or_default())?;
+        let state_db = db::state::Database::new(self.installation.db_path("state").to_str().unwrap_or_default())?;
+        let layout_db = db::layout::Database::new(self.installation.db_path("layout").to_str().unwrap_or_default())?;
+
+        let repositories = if let Some(repos) = self.repositories {
+            repository::Manager::explicit(&self.client_name, repos, self.installation.clone())?
+        } else if let Some(system_model) = &self.installation.system_model {
+            repository::Manager::explicit(
+                &self.client_name,
+                system_model.repositories.clone(),
+                self.installation.clone(),
+            )?
+        } else {
+            repository::Manager::system(config.clone(), self.installation.clone())?
+        };
+
+        let registry = build_registry(&self.installation, &repositories, &install_db, &state_db)?;
+
+        let mut client = Client {
+            config,
+            installation: self.installation,
+            repositories,
+            registry,
+            install_db,
+            state_db,
+            layout_db,
+            scope: Scope::Stateful,
+        };
+
+        if let Some(blit_root) = self.blit_root {
+            client = client.ephemeral(blit_root)?;
+        }
+        Ok(client)
+    }
+}
+
 /// A Client is a connection to the underlying package management systems
 pub struct Client {
     /// Root that we operate on
@@ -87,52 +166,20 @@ pub struct Client {
 }
 
 impl Client {
+    /// Construct a new ClientBuilder for the given [`Installation`]
+    pub fn builder(client_name: impl ToString, installation: Installation) -> ClientBuilder {
+        ClientBuilder {
+            client_name: client_name.to_string(),
+            installation,
+            repositories: None,
+            system_model_path: None,
+            blit_root: None,
+        }
+    }
+
     /// Construct a new Client for the given [`Installation`]
     pub fn new(client_name: impl ToString, installation: Installation) -> Result<Client, Error> {
-        Self::build(client_name, installation, None)
-    }
-
-    /// Construct a new Client with explicitly configured repositories
-    pub fn with_explicit_repositories(
-        client_name: impl ToString,
-        installation: Installation,
-        repositories: repository::Map,
-    ) -> Result<Client, Error> {
-        Self::build(client_name, installation, Some(repositories))
-    }
-
-    /// Build a functioning Client for the given [`Installation`] and repositories
-    fn build(
-        client_name: impl ToString,
-        installation: Installation,
-        repositories: Option<repository::Map>,
-    ) -> Result<Client, Error> {
-        let name = client_name.to_string();
-        let config = config::Manager::system(&installation.root, "moss");
-        let install_db = db::meta::Database::new(installation.db_path("install").to_str().unwrap_or_default())?;
-        let state_db = db::state::Database::new(installation.db_path("state").to_str().unwrap_or_default())?;
-        let layout_db = db::layout::Database::new(installation.db_path("layout").to_str().unwrap_or_default())?;
-
-        let repositories = if let Some(repos) = repositories {
-            repository::Manager::explicit(&name, repos, installation.clone())?
-        } else if let Some(system_model) = &installation.system_model {
-            repository::Manager::explicit(&name, system_model.repositories.clone(), installation.clone())?
-        } else {
-            repository::Manager::system(config.clone(), installation.clone())?
-        };
-
-        let registry = build_registry(&installation, &repositories, &install_db, &state_db)?;
-
-        Ok(Client {
-            config,
-            installation,
-            repositories,
-            registry,
-            install_db,
-            state_db,
-            layout_db,
-            scope: Scope::Stateful,
-        })
+        Self::builder(client_name.to_string(), installation).build()
     }
 
     /// Returns `true` if this is an ephemeral client
@@ -156,8 +203,8 @@ impl Client {
     }
 
     /// Perform a sync
-    pub fn sync(&mut self, import: Option<&Path>, yes: bool, simulate: bool) -> Result<sync::Timing, Error> {
-        sync(self, import, yes, simulate).map_err(|error| Error::Sync(Box::new(error)))
+    pub fn sync(&mut self, yes: bool, simulate: bool) -> Result<sync::Timing, Error> {
+        sync(self, yes, simulate).map_err(|error| Error::Sync(Box::new(error)))
     }
 
     /// Transition to an ephemeral client that doesn't record state changes
@@ -481,6 +528,15 @@ impl Client {
         record_system_model(&self.installation.staging_dir(), system_model)?;
 
         create_root_links(&self.installation.isolation_dir())?;
+
+        // The container running triggers expects /etc to exist
+        let root_etc = self.installation.root.join("etc");
+        fs::create_dir_all(root_etc)?;
+
+        let isolation_etc = self.installation.isolation_dir().join("etc");
+        fs::create_dir_all(isolation_etc)?;
+
+        // Apply transaction triggers
         Self::apply_triggers(TriggerScope::Transaction(&self.installation, &self.scope), &fstree)?;
 
         // Staging is only used with [`Scope::Stateful`]
@@ -513,6 +569,7 @@ impl Client {
         create_root_links(blit_root)?;
         create_root_links(&self.installation.isolation_dir())?;
 
+        // The container running triggers expects /etc to exist
         let etc = blit_root.join("etc");
         fs::create_dir_all(etc)?;
 
@@ -1450,4 +1507,6 @@ pub enum Error {
     Fetch(#[source] Box<fetch::Error>),
     #[error("sync")]
     Sync(#[source] Box<sync::Error>),
+    #[error("system model doesn't exist at {0:?}")]
+    ImportSystemModelDoesntExist(PathBuf),
 }

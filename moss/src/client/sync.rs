@@ -3,7 +3,6 @@
 
 use std::{
     collections::BTreeSet,
-    path::{Path, PathBuf},
     time::{Duration, Instant},
 };
 
@@ -20,15 +19,12 @@ use crate::{
     system_model,
 };
 
-pub fn sync(client: &Client, import: Option<&Path>, yes: bool, simulate: bool) -> Result<Timing, Error> {
+pub fn sync(client: &Client, yes: bool, simulate: bool) -> Result<Timing, Error> {
     let mut timing = Timing::default();
     let mut instant = Instant::now();
 
-    let system_model = if let Some(path) = import {
-        Some(system_model::load(path)?.ok_or(Error::ImportSystemModelDoesntExist(path.to_owned()))?)
-    } else {
-        client.installation.system_model.clone()
-    };
+    // Grab the system model from the installation
+    let system_model = client.installation.system_model.clone();
 
     // Grab all the existing installed packages
     let installed = client.registry.list_installed().collect::<Vec<_>>();
@@ -316,7 +312,4 @@ pub enum Error {
 
     #[error("load system model")]
     LoadSystemModel(#[from] system_model::LoadError),
-
-    #[error("system model doesn't exist at {0:?}")]
-    ImportSystemModelDoesntExist(PathBuf),
 }

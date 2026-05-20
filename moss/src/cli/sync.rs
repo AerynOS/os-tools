@@ -50,19 +50,25 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     let simulate = command.dry_run;
     let update = command.update;
 
-    let mut client = Client::new(environment::NAME, installation)?;
+    let mut client_builder = Client::builder(environment::NAME, installation);
+
+    if let Some(path) = &command.import {
+        client_builder = client_builder.system_model_path(path);
+    }
 
     // Make ephemeral if a blit target was provided
     if let Some(blit_target) = command.blit_target {
-        client = client.ephemeral(blit_target)?;
+        client_builder = client_builder.ephemeral(blit_target);
     }
+
+    let mut client = client_builder.build()?;
 
     // Update repos if requested
     if update {
         runtime::block_on(client.refresh_repositories())?;
     }
 
-    client.sync(command.import.as_deref(), yes, simulate)?;
+    client.sync(yes, simulate)?;
 
     Ok(())
 }
