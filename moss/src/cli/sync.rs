@@ -56,12 +56,12 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         client_builder = client_builder.system_model_path(path);
     }
 
-    let mut client = client_builder.build()?;
-
     // Make ephemeral if a blit target was provided
     if let Some(blit_target) = command.blit_target {
-        client = client.ephemeral(blit_target)?;
+        client_builder = client_builder.ephemeral(blit_target);
     }
+
+    let mut client = client_builder.build()?;
 
     // Update repos if requested
     if update {
