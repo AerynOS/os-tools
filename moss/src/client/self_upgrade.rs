@@ -13,6 +13,8 @@ use crate::{
     state::{self, Selection},
 };
 
+// TODO: Flesh this out before v0 -> v1 upgrade is in place
+#[allow(unused, clippy::diverging_sub_expression)]
 #[instrument(skip(client))]
 pub fn self_upgrade(client: &mut Client, simulate: bool) -> Result<(), Error> {
     // Ensure client is stateful
