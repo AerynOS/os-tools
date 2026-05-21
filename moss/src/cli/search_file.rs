@@ -25,9 +25,7 @@ pub fn command() -> Command {
         )
 }
 
-pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
-    let mut keyword = String::from(args.get_one::<String>(ARG_KEYWORD).unwrap());
-
+fn search_file(mut keyword: String, client: Client) -> Result<(), Error> {
     // moss db doesn't record the /usr/ prefix so strip any combination of it
     // so queries like r/bin/nano, /bin/nano and /usr/bin/nano still succeed.
     let prefix = "/usr/";
@@ -38,8 +36,6 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
             break;
         }
     }
-
-    let client = Client::new(environment::NAME, installation)?;
 
     let layouts = client.list_layouts()?;
 
@@ -58,6 +54,13 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     });
 
     Ok(())
+}
+
+pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
+    let keyword = String::from(args.get_one::<String>(ARG_KEYWORD).unwrap());
+
+    let client = Client::new(environment::NAME, installation)?;
+    search_file(keyword, client)
 }
 
 #[derive(Debug, thiserror::Error)]
