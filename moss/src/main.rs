@@ -15,6 +15,9 @@ fn main() {
         if let Some(error) = error_needs_manual_handling(&error) {
             match error {
                 ManuallyHandledError::UnsupportedRepos(_) => todo!("handle unsupported repo format"),
+                ManuallyHandledError::OutdatedRepos(outdated_repos) => {
+                    print_outdated_repos_help(outdated_repos);
+                }
             }
         } else {
             report_error(error);
@@ -60,11 +63,57 @@ fn error_needs_manual_handling(error: &cli::Error) -> Option<ManuallyHandledErro
     if let Some(repository::manager::Error::UnsupportedRepos(repos)) = find_source::<repository::manager::Error>(&error)
     {
         return Some(ManuallyHandledError::UnsupportedRepos(repos.clone()));
+    } else if let Some(repository::manager::Error::OutdatedRepos(repos)) =
+        find_source::<repository::manager::Error>(&error)
+    {
+        return Some(ManuallyHandledError::OutdatedRepos(repos.clone()));
     }
-
     None
 }
 
 pub enum ManuallyHandledError {
     UnsupportedRepos(Vec<repository::manager::UnsupportedRepoFormat>),
+    OutdatedRepos(Vec<repository::manager::OutdatedRepoIndexUri>),
+}
+
+fn print_outdated_repos_help(outdated_repos: Vec<repository::manager::OutdatedRepoIndexUri>) {
+    let count = outdated_repos.len();
+
+    let repo_plural = if count == 1 { "repo" } else { "repos" };
+    let require_plural = if count == 1 { "requires" } else { "require" };
+
+    println!("{count} {repo_plural} {require_plural} a configuration update to the new repository format");
+
+    for repo in outdated_repos {
+        let id = &repo.repository.id;
+
+        let old_repo = &repo.repository.repository;
+        let new_repo = moss::Repository {
+            source: repository::Source::RootIndex(repo.compatible_root_index_source),
+            ..old_repo.clone()
+        };
+
+        let old_yaml = serde_yaml::to_string(&old_repo).unwrap_or_default();
+        let new_yaml = serde_yaml::to_string(&new_repo).unwrap_or_default();
+
+        println!("\nRepo {}\n\n```diff", id.to_string().bold());
+        print_diff(&old_yaml, &new_yaml);
+        println!("```");
+    }
+}
+
+fn print_diff(a: &str, b: &str) {
+    let diff = similar::TextDiff::from_lines(a, b);
+
+    for line in diff.unified_diff().to_string().lines() {
+        let colored = if line.starts_with('-') {
+            line.red()
+        } else if line.starts_with('+') {
+            line.green()
+        } else {
+            line.dim()
+        };
+
+        println!("{colored}");
+    }
 }

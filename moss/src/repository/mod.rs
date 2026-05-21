@@ -248,6 +248,14 @@ impl RootIndexSource {
         uri
     }
 
+    pub async fn fetch_root_index(&self) -> Result<format::RootIndex, ResolveHistoryIndexUriError> {
+        let root_index_uri = self.uri();
+
+        request::download_json::<format::RootIndex>(root_index_uri.clone())
+            .await
+            .map_err(|err| ResolveHistoryIndexUriError::FetchRootIndex(err, root_index_uri.clone()))
+    }
+
     pub async fn resolve_history_index_uri(&self) -> Result<ResolvedHistoryIndexUri, ResolveHistoryIndexUriError> {
         let root_index_uri = self.uri();
 

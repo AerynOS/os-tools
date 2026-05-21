@@ -187,6 +187,9 @@ impl Manager {
                     (Err(Error::UnsupportedRepos(a)), Err(Error::UnsupportedRepos(b))) => {
                         Err(Error::UnsupportedRepos(a.into_iter().chain(b).collect()))
                     }
+                    (Err(Error::OutdatedRepos(a)), Err(Error::OutdatedRepos(b))) => {
+                        Err(Error::OutdatedRepos(a.into_iter().chain(b).collect()))
+                    }
                     (_, Err(err)) => Err(err),
                 }
             })
@@ -245,6 +248,9 @@ impl Manager {
                     (Err(err), Ok(_)) => Err(err),
                     (Err(Error::UnsupportedRepos(a)), Err(Error::UnsupportedRepos(b))) => {
                         Err(Error::UnsupportedRepos(a.into_iter().chain(b).collect()))
+                    }
+                    (Err(Error::OutdatedRepos(a)), Err(Error::OutdatedRepos(b))) => {
+                        Err(Error::OutdatedRepos(a.into_iter().chain(b).collect()))
                     }
                     (_, Err(err)) => Err(err),
                 }
@@ -388,7 +394,29 @@ async fn fetch_index(
         .map_err(Error::CreateDir)?;
 
     let index_uri = match &state.repository.source {
-        repository::Source::DirectIndex(uri) => uri.clone(),
+        repository::Source::DirectIndex(uri) => match identify_legacy_index_uri(uri) {
+            None => uri.clone(),
+            Some(legacy_index) => {
+                // The compatible root index source for this legacy index uri
+                let source = legacy_index.compatible_root_index_source();
+
+                // If this root index exists & the related stream is now on v0+, we
+                // need to return an error informing the user to upgrade their repo
+                // configuration to the new format
+                if let Ok(root_index) = source.fetch_root_index().await
+                    && let Some((_, history)) = root_index.resolve_version_to_history(&source.version)
+                    && history.format != Format::Legacy
+                {
+                    return Err(Error::OutdatedRepos(vec![OutdatedRepoIndexUri {
+                        repository: state.clone(),
+                        legacy_index_uri: uri.clone(),
+                        compatible_root_index_source: source,
+                    }]));
+                }
+
+                uri.clone()
+            }
+        },
         repository::Source::RootIndex(source) => resolve_index_from_root(state, &out_dir, source).await?,
     };
 
@@ -507,6 +535,8 @@ pub enum Error {
     ParseCachedIndexUri(#[source] url::ParseError),
     #[error("one or more repositories has an unsupported format")]
     UnsupportedRepos(Vec<UnsupportedRepoFormat>),
+    #[error("one or more repositories with a legacy URI need to be upgraded to the new configuration format")]
+    OutdatedRepos(Vec<OutdatedRepoIndexUri>),
 }
 
 impl From<package::MissingMetaFieldError> for Error {
@@ -528,4 +558,78 @@ pub struct UnsupportedRepoFormat {
     pub upgrade_via_index_uri: Option<Url>,
     pub version: format::ScopedIdentifier,
     pub format: Format,
+}
+
+#[derive(Debug, Clone)]
+pub struct OutdatedRepoIndexUri {
+    pub repository: repository::Cached,
+    pub legacy_index_uri: Url,
+    pub compatible_root_index_source: repository::RootIndexSource,
+}
+
+struct LegacyIndexUri {
+    base_uri: Url,
+    stream: LegacyIndexUriStream,
+}
+
+enum LegacyIndexUriStream {
+    Volatile,
+    Unstable,
+}
+
+impl LegacyIndexUri {
+    fn compatible_root_index_source(self) -> repository::RootIndexSource {
+        repository::RootIndexSource {
+            version: self.stream.version(),
+            base_uri: self.base_uri,
+            channel: repository::DEFAULT_CHANNEL.try_into().expect("valid identifier"),
+            arch: repository::DEFAULT_ARCH.to_owned(),
+        }
+    }
+}
+
+impl LegacyIndexUriStream {
+    fn version(&self) -> format::ScopedIdentifier {
+        format::ScopedIdentifier::Stream(
+            format::Identifier::new(match self {
+                LegacyIndexUriStream::Volatile => "volatile",
+                LegacyIndexUriStream::Unstable => "unstable",
+            })
+            .expect("valid ident"),
+        )
+    }
+}
+
+fn identify_legacy_index_uri(uri: &Url) -> Option<LegacyIndexUri> {
+    const DOMAINS: &[&str] = &[
+        "dev.serpentos.com",
+        "packages.aerynos.com",
+        "cdn.aerynos.dev",
+        "packages.aerynos.dev",
+        "build.aerynos.dev",
+        "infratest.aerynos.dev",
+    ];
+    const VOLATILE_PATHS: &[&str] = &["/volatile/x86_64/stone.index", "/stream/volatile/x86_64/stone.index"];
+    const UNSTABLE_PATHS: &[&str] = &["/unstable/x86_64/stone.index", "/stream/unstable/x86_64/stone.index"];
+
+    let mut stream = None;
+
+    if uri.domain().is_some_and(|domain| DOMAINS.contains(&domain)) {
+        if VOLATILE_PATHS.contains(&uri.path()) {
+            stream = Some(LegacyIndexUriStream::Volatile);
+        }
+
+        if UNSTABLE_PATHS.contains(&uri.path()) {
+            stream = Some(LegacyIndexUriStream::Unstable);
+        }
+    }
+
+    if let Some(stream) = stream {
+        let mut base_uri = uri.clone();
+        base_uri.set_path("");
+
+        Some(LegacyIndexUri { base_uri, stream })
+    } else {
+        None
+    }
 }
