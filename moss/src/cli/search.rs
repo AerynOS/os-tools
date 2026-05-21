@@ -74,20 +74,12 @@ fn map_aliases(value: &str) -> &str {
     }
 }
 
-fn determine_provider(args: &ArgMatches) -> Result<Provider, Error> {
-    let keyword = args.get_one::<String>(ARG_KEYWORD).unwrap();
-    let provides_flag = args
-        .get_one::<String>(FLAG_PROVIDES)
-        .map(|s| map_aliases(s))
-        .map(|s| s.parse::<dependency::Kind>().expect("clap should restrict input"));
+fn determine_provider(keyword: &str, provides_flag: Option<dependency::Kind>) -> Result<Provider, Error> {
+    let mut provider = Provider::from_name(keyword).map_err(|_| Error::Parse(keyword.to_owned()))?;
     if let Some(kind) = provides_flag {
-        Ok(Provider {
-            kind,
-            name: keyword.to_owned(),
-        })
-    } else {
-        Provider::from_name(keyword).map_err(|_| Error::ParseError(keyword.to_owned()))
+        provider.kind = kind;
     }
+    Ok(provider)
 }
 
 fn query_packages(client: &Client, flags: package::Flags, provider: Provider) -> BTreeMap<MatchKind, Vec<Output>> {
@@ -101,10 +93,15 @@ fn query_packages(client: &Client, flags: package::Flags, provider: Provider) ->
 }
 
 pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
+    let keyword = args.get_one::<String>(ARG_KEYWORD).unwrap();
+    let provides_flag = args
+        .get_one::<String>(FLAG_PROVIDES)
+        .map(|s| map_aliases(s))
+        .map(|s| s.parse::<dependency::Kind>().expect("clap should restrict input"));
     let only_installed = args.get_flag(FLAG_INSTALLED);
-    let provider = determine_provider(args)?;
-
+    let provider = determine_provider(keyword, provides_flag)?;
     let client = Client::new(environment::NAME, installation)?;
+
     let flags = if only_installed {
         package::Flags::new().with_installed()
     } else {
@@ -156,7 +153,10 @@ pub enum Error {
     Client(#[from] client::Error),
 
     #[error("Invalid dependency type: {0}")]
-    ParseError(String),
+    Parse(String),
+
+    #[error("db")]
+    DB(#[from] moss::db::Error),
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -341,7 +341,12 @@ mod tests {
     /// Test helper function that approximates the behavior of `handle()`
     fn test_handle(query: &str) -> BTreeMap<MatchKind, Vec<Output>> {
         let args = moss(query);
-        let provider = determine_provider(&args).unwrap();
+        let keyword = args.get_one::<String>(ARG_KEYWORD).unwrap();
+        let provides_flag = args
+            .get_one::<String>(FLAG_PROVIDES)
+            .map(|s| map_aliases(s))
+            .map(|s| s.parse::<dependency::Kind>().expect("clap should restrict input"));
+        let provider = determine_provider(keyword, provides_flag).unwrap();
         query_packages(client(), flags_available(), provider)
     }
 
