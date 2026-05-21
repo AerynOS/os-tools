@@ -10,6 +10,7 @@ use moss::client;
 use moss::dependency;
 use moss::package::{self, Name};
 use moss::{Client, Installation, Provider, environment};
+use stone::StonePayloadLayoutFile;
 use strum::Display;
 use tui::Styled;
 use tui::pretty::{ColumnDisplay, print_columns};
@@ -92,6 +93,37 @@ fn query_packages(client: &Client, flags: package::Flags, provider: Provider) ->
     }
 }
 
+fn search_file(mut keyword: String, client: Client) -> Result<(), Error> {
+    // moss db doesn't record the /usr/ prefix so strip any combination of it
+    // so queries like r/bin/nano, /bin/nano and /usr/bin/nano still succeed.
+    let prefix = "/usr/";
+    for i in 0..=prefix.len() {
+        let suffix = &prefix[i..];
+        if keyword.starts_with(suffix) {
+            keyword.drain(..suffix.len());
+            break;
+        }
+    }
+
+    let layouts = client.list_layouts()?;
+
+    layouts.into_iter().for_each(|(id, layout)| match layout.file {
+        StonePayloadLayoutFile::Regular(_, file)
+        | StonePayloadLayoutFile::Symlink(_, file)
+        | StonePayloadLayoutFile::Directory(file) => {
+            if file.contains(&keyword)
+                && let Ok(pkg) = client.resolve_package(&id)
+            {
+                let name = pkg.meta.name;
+                println!("{prefix}{file} from {}", name.as_str().bold());
+            }
+        }
+        _ => {}
+    });
+
+    Ok(())
+}
+
 pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
     let keyword = args.get_one::<String>(ARG_KEYWORD).unwrap();
     let provides_flag = args
@@ -99,8 +131,13 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         .map(|s| map_aliases(s))
         .map(|s| s.parse::<dependency::Kind>().expect("clap should restrict input"));
     let only_installed = args.get_flag(FLAG_INSTALLED);
-    let provider = determine_provider(keyword, provides_flag)?;
     let client = Client::new(environment::NAME, installation)?;
+
+    if keyword.contains('/') {
+        return search_file(keyword.to_owned(), client);
+    }
+
+    let provider = determine_provider(keyword, provides_flag)?;
 
     let flags = if only_installed {
         package::Flags::new().with_installed()
