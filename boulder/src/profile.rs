@@ -97,6 +97,7 @@ impl<'a> Manager<'a> {
             .config
             .load::<Map>()
             .into_iter()
+            .map(|loaded| loaded.value)
             .reduce(Map::merge)
             .unwrap_or_default();
 

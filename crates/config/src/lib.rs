@@ -52,15 +52,15 @@ impl Manager {
         }
     }
 
-    pub fn load<T: Config>(&self) -> Vec<T> {
+    pub fn load<T: Config>(&self) -> Vec<LoadedConfig<T>> {
         let domain = T::domain();
 
         let mut configs = vec![];
 
         for (entry, resolve) in self.scope.load_with() {
             for path in enumerate_paths(entry, resolve, &domain) {
-                if let Some(config) = read_config(path) {
-                    configs.push(config);
+                if let Some(value) = read_config(&path) {
+                    configs.push(LoadedConfig { path, value });
                 }
             }
         }
@@ -68,7 +68,7 @@ impl Manager {
         configs
     }
 
-    pub fn save<T: Config + Serialize>(&self, name: impl fmt::Display, config: &T) -> Result<(), SaveError> {
+    pub fn save<T: Config + Serialize>(&self, name: impl fmt::Display, config: &T) -> Result<PathBuf, SaveError> {
         let domain = T::domain();
 
         let dir = self.scope.save_dir(&domain);
@@ -79,9 +79,9 @@ impl Manager {
 
         let serialized = serde_yaml::to_string(config).context(YamlSnafu)?;
 
-        fs::write(&path, serialized).context(WriteSnafu { path })?;
+        fs::write(&path, serialized).context(WriteSnafu { path: path.clone() })?;
 
-        Ok(())
+        Ok(path)
     }
 
     pub fn delete<T: Config>(&self, name: impl fmt::Display) -> io::Result<()> {
@@ -108,6 +108,11 @@ pub enum SaveError {
     Yaml { source: serde_yaml::Error },
     #[snafu(display("write config file"))]
     Write { path: PathBuf, source: io::Error },
+}
+
+pub struct LoadedConfig<T> {
+    pub path: PathBuf,
+    pub value: T,
 }
 
 fn enumerate_paths(entry: Entry, resolve: Resolve<'_>, domain: &str) -> Vec<PathBuf> {
@@ -139,7 +144,7 @@ fn enumerate_paths(entry: Entry, resolve: Resolve<'_>, domain: &str) -> Vec<Path
     }
 }
 
-fn read_config<T: Config>(path: PathBuf) -> Option<T> {
+fn read_config<T: Config>(path: &Path) -> Option<T> {
     let bytes = fs::read(path).ok()?;
     serde_yaml::from_slice(&bytes).ok()
 }

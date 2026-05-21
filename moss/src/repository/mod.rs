@@ -64,15 +64,23 @@ pub struct Cached {
     pub id: Id,
     pub repository: Repository,
     pub db: meta::Database,
+    pub config_path: Option<PathBuf>,
     index_uri: Arc<ArcSwap<Option<Url>>>,
 }
 
 impl Cached {
-    pub fn new(id: Id, repository: Repository, db: meta::Database, index_uri: Option<Url>) -> Self {
+    pub fn new(
+        id: Id,
+        repository: Repository,
+        db: meta::Database,
+        config_path: Option<PathBuf>,
+        index_uri: Option<Url>,
+    ) -> Self {
         Self {
             id,
             repository,
             db,
+            config_path,
             index_uri: Arc::new(ArcSwap::new(Arc::new(index_uri))),
         }
     }

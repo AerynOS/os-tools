@@ -80,26 +80,34 @@ impl Manager {
                 config
                     .load::<repository::Map>()
                     .into_iter()
-                    .reduce(repository::Map::merge)
-                    .unwrap_or_default()
+                    .map(|loaded| (Some(loaded.path), loaded.value))
+                    .collect()
             }
-            Source::Explicit { repos, .. } => repos.clone(),
+            Source::Explicit { repos, .. } => vec![(None, repos.clone())],
         };
 
         // Open all repo meta dbs and collect into hash map
         let repositories = configs
             .into_iter()
-            .map(|(id, repository)| {
-                let db = open_meta_db(source.identifier(), &repository, &installation)?;
+            .flat_map(|(config_path, repo_map)| {
+                repo_map
+                    .into_iter()
+                    .map(|(id, repository)| {
+                        let db = open_meta_db(source.identifier(), &repository, &installation)?;
 
-                let index_uri = match &repository.source {
-                    repository::Source::DirectIndex(uri) => Some(uri.clone()),
-                    repository::Source::RootIndex(_) => {
-                        load_cached_index_uri(source.identifier(), &repository, &installation)?
-                    }
-                };
+                        let index_uri = match &repository.source {
+                            repository::Source::DirectIndex(uri) => Some(uri.clone()),
+                            repository::Source::RootIndex(_) => {
+                                load_cached_index_uri(source.identifier(), &repository, &installation)?
+                            }
+                        };
 
-                Ok((id.clone(), repository::Cached::new(id, repository, db, index_uri)))
+                        Ok((
+                            id.clone(),
+                            repository::Cached::new(id, repository, db, config_path.clone(), index_uri),
+                        ))
+                    })
+                    .collect::<Vec<_>>()
             })
             .collect::<Result<_, Error>>()?;
 
@@ -119,10 +127,8 @@ impl Manager {
         // Save repo as new config file
         // We save it as a map for easy merging across
         // multiple configuration files
-        {
-            let map = repository::Map::with([(id.clone(), repository.clone())]);
-            config.save(&id, &map).map_err(Error::SaveConfig)?;
-        }
+        let map = repository::Map::with([(id.clone(), repository.clone())]);
+        let config_path = config.save(&id, &map).map_err(Error::SaveConfig)?;
 
         let db = open_meta_db(self.source.identifier(), &repository, &self.installation)?;
 
@@ -133,8 +139,10 @@ impl Manager {
             }
         };
 
-        self.repositories
-            .insert(id.clone(), repository::Cached::new(id, repository, db, index_uri));
+        self.repositories.insert(
+            id.clone(),
+            repository::Cached::new(id, repository, db, Some(config_path), index_uri),
+        );
 
         Ok(())
     }

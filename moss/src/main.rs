@@ -86,6 +86,7 @@ fn print_outdated_repos_help(outdated_repos: Vec<repository::manager::OutdatedRe
 
     for repo in outdated_repos {
         let id = &repo.repository.id;
+        let config_path = &repo.repository.config_path;
 
         let old_repo = &repo.repository.repository;
         let new_repo = moss::Repository {
@@ -96,7 +97,17 @@ fn print_outdated_repos_help(outdated_repos: Vec<repository::manager::OutdatedRe
         let old_yaml = serde_yaml::to_string(&old_repo).unwrap_or_default();
         let new_yaml = serde_yaml::to_string(&new_repo).unwrap_or_default();
 
-        println!("\nRepo {}\n\n```diff", id.to_string().bold());
+        if let Some(config_path) = config_path {
+            println!(
+                "\nRepo {} at {}",
+                id.to_string().bold(),
+                config_path.display().to_string().bold()
+            );
+        } else {
+            println!("\nRepo {}", id.to_string().bold());
+        }
+
+        println!("\n```diff");
         print_diff(&old_yaml, &new_yaml);
         println!("```");
     }
