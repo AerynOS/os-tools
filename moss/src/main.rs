@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2023 AerynOS Developers
 // SPDX-License-Identifier: MPL-2.0
 
-use std::error::Error;
+use fs_err as fs;
+use std::{collections::HashMap, error::Error};
 
 use moss::repository;
 use tracing::error;
@@ -15,8 +16,8 @@ fn main() {
         if let Some(error) = error_needs_manual_handling(&error) {
             match error {
                 ManuallyHandledError::UnsupportedRepos(_) => todo!("handle unsupported repo format"),
-                ManuallyHandledError::OutdatedRepos(outdated_repos) => {
-                    print_outdated_repos_help(outdated_repos);
+                ManuallyHandledError::OutdatedRepos(config_manager, outdated_repos) => {
+                    handle_outdated_repos(config_manager, outdated_repos);
                 }
             }
         } else {
@@ -63,60 +64,139 @@ fn error_needs_manual_handling(error: &cli::Error) -> Option<ManuallyHandledErro
     if let Some(repository::manager::Error::UnsupportedRepos(repos)) = find_source::<repository::manager::Error>(&error)
     {
         return Some(ManuallyHandledError::UnsupportedRepos(repos.clone()));
-    } else if let Some(repository::manager::Error::OutdatedRepos(repos)) =
+    } else if let Some(repository::manager::Error::OutdatedRepos(config_manager, repos)) =
         find_source::<repository::manager::Error>(&error)
     {
-        return Some(ManuallyHandledError::OutdatedRepos(repos.clone()));
+        return Some(ManuallyHandledError::OutdatedRepos(
+            config_manager.clone(),
+            repos.clone(),
+        ));
     }
     None
 }
 
 pub enum ManuallyHandledError {
     UnsupportedRepos(Vec<repository::manager::UnsupportedRepoFormat>),
-    OutdatedRepos(Vec<repository::manager::OutdatedRepoIndexUri>),
+    OutdatedRepos(Option<config::Manager>, Vec<repository::manager::OutdatedRepoIndexUri>),
 }
 
-fn print_outdated_repos_help(outdated_repos: Vec<repository::manager::OutdatedRepoIndexUri>) {
+fn handle_outdated_repos(
+    config_manager: Option<config::Manager>,
+    outdated_repos: Vec<repository::manager::OutdatedRepoIndexUri>,
+) {
     let count = outdated_repos.len();
 
     let repo_plural = if count == 1 { "repo" } else { "repos" };
     let require_plural = if count == 1 { "requires" } else { "require" };
 
-    println!("{count} {repo_plural} {require_plural} a configuration update to the new repository format");
+    if let Some(config_manager) = &config_manager {
+        println!("{count} {repo_plural} will be upgraded to the new repository format");
 
-    for repo in outdated_repos {
-        let id = &repo.repository.id;
-        let config_path = &repo.repository.config_path;
+        let loaded_config = config_manager
+            .load::<repository::Map>()
+            .into_iter()
+            .map(|item| {
+                let no_ext = item.path.with_extension("");
+                (no_ext, item)
+            })
+            .collect::<HashMap<_, _>>();
 
-        let old_repo = &repo.repository.repository;
-        let new_repo = moss::Repository {
-            source: repository::Source::RootIndex(repo.compatible_root_index_source),
-            ..old_repo.clone()
-        };
+        let updated_config = outdated_repos
+            .into_iter()
+            .fold(HashMap::<_, repository::Map>::new(), |mut acc, repo| {
+                let Some(path) = repo.repository.config_path else {
+                    // Unreachable, if config manager is present than
+                    // all repos were loaded from it & will have a config path
+                    return acc;
+                };
+                let no_ext = path.with_extension("");
 
-        let old_yaml = serde_yaml::to_string(&old_repo).unwrap_or_default();
-        let new_yaml = serde_yaml::to_string(&new_repo).unwrap_or_default();
+                let id = repo.repository.id.clone();
 
-        if let Some(config_path) = config_path {
-            println!(
-                "\nRepo {} at {}",
-                id.to_string().bold(),
-                config_path.display().to_string().bold()
+                let old_repo = &repo.repository.repository;
+                let new_repo = moss::Repository {
+                    source: repository::Source::RootIndex(repo.compatible_root_index_source),
+                    ..old_repo.clone()
+                };
+
+                acc.entry(no_ext.clone()).or_default().add(id, new_repo);
+                acc
+            });
+
+        // TODO: Prompt confirmation
+
+        for (no_ext, updated_map) in updated_config {
+            let Some(current_config) = loaded_config.get(&no_ext) else {
+                // Unreachable, everything returned originated from
+                // stuff loaded via config manager
+                continue;
+            };
+
+            let name = no_ext.file_name().unwrap_or_default().to_str().unwrap_or_default();
+            let kdl_path = no_ext.with_extension("kdl");
+
+            let old_content = fs::read_to_string(&current_config.path).unwrap_or_default();
+
+            if let Err(e) = config_manager.save(name, &updated_map) {
+                eprintln!("Failed to save updated config to {kdl_path:?}: {e:#}");
+                continue;
+            }
+
+            let new_content = fs::read_to_string(&kdl_path).unwrap_or_default();
+
+            println!("\nUpdate applied to {kdl_path:?}");
+
+            println!("\n```diff");
+            print_diff(
+                &old_content,
+                &new_content,
+                Some((
+                    current_config.path.as_os_str().to_str().unwrap_or_default(),
+                    kdl_path.as_os_str().to_str().unwrap_or_default(),
+                )),
             );
-        } else {
-            println!("\nRepo {}", id.to_string().bold());
+            println!("```");
         }
+    } else {
+        // System model
 
-        println!("\n```diff");
-        print_diff(&old_yaml, &new_yaml);
-        println!("```");
+        println!(
+            "{count} system model {repo_plural} {require_plural} a configuration update to the new repository format"
+        );
+
+        for repo in outdated_repos {
+            let id = &repo.repository.id;
+
+            let old_repo = &repo.repository.repository;
+            let new_repo = moss::Repository {
+                source: repository::Source::RootIndex(repo.compatible_root_index_source),
+                ..old_repo.clone()
+            };
+
+            let mut old_kdl = kdl::se::to_document(&old_repo).unwrap_or_default();
+            let mut new_kdl = kdl::se::to_document(&new_repo).unwrap_or_default();
+
+            old_kdl.autoformat();
+            new_kdl.autoformat();
+
+            println!("\nUpdate for {}", id.to_string().bold());
+            println!("\n```diff");
+            print_diff(&old_kdl.to_string(), &new_kdl.to_string(), None);
+            println!("```");
+        }
     }
 }
 
-fn print_diff(a: &str, b: &str) {
+fn print_diff(a: &str, b: &str, header: Option<(&str, &str)>) {
     let diff = similar::TextDiff::from_lines(a, b);
 
-    for line in diff.unified_diff().to_string().lines() {
+    let mut unified = diff.unified_diff();
+
+    if let Some((file_a, file_b)) = header {
+        unified.header(file_a, file_b);
+    }
+
+    for line in unified.to_string().lines() {
         let colored = if line.starts_with('-') {
             line.red()
         } else if line.starts_with('+') {

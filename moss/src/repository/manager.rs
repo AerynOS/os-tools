@@ -36,6 +36,13 @@ impl Source {
             Source::Explicit { identifier, .. } => identifier,
         }
     }
+
+    fn config_manager(&self) -> Option<&config::Manager> {
+        match self {
+            Source::System(manager) => Some(manager),
+            Source::Explicit { .. } => None,
+        }
+    }
 }
 
 /// Manage a bunch of repositories
@@ -154,7 +161,7 @@ impl Manager {
         };
 
         if repo.repository.active {
-            let file = fetch_index(self.source.identifier(), &repo, &self.installation).await?;
+            let file = fetch_index(&self.source, &repo, &self.installation).await?;
             runtime::unblock(move || update_meta_db(&repo, &file)).await?;
         }
 
@@ -195,9 +202,10 @@ impl Manager {
                     (Err(Error::UnsupportedRepos(a)), Err(Error::UnsupportedRepos(b))) => {
                         Err(Error::UnsupportedRepos(a.into_iter().chain(b).collect()))
                     }
-                    (Err(Error::OutdatedRepos(a)), Err(Error::OutdatedRepos(b))) => {
-                        Err(Error::OutdatedRepos(a.into_iter().chain(b).collect()))
-                    }
+                    (Err(Error::OutdatedRepos(_, a)), Err(Error::OutdatedRepos(_, b))) => Err(Error::OutdatedRepos(
+                        self.source.config_manager().cloned(),
+                        a.into_iter().chain(b).collect(),
+                    )),
                     (_, Err(err)) => Err(err),
                 }
             })
@@ -257,9 +265,10 @@ impl Manager {
                     (Err(Error::UnsupportedRepos(a)), Err(Error::UnsupportedRepos(b))) => {
                         Err(Error::UnsupportedRepos(a.into_iter().chain(b).collect()))
                     }
-                    (Err(Error::OutdatedRepos(a)), Err(Error::OutdatedRepos(b))) => {
-                        Err(Error::OutdatedRepos(a.into_iter().chain(b).collect()))
-                    }
+                    (Err(Error::OutdatedRepos(_, a)), Err(Error::OutdatedRepos(_, b))) => Err(Error::OutdatedRepos(
+                        self.source.config_manager().cloned(),
+                        a.into_iter().chain(b).collect(),
+                    )),
                     (_, Err(err)) => Err(err),
                 }
             })
@@ -391,11 +400,11 @@ fn load_cached_index_uri(
 /// Fetches a stone index file from the repository URL
 /// and saves it to the repo installation path
 async fn fetch_index(
-    identifier: &str,
+    source: &Source,
     state: &repository::Cached,
     installation: &Installation,
 ) -> Result<PathBuf, Error> {
-    let out_dir = cache_dir(identifier, &state.repository, installation);
+    let out_dir = cache_dir(source.identifier(), &state.repository, installation);
 
     fs_err::tokio::create_dir_all(&out_dir)
         .await
@@ -406,20 +415,23 @@ async fn fetch_index(
             None => uri.clone(),
             Some(legacy_index) => {
                 // The compatible root index source for this legacy index uri
-                let source = legacy_index.compatible_root_index_source();
+                let root_source = legacy_index.compatible_root_index_source();
 
                 // If this root index exists & the related stream is now on v0+, we
                 // need to return an error informing the user to upgrade their repo
                 // configuration to the new format
-                if let Ok(root_index) = source.fetch_root_index().await
-                    && let Some((_, history)) = root_index.resolve_version_to_history(&source.version)
+                if let Ok(root_index) = root_source.fetch_root_index().await
+                    && let Some((_, history)) = root_index.resolve_version_to_history(&root_source.version)
                     && history.format != Format::Legacy
                 {
-                    return Err(Error::OutdatedRepos(vec![OutdatedRepoIndexUri {
-                        repository: state.clone(),
-                        legacy_index_uri: uri.clone(),
-                        compatible_root_index_source: source,
-                    }]));
+                    return Err(Error::OutdatedRepos(
+                        source.config_manager().cloned(),
+                        vec![OutdatedRepoIndexUri {
+                            repository: state.clone(),
+                            legacy_index_uri: uri.clone(),
+                            compatible_root_index_source: root_source,
+                        }],
+                    ));
                 }
 
                 uri.clone()
@@ -544,7 +556,7 @@ pub enum Error {
     #[error("one or more repositories has an unsupported format")]
     UnsupportedRepos(Vec<UnsupportedRepoFormat>),
     #[error("one or more repositories with a legacy URI need to be upgraded to the new configuration format")]
-    OutdatedRepos(Vec<OutdatedRepoIndexUri>),
+    OutdatedRepos(Option<config::Manager>, Vec<OutdatedRepoIndexUri>),
 }
 
 impl From<package::MissingMetaFieldError> for Error {
