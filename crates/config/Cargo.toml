@@ -12,6 +12,8 @@ rust-version.workspace = true
 [dependencies]
 dirs.workspace = true
 fs-err.workspace = true
+itertools.workspace = true
+kdl.workspace = true
 serde_core.workspace = true
 serde_yaml.workspace = true
 snafu.workspace = true

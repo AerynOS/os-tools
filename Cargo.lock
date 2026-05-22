@@ -314,7 +314,7 @@ dependencies = [
  "sha2",
  "similar",
  "stone",
- "stone_recipe 0.26.1",
+ "stone_recipe",
  "strum",
  "tempfile",
  "thiserror 2.0.18",
@@ -603,6 +603,8 @@ version = "0.26.1"
 dependencies = [
  "dirs",
  "fs-err",
+ "itertools 0.14.0",
+ "kdl",
  "serde_core",
  "serde_yaml",
  "snafu",
@@ -1065,7 +1067,7 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_yaml",
- "stone_recipe 0.26.1 (git+https://github.com/AerynOS/tools.git)",
+ "stone_recipe",
  "thiserror 2.0.18",
 ]
 
@@ -1855,12 +1857,12 @@ dependencies = [
 [[package]]
 name = "kdl"
 version = "6.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81a29e7b50079ff44549f68c0becb1c73d7f6de2a4ea952da77966daf3d4761e"
+source = "git+https://github.com/kdl-org/kdl-rs?rev=e9df058c25cd4486df8fe568d2ff24ea2c4ed0e8#e9df058c25cd4486df8fe568d2ff24ea2c4ed0e8"
 dependencies = [
  "miette",
  "num",
- "winnow 0.6.24",
+ "serde",
+ "winnow 0.7.15",
 ]
 
 [[package]]
@@ -3157,21 +3159,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "stone_recipe"
-version = "0.26.1"
-source = "git+https://github.com/AerynOS/tools.git#73c0e0a7df13398924f67fa0640895897361dd66"
-dependencies = [
- "kdl",
- "nom",
- "serde",
- "serde_yaml",
- "snafu",
- "strum",
- "thiserror 2.0.18",
- "url",
-]
-
-[[package]]
 name = "strsim"
 version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4418,15 +4405,6 @@ name = "windows_x86_64_msvc"
 version = "0.53.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6bbff5f0aada427a1e5a6da5f1f98158182f26556f345ac9e04d36d0ebed650"
-
-[[package]]
-name = "winnow"
-version = "0.6.24"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c8d71a593cc5c42ad7876e2c1fda56f314f3754c084128833e64f1345ff8a03a"
-dependencies = [
- "memchr",
-]
 
 [[package]]
 name = "winnow"
