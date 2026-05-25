@@ -270,6 +270,7 @@ mod tests {
     use moss::registry::plugin;
     use std::collections::BTreeSet;
     use std::sync::LazyLock;
+    use stone::{StonePayloadLayoutFile, StonePayloadLayoutRecord};
 
     use super::*;
 
@@ -352,12 +353,33 @@ mod tests {
         _root: tempfile::TempDir,
         client: Client,
     }
+    fn test_layouts() -> Vec<(package::Id, StonePayloadLayoutRecord)> {
+        fn regular(file: &str) -> StonePayloadLayoutRecord {
+            StonePayloadLayoutRecord {
+                uid: 0,
+                gid: 0,
+                mode: 0o755,
+                tag: 0,
+                file: StonePayloadLayoutFile::Regular(0, file.into()),
+            }
+        }
+        [
+            ("helix", "bin/hx"),
+            ("nano", "bin/nano"),
+            ("nano", "bin/rnano"),
+            ("libyaml", "lib/libyaml-0.so.2"),
+            ("libyaml", "lib/libyaml-0.so.2.0.9"),
+        ]
+        .into_iter()
+        .map(|(pkg, file)| (package::Id::from(pkg.to_owned()), regular(file)))
+        .collect()
+    }
 
     static TEST_FIXTURE: LazyLock<TestFixture> = LazyLock::new(|| {
         let root = tempfile::tempdir().unwrap();
         let installation = Installation::open(root.path(), None).unwrap();
         let registry = test_registry();
-        let client = Client::mocked(installation, registry).unwrap();
+        let client = Client::mocked(installation, registry, test_layouts()).unwrap();
         TestFixture { _root: root, client }
     });
 
@@ -392,6 +414,10 @@ mod tests {
             .map(|s| s.parse::<dependency::Kind>().expect("clap should restrict input"));
         let provider = determine_provider(keyword, provides_flag).unwrap();
         query_packages(client(), flags_available(), provider)
+    }
+
+    fn search_file_results(keyword: &str) -> Vec<(String, Name)> {
+        search_file(keyword.to_owned(), client()).unwrap()
     }
 
     #[test]
@@ -510,5 +536,32 @@ mod tests {
 
         assert_eq!(names_provides_flag, names_dependency_syntax);
         assert_eq!(names_provides_flag, vec!["libyaml-devel"]);
+    }
+
+    #[test]
+    fn test_search_file_strips_usr_prefix() {
+        for query in ["/usr/bin/hx", "usr/bin/hx", "/bin/hx", "bin/hx"] {
+            let results = search_file_results(query);
+            assert_eq!(results.len(), 1, "expected one result for {query:?}");
+            assert_eq!(results[0].0, "/usr/bin/hx");
+        }
+    }
+
+    #[test]
+    fn test_search_file_libyaml() {
+        let results = search_file_results("libyaml");
+        assert_eq!(results.len(), 2);
+        for (filepath, _) in results {
+            assert!(
+                filepath.starts_with("/usr/lib/libyaml-0.so.2"),
+                "File path {filepath} does not contain expected prefix /usr/lib/libyaml-0.so.2"
+            );
+        }
+    }
+
+    #[test]
+    fn test_search_file_nonexistent_returns_empty() {
+        let results = search_file_results("/bin/nonexistent");
+        assert!(results.is_empty());
     }
 }
