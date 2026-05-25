@@ -93,7 +93,7 @@ fn query_packages(client: &Client, flags: package::Flags, provider: Provider) ->
     }
 }
 
-fn search_file(mut keyword: String, client: Client) -> Result<(), Error> {
+fn search_file(mut keyword: String, client: &Client) -> Result<Vec<(String, Name)>, Error> {
     // moss db doesn't record the /usr/ prefix so strip any combination of it
     // so queries like r/bin/nano, /bin/nano and /usr/bin/nano still succeed.
     let prefix = "/usr/";
@@ -107,21 +107,25 @@ fn search_file(mut keyword: String, client: Client) -> Result<(), Error> {
 
     let layouts = client.list_layouts()?;
 
-    layouts.into_iter().for_each(|(id, layout)| match layout.file {
-        StonePayloadLayoutFile::Regular(_, file)
-        | StonePayloadLayoutFile::Symlink(_, file)
-        | StonePayloadLayoutFile::Directory(file) => {
-            if file.contains(&keyword)
-                && let Ok(pkg) = client.resolve_package(&id)
-            {
-                let name = pkg.meta.name;
-                println!("{prefix}{file} from {}", name.as_str().bold());
+    let result = layouts
+        .into_iter()
+        .filter_map(|(id, layout)| match layout.file {
+            StonePayloadLayoutFile::Regular(_, file)
+            | StonePayloadLayoutFile::Symlink(_, file)
+            | StonePayloadLayoutFile::Directory(file) => {
+                if file.contains(&keyword)
+                    && let Ok(pkg) = client.resolve_package(&id)
+                {
+                    Some((format!("{prefix}{file}"), pkg.meta.name))
+                } else {
+                    None
+                }
             }
-        }
-        _ => {}
-    });
+            _ => None,
+        })
+        .collect();
 
-    Ok(())
+    Ok(result)
 }
 
 pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
@@ -134,7 +138,10 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     let client = Client::new(environment::NAME, installation)?;
 
     if keyword.contains('/') {
-        return search_file(keyword.to_owned(), client);
+        for (filepath, name) in search_file(keyword.to_owned(), &client).unwrap() {
+            println!("{filepath} from {}", name.as_str().bold());
+        }
+        return Ok(());
     }
 
     let provider = determine_provider(keyword, provides_flag)?;
