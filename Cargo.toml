@@ -17,9 +17,9 @@ blsforme = { git = "https://github.com/AerynOS/blsforme.git", rev = "68072054530
 bytes = "1.6.0"
 camino = "1.1.10"
 chrono = "0.4.38"
-clap = { version = "4.5.8", features = ["derive", "string"] }
-clap_complete = "4.5.37"
-clap_mangen = "0.2.24"
+clap = { version = "4.6.1", features = ["derive", "string"] }
+clap_complete = "4.6.5"
+clap_mangen = "0.3.0"
 criterion = { version = "0.8.2", features = ["html_reports"] }
 crossterm = "0.29.0"
 derive_more = { version = "2.0.1", features = [
@@ -29,30 +29,30 @@ derive_more = { version = "2.0.1", features = [
     "into",
 ] }
 dialoguer = "0.12.0"
-diesel = { version = "2.2.1", features = [
+diesel = { version = "2.3.9", features = [
     "sqlite",
     "returning_clauses_for_sqlite_3_35",
 ] }
-diesel_migrations = "2.2.0"
+diesel_migrations = "2.3.2"
 dirs = "6.0.0"
 elf = "0.8.0"
 ent_core = { git = "https://github.com/AerynOS/ent.git", rev = "fdb389a2ee49da8cc753dd32dc5ab8f8e9aebb04" }
 indicatif = "0.18.0"
 inventory = "0.3.22"
 itertools = "0.14.0"
-filetime = "0.2.24"
+filetime = "0.2.29"
 fs-err = { version = "3.3.0", features = ["tokio"] }
 
 futures-util = "0.3.31"
 glob = "0.3.1"
 hex = "0.4.3"
 humansize = "2.1.3"
-indextree = "4.6.1"
-libsqlite3-sys = { version = "0.35.0", features = ["bundled"] }
-log = "0.4.22"
+indextree = "4.8.1"
+libsqlite3-sys = { version = "0.37.0", features = ["bundled"] }
+log = "0.4.30"
 nc = "0.9.7"
-nom = "7.1.3"
-nix = { version = "0.27.1", features = [
+nom = "8.0.0"
+nix = { version = "0.31.2", features = [
     "user",
     "fs",
     "sched",
@@ -65,9 +65,9 @@ nix = { version = "0.27.1", features = [
 os-info = { git = "https://github.com/AerynOS/os-info", rev = "26b39c1d49c3b4f30d778729fb56958824c069de" }
 path-clean = "1.0.1"
 petgraph = "0.8.2"
-rayon = "1.10.0"
+rayon = "1.12.0"
 regex = "1.10.5"
-reqwest = { version = "0.13.2", default-features = false, features = [
+reqwest = { version = "0.13.4", default-features = false, features = [
     "brotli",
     "charset",
     "deflate",
@@ -81,12 +81,12 @@ reqwest = { version = "0.13.2", default-features = false, features = [
 ] }
 serde = { version = "1.0.223", features = ["derive"] }
 serde_core = "1.0.223"
-serde_json = "1.0.145"
+serde_json = "1.0.150"
 serde_yaml = "0.9.34"
-sha2 = "0.10.8"
+sha2 = "0.11.0"
 similar = "3"
 snafu = "0.9.0"
-strum = { version = "0.27.1", features = ["derive"] }
+strum = { version = "0.28.0", features = ["derive"] }
 thiserror = "2.0.3"
 thread-priority = "3.0.0"
 tokio = { version = "1.38.0", features = ["full"] }
@@ -102,10 +102,10 @@ url = { version = "2.5.2", features = ["serde"] }
 xxhash-rust = { version = "0.8.11", features = ["xxh3"] }
 zstd = { version = "0.13.2", features = ["zstdmt"] }
 mailparse = "0.16.1"
-zbus = { version = "5.1.1", default-features = false, features = ["tokio"] }
+zbus = { version = "5.15.0", default-features = false, features = ["tokio"] }
 tempfile = "3.20.0"
 kdl = "6.5.0"
-libc = "0.2.62"
+libc = "0.2.186"
 cbindgen = "0.29.2"
 
 [workspace.lints.rust]
