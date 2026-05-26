@@ -46,21 +46,21 @@ pub struct VersionPattern {
 
 struct VcsProvider {
     host: &'static str,
-    path_contains: &'static str,
+    path_contains: &'static [&'static str],
 }
 
 const VCS_PROVIDERS: &[VcsProvider] = &[
     VcsProvider {
         host: "github.com",
-        path_contains: "archive/refs/tags/",
+        path_contains: &["archive/refs/tags/"],
     },
     VcsProvider {
         host: "gitlab.com",
-        path_contains: "/-/archive/",
+        path_contains: &["/-/archive/"],
     },
     VcsProvider {
         host: "codeberg.org",
-        path_contains: "/archive/",
+        path_contains: &["/archive/"],
     },
 ];
 
@@ -242,7 +242,7 @@ impl VersionExtractor {
 
         let _provider = VCS_PROVIDERS
             .iter()
-            .find(|p| p.host == host && url.path().contains(p.path_contains))?;
+            .find(|p| p.host == host && p.path_contains.iter().any(|s| url.path().contains(s)))?;
 
         let parts: Vec<&str> = url.path().split('/').collect();
         let project = parts.get(2)?;
