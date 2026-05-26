@@ -52,7 +52,7 @@ struct VcsProvider {
 const VCS_PROVIDERS: &[VcsProvider] = &[
     VcsProvider {
         host: "github.com",
-        path_contains: &["archive/refs/tags/"],
+        path_contains: &["archive/refs/tags/", "releases/download/"],
     },
     VcsProvider {
         host: "gitlab.com",
@@ -284,6 +284,14 @@ mod tests {
             ),
             (
                 "https://github.com/cli/cli/archive/refs/tags/v2.63.2.tar.gz",
+                Extraction {
+                    version: "2.63.2".to_string(),
+                    name: "cli".to_string(),
+                    release_series: None,
+                },
+            ),
+            (
+                "https://github.com/cli/cli/releases/download/v2.63.2/cli-2.63.2.tar.gz",
                 Extraction {
                     version: "2.63.2".to_string(),
                     name: "cli".to_string(),
