@@ -44,7 +44,7 @@ impl Active {
     fn query(&self, flags: package::Flags, filter: Option<db::meta::Filter<'_>>) -> Vec<Package> {
         if flags.installed || flags == package::Flags::default() {
             // TODO: Error handling
-            let packages = match self.db.query(filter) {
+            let packages = match self.db.query(filter.unwrap_or(db::meta::Filter::All)) {
                 Ok(packages) => packages,
                 Err(error) => {
                     warn!("failed to query repository packages: {error}");
