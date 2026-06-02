@@ -246,8 +246,15 @@ impl VersionExtractor {
 
         let parts: Vec<&str> = url.path().split('/').collect();
         let project = parts.get(2)?;
-        let asset = parts.last()?;
-        let faux = format!("{project}-{asset}");
+
+        // Look for something "digity", otherwise just use the last part
+        let version = parts
+            .iter()
+            .skip(2)
+            .find(|part| part.chars().any(|c| c.is_ascii_digit()))
+            .unwrap_or_else(|| parts.last().unwrap());
+
+        let faux = format!("{project}-{version}");
 
         Some(self.extract(&faux).map(|matched| Extraction {
             name: project.to_string(),
@@ -415,6 +422,22 @@ mod tests {
                 Extraction {
                     version: "2024.1.5".to_string(),
                     name: "flightgear".to_string(),
+                    release_series: None,
+                },
+            ),
+            (
+                "https://github.com/protocolbuffers/protobuf/releases/download/v35.0/protobuf-35.0.bazel.tar.gz",
+                Extraction {
+                    version: "35.0".to_string(),
+                    name: "protobuf".to_string(),
+                    release_series: None,
+                },
+            ),
+            (
+                "https://github.com/unicode-org/icu/releases/download/release-78.3/icu4c-78.3-sources.tgz",
+                Extraction {
+                    version: "78.3".to_string(),
+                    name: "icu".to_string(),
                     release_series: None,
                 },
             ),
