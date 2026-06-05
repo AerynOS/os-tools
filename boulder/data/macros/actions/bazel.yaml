@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: 2026 AerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
+
+actions:
+    - bazel_fetch:
+        description: Fetch dependencies (should specify target in recipe)
+        command: |
+            bazel fetch
+        dependencies:
+            - binary(bazel)
+
+    - bazel_build:
+        description: Build using Bazel (should specify target in recipe)
+        command: |
+            bazel build %(options_bazel_release)
+        dependencies:
+            - binary(bazel)
+
+definitions:
+    # Default compilation mode for releases
+    - bazel_profile: "opt"
+
+    - options_bazel: |
+        --jobs="%(jobs)" \
+        --subcommands \
+        --verbose_failures \
+        --curses=no \
+        --spawn_strategy=local
+
+    - options_bazel_release: |
+        %(options_bazel) -c %(bazel_profile)
