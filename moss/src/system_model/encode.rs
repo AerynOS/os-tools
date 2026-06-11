@@ -23,55 +23,7 @@ fn encode_repositories<'a>(repositories: impl IntoIterator<Item = (&'a repositor
     let mut node = KdlNode::new("repositories");
 
     for (id, repo) in repositories {
-        push_child(&mut node, id, |repo_node| {
-            push_child(repo_node, "description", |description| {
-                push_value(description, repo.description.clone());
-            });
-
-            match &repo.source {
-                repository::Source::DirectIndex(uri) => {
-                    push_child(repo_node, "uri", |uri_node| {
-                        push_value(uri_node, uri.to_string());
-                    });
-                }
-                repository::Source::RootIndex(repository::RootIndexSource {
-                    base_uri,
-                    channel,
-                    version,
-                    arch,
-                }) => {
-                    push_child(repo_node, "base-uri", |uri_node| {
-                        push_value(uri_node, base_uri.to_string());
-                    });
-
-                    if channel.as_ref() != repository::DEFAULT_CHANNEL {
-                        push_child(repo_node, "channel", |channel_node| {
-                            push_value(channel_node, channel.to_string());
-                        });
-                    }
-
-                    push_child(repo_node, "version", |version_node| {
-                        push_value(version_node, version.to_string());
-                    });
-
-                    if arch != repository::DEFAULT_ARCH {
-                        push_child(repo_node, "arch", |arch_node| {
-                            push_value(arch_node, arch.clone());
-                        });
-                    }
-                }
-            }
-
-            push_child(repo_node, "priority", |priority| {
-                push_value(priority, i128::from(u64::from(repo.priority)));
-            });
-
-            if !repo.active {
-                push_child(repo_node, "enabled", |enabled| {
-                    push_value(enabled, false);
-                });
-            }
-        });
+        push_child(&mut node, id, |repo_node| push_repository_fields(repo_node, repo));
     }
 
     node
@@ -85,6 +37,56 @@ fn encode_packages<'a>(packages: impl IntoIterator<Item = &'a Provider>) -> KdlN
     }
 
     node
+}
+
+pub(super) fn push_repository_fields(repo_node: &mut KdlNode, repo: &Repository) {
+    push_child(repo_node, "description", |description| {
+        push_value(description, repo.description.clone());
+    });
+
+    match &repo.source {
+        repository::Source::DirectIndex(uri) => {
+            push_child(repo_node, "uri", |uri_node| {
+                push_value(uri_node, uri.to_string());
+            });
+        }
+        repository::Source::RootIndex(repository::RootIndexSource {
+            base_uri,
+            channel,
+            version,
+            arch,
+        }) => {
+            push_child(repo_node, "base-uri", |uri_node| {
+                push_value(uri_node, base_uri.to_string());
+            });
+
+            if channel.as_ref() != repository::DEFAULT_CHANNEL {
+                push_child(repo_node, "channel", |channel_node| {
+                    push_value(channel_node, channel.to_string());
+                });
+            }
+
+            push_child(repo_node, "version", |version_node| {
+                push_value(version_node, version.to_string());
+            });
+
+            if arch != repository::DEFAULT_ARCH {
+                push_child(repo_node, "arch", |arch_node| {
+                    push_value(arch_node, arch.clone());
+                });
+            }
+        }
+    }
+
+    push_child(repo_node, "priority", |priority| {
+        push_value(priority, i128::from(u64::from(repo.priority)));
+    });
+
+    if !repo.active {
+        push_child(repo_node, "enabled", |enabled| {
+            push_value(enabled, false);
+        });
+    }
 }
 
 pub(super) fn push_child(node: &mut KdlNode, name: impl ToString, f: impl FnOnce(&mut KdlNode)) {

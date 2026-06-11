@@ -4,6 +4,7 @@
 use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 
 use astr::AStr;
@@ -20,52 +21,74 @@ use crate::{
     Installation,
     db::meta,
     environment, package,
-    repository::{self, Format, Repository, format},
+    repository::{self, Format, OutdatedRepoIndexUri, Repository, format},
     runtime,
+    system_model::LoadedSystemModel,
 };
 
-enum Source {
-    System(config::Manager),
-    Explicit { identifier: String, repos: repository::Map },
+#[derive(Debug)]
+pub enum Source {
+    ConfigManager(config::Manager),
+    SystemModel {
+        identifier: String,
+        system_model: LoadedSystemModel,
+    },
+    Explicit {
+        identifier: String,
+        repos: repository::Map,
+    },
 }
 
 impl Source {
     fn identifier(&self) -> &str {
         match self {
-            Source::System(_) => environment::NAME,
+            Source::ConfigManager(_) => environment::NAME,
+            Source::SystemModel { identifier, .. } => identifier,
             Source::Explicit { identifier, .. } => identifier,
-        }
-    }
-
-    fn config_manager(&self) -> Option<&config::Manager> {
-        match self {
-            Source::System(manager) => Some(manager),
-            Source::Explicit { .. } => None,
         }
     }
 }
 
 /// Manage a bunch of repositories
 pub struct Manager {
-    source: Source,
+    source: Arc<Source>,
     installation: Installation,
     repositories: BTreeMap<repository::Id, repository::Cached>,
 }
 
 impl Manager {
     pub fn is_explicit(&self) -> bool {
-        matches!(self.source, Source::Explicit { .. })
+        matches!(*self.source, Source::Explicit { .. })
     }
 
-    /// Create a [`Manager`] for the supplied [`Installation`] using system configurations
-    pub fn system(config: config::Manager, installation: Installation) -> Result<Self, Error> {
-        Self::new(Source::System(config), installation)
+    /// Create a [`Manager`] for the supplied [`Installation`] using repositories loaded
+    /// via the supplied [`config::Manager`]
+    pub fn with_config_manager(config: config::Manager, installation: Installation) -> Result<Self, Error> {
+        Self::new(Source::ConfigManager(config), installation)
+    }
+
+    /// Create a [`Manager`] for the supplied [`Installation`] using repositories
+    /// defined in the provided [`SystemModel`]
+    ///
+    /// [`Manager`] can't be used to `add` new repos in this mode
+    pub fn with_system_model(
+        identifier: impl ToString,
+        system_model: LoadedSystemModel,
+        installation: Installation,
+    ) -> Result<Self, Error> {
+        Self::new(
+            Source::SystemModel {
+                identifier: identifier.to_string(),
+                system_model,
+            },
+            installation,
+        )
     }
 
     /// Create a [`Manager`] for the supplied [`Installation`] using the provided configurations
     ///
     /// [`Manager`] can't be used to `add` new repos in this mode
-    pub fn explicit(
+    pub fn with_explicit(
         identifier: impl ToString,
         repos: repository::Map,
         installation: Installation,
@@ -81,7 +104,7 @@ impl Manager {
 
     fn new(source: Source, installation: Installation) -> Result<Self, Error> {
         let configs = match &source {
-            Source::System(config) =>
+            Source::ConfigManager(config) =>
             // Load all configs, default if none exist
             {
                 config
@@ -90,6 +113,7 @@ impl Manager {
                     .map(|loaded| (Some(loaded.path), loaded.value))
                     .collect()
             }
+            Source::SystemModel { system_model, .. } => vec![(None, system_model.repositories.clone())],
             Source::Explicit { repos, .. } => vec![(None, repos.clone())],
         };
 
@@ -119,7 +143,7 @@ impl Manager {
             .collect::<Result<_, Error>>()?;
 
         Ok(Self {
-            source,
+            source: Arc::new(source),
             installation,
             repositories,
         })
@@ -127,7 +151,7 @@ impl Manager {
 
     /// Add a [`Repository`]
     pub fn add_repository(&mut self, id: repository::Id, repository: Repository) -> Result<(), Error> {
-        let Source::System(config) = &self.source else {
+        let Source::ConfigManager(config) = &*self.source else {
             return Err(Error::ExplicitUnsupported);
         };
 
@@ -203,7 +227,7 @@ impl Manager {
                         Err(Error::UnsupportedRepos(a.into_iter().chain(b).collect()))
                     }
                     (Err(Error::OutdatedRepos(_, a)), Err(Error::OutdatedRepos(_, b))) => Err(Error::OutdatedRepos(
-                        self.source.config_manager().cloned(),
+                        self.source.clone(),
                         a.into_iter().chain(b).collect(),
                     )),
                     (_, Err(err)) => Err(err),
@@ -266,7 +290,7 @@ impl Manager {
                         Err(Error::UnsupportedRepos(a.into_iter().chain(b).collect()))
                     }
                     (Err(Error::OutdatedRepos(_, a)), Err(Error::OutdatedRepos(_, b))) => Err(Error::OutdatedRepos(
-                        self.source.config_manager().cloned(),
+                        self.source.clone(),
                         a.into_iter().chain(b).collect(),
                     )),
                     (_, Err(err)) => Err(err),
@@ -285,7 +309,7 @@ impl Manager {
     /// Remove a repository, deleting any related config & cached data
     pub fn remove(&mut self, id: impl Into<repository::Id>) -> Result<Removal, Error> {
         // Only allow removal for system repo manager
-        let Source::System(config) = &self.source else {
+        let Source::ConfigManager(config) = &*self.source else {
             return Err(Error::ExplicitUnsupported);
         };
 
@@ -318,7 +342,7 @@ impl Manager {
     /// Sets the repo as active or not
     async fn set_active(&mut self, id: &repository::Id, active: bool) -> Result<(), Error> {
         // Only allow disable for system repo manager
-        let Source::System(config) = &self.source else {
+        let Source::ConfigManager(config) = &*self.source else {
             return Err(Error::ExplicitUnsupported);
         };
 
@@ -400,7 +424,7 @@ fn load_cached_index_uri(
 /// Fetches a stone index file from the repository URL
 /// and saves it to the repo installation path
 async fn fetch_index(
-    source: &Source,
+    source: &Arc<Source>,
     state: &repository::Cached,
     installation: &Installation,
 ) -> Result<PathBuf, Error> {
@@ -425,7 +449,7 @@ async fn fetch_index(
                     && history.format != Format::Legacy
                 {
                     return Err(Error::OutdatedRepos(
-                        source.config_manager().cloned(),
+                        source.clone(),
                         vec![OutdatedRepoIndexUri {
                             repository: state.clone(),
                             legacy_index_uri: uri.clone(),
@@ -523,7 +547,7 @@ async fn resolve_index_from_root(
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("Can't modify repos when using explicit configs")]
+    #[error("Can't modify repos when using explicit configs or system-model.kdl")]
     ExplicitUnsupported,
     #[error("Missing metadata field: {0:?}")]
     MissingMetaField(StonePayloadMetaTag),
@@ -556,7 +580,7 @@ pub enum Error {
     #[error("one or more repositories has an unsupported format")]
     UnsupportedRepos(Vec<UnsupportedRepoFormat>),
     #[error("one or more repositories with a legacy URI need to be upgraded to the new configuration format")]
-    OutdatedRepos(Option<config::Manager>, Vec<OutdatedRepoIndexUri>),
+    OutdatedRepos(Arc<Source>, Vec<OutdatedRepoIndexUri>),
 }
 
 impl From<package::MissingMetaFieldError> for Error {
@@ -578,13 +602,6 @@ pub struct UnsupportedRepoFormat {
     pub upgrade_via_index_uri: Option<Url>,
     pub version: format::ScopedIdentifier,
     pub format: Format,
-}
-
-#[derive(Debug, Clone)]
-pub struct OutdatedRepoIndexUri {
-    pub repository: repository::Cached,
-    pub legacy_index_uri: Url,
-    pub compatible_root_index_source: repository::RootIndexSource,
 }
 
 struct LegacyIndexUri {

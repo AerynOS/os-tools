@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use arc_swap::ArcSwap;
-use derive_more::{Debug, Display, From, Into};
+use derive_more::{AsRef, Debug, Display, From, Into};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use tokio::io;
@@ -17,16 +17,18 @@ use config::Config;
 use crate::{db::meta, request};
 
 pub use self::format::Format;
+pub use self::handle_outdated::{OutdatedRepoIndexUri, handle_outdated_index_uris};
 pub use self::manager::Manager;
 
 pub mod format;
+pub mod handle_outdated;
 pub mod manager;
 
 pub const DEFAULT_CHANNEL: &str = "main";
 pub const DEFAULT_ARCH: &str = "x86_64";
 
 /// A unique [`Repository`] identifier
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Ord, PartialOrd, From, Display)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Ord, PartialOrd, From, Display, AsRef)]
 #[debug("{_0:?}")]
 #[serde(from = "String")]
 pub struct Id(String);
@@ -135,6 +137,10 @@ impl Map {
 
     pub fn add(&mut self, id: Id, repo: Repository) {
         self.0.insert(id, repo);
+    }
+
+    pub fn contains_id(&self, id: &Id) -> bool {
+        self.0.contains_key(id)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&Id, &Repository)> {

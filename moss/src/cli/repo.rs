@@ -114,13 +114,9 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
     let system_model = system_model::load(&installation.system_model_path())?;
 
     let manager = if let Some(system_model) = &system_model {
-        repository::Manager::explicit(
-            environment::NAME,
-            system_model.repositories.clone(),
-            installation.clone(),
-        )?
+        repository::Manager::with_system_model(environment::NAME, system_model.clone(), installation.clone())?
     } else {
-        repository::Manager::system(config, installation.clone())?
+        repository::Manager::with_config_manager(config, installation.clone())?
     };
 
     let handler = match args.subcommand() {

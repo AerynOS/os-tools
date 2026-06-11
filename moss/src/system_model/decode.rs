@@ -42,7 +42,7 @@ pub(super) fn decode_package(node: &KdlNode) -> Result<Provider, Error> {
     Provider::from_name(node.name().value()).map_err(Error::ParseProvider)
 }
 
-fn decode_repository(node: &KdlNode) -> Result<(repository::Id, Repository), Error> {
+pub(super) fn decode_repository(node: &KdlNode) -> Result<(repository::Id, Repository), Error> {
     let name = node.name().value();
     let id = repository::Id::new(name);
 
