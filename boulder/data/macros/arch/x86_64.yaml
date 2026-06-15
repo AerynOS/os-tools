@@ -15,6 +15,7 @@ definitions:
     - march          : x86-64-v2
     - mtune          : ivybridge
     - target_triple  : "x86_64-unknown-linux-gnu"
+    - goamd64_arch   : "v2"
 
 flags:
 

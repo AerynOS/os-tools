@@ -99,6 +99,8 @@ actions              :
             RANLIB="%(ranlib)"; export RANLIB
             STRIP="%(strip)"; export STRIP
             PATH="%(path)"; export PATH
+            GOAMD64="%(goamd64_arch)"; export GOAMD64
+            test -z "$GOAMD64" && unset GOAMD64;
             CCACHE_DIR="%(ccachedir)"; export CCACHE_DIR;
             CCACHE_BASEDIR="%(workdir)"; export CCACHE_BASEDIR
             test -z "$CCACHE_DIR" && unset CCACHE_DIR;
