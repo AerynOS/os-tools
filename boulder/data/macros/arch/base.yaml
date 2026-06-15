@@ -58,6 +58,7 @@ definitions:
     - gocachedir     : "%(compiler_go_cache)"
     - gomodcachedir  : "%(compiler_go_mod_cache)"
     - cargocachedir  : "%(compiler_cargo_cache)"
+    - zigcachedir    : "%(compiler_zig_cache)"
     - sccachedir     : "%(scompiler_cache)"
     - pkgconfigpath  : "%(libdir)/pkgconfig:/usr/share/pkgconfig"
 
@@ -115,6 +116,10 @@ actions              :
             test -z "$GOMODCACHE" && unset GOMODCACHE;
             CARGO_HOME="%(cargocachedir)"; export CARGO_HOME;
             test -z "$CARGO_HOME" && unset CARGO_HOME;
+            ZIG_GLOBAL_CACHE_DIR="%(zigcachedir)"; export ZIG_GLOBAL_CACHE_DIR;
+            test -z "$ZIG_GLOBAL_CACHE_DIR" && unset ZIG_GLOBAL_CACHE_DIR;
+            ZIG_LOCAL_CACHE_DIR="%(zigcachedir)"; export ZIG_LOCAL_CACHE_DIR;
+            test -z "$ZIG_LOCAL_CACHE_DIR" && unset ZIG_LOCAL_CACHE_DIR;
             SCCACHE_DIR="%(sccachedir)"; export SCCACHE_DIR;
             test -z "$SCCACHE_DIR" && unset SCCACHE_DIR;
             LANG="en_US.UTF-8"; export LANG

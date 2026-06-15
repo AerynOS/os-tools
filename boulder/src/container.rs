@@ -24,6 +24,7 @@ where
     let gocache = paths.gocache();
     let gomodcache = paths.gomodcache();
     let cargocache = paths.cargocache();
+    let zigcache = paths.zigcache();
     let rustc_wrapper = paths.sccache();
     let recipe = paths.recipe();
     let ccache_conf = paths.ccache_config();
@@ -39,6 +40,7 @@ where
         .bind_rw(&gocache.host, &gocache.guest)
         .bind_rw(&gomodcache.host, &gomodcache.guest)
         .bind_rw(&cargocache.host, &cargocache.guest)
+        .bind_rw(&zigcache.host, &zigcache.guest)
         .bind_rw(&rustc_wrapper.host, &rustc_wrapper.guest)
         .bind_ro(&recipe.host, &recipe.guest)
         .bind_ro_if_exists(&ccache_conf.host, &ccache_conf.guest);

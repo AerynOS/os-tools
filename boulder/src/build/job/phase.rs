@@ -165,11 +165,13 @@ impl Phase {
             parser.add_definition("compiler_go_cache", "/mason/gocache");
             parser.add_definition("compiler_go_mod_cache", "/mason/gomodcache");
             parser.add_definition("compiler_cargo_cache", "/mason/cargocache");
+            parser.add_definition("compiler_zig_cache", "/mason/zigcache");
             parser.add_definition("rustc_wrapper", "/usr/bin/sccache");
         } else {
             parser.add_definition("compiler_go_cache", "");
             parser.add_definition("compiler_go_mod_cache", "");
             parser.add_definition("compiler_cargo_cache", "");
+            parser.add_definition("compiler_zig_cache", "");
             parser.add_definition("rustc_wrapper", "");
         }
 

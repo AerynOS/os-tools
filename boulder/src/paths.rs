@@ -59,6 +59,7 @@ impl Paths {
         util::ensure_dir_exists(&job.gocache().host)?;
         util::ensure_dir_exists(&job.gomodcache().host)?;
         util::ensure_dir_exists(&job.cargocache().host)?;
+        util::ensure_dir_exists(&job.zigcache().host)?;
         util::ensure_dir_exists(&job.sccache().host)?;
         util::ensure_dir_exists(&job.upstreams().host)?;
 
@@ -119,6 +120,13 @@ impl Paths {
         Mapping {
             host: self.host_root.join("cargocache"),
             guest: self.guest_root.join("cargocache"),
+        }
+    }
+
+    pub fn zigcache(&self) -> Mapping {
+        Mapping {
+            host: self.host_root.join("zigcache"),
+            guest: self.guest_root.join("zigcache"),
         }
     }
 
