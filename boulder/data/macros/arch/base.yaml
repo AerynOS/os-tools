@@ -84,6 +84,7 @@ actions              :
             CGO_LDFLAGS="%(ldflags) -Wl,--no-gc-sections"; export CGO_LDFLAGS
             DFLAGS="%(dflags)"; export DFLAGS
             RUSTFLAGS="%(rustflags)"; export RUSTFLAGS
+            VALAFLAGS="%(valaflags)"; export VALAFLAGS
             CC="%(cc)"; export CC
             CXX="%(cxx)"; export CXX
             OBJC="%(objc)"; export OBJC
@@ -645,6 +646,7 @@ flags               :
         f         : "-g"
         d         : "-g -gc -d-debug"
         rust      : "-C debuginfo=2 -C split-debuginfo=off"
+        vala      : "-g"
         gnu:
             c         : "-g -feliminate-unused-debug-types -fasynchronous-unwind-tables"
             cxx       : "-g -feliminate-unused-debug-types -fasynchronous-unwind-tables"
