@@ -68,7 +68,14 @@ actions:
     - make:
         description: |
             Perform a `make` to build the current Makefile.
-            Tip: Add V=1 VERBOSE=1 after `%%make` in the recipe if you need a more verbose build.
+        command: |
+            make VERBOSE=1 -j "%(jobs)"
+        dependencies:
+            - binary(make)
+
+    - make_no_verbose:
+        description: |
+            Perform a `make` to build the current Makefile. This doesn't use the VERBOSE flag.
         command: |
             make -j "%(jobs)"
         dependencies:
