@@ -125,17 +125,21 @@ defaultTuningGroups :
     - bindnow
     - build-id
     - compress-debug
+    - control-flow
     - debug
     - fat-lto
     - fortify
     - frame-pointer
     - harden
     - icf
+    - libstdc-assertions
     - lto
     - lto-errors
     - optimize
     - relr
     - symbolic
+    - thread-exceptions
+    - tls-gnu
     - version-allow-undefined
 
 tuning              :
@@ -196,7 +200,14 @@ tuning              :
 
     # Enable fortify
     - fortify:
-        enabled: fortify
+        options:
+            - lvl1:
+                enabled: fortify-lvl1
+            - lvl2:
+                enabled: fortify-lvl2
+            - lvl3:
+                enabled: fortify-lvl3
+        default: lvl3
 
     # Enable hardening
     - harden:
@@ -209,6 +220,18 @@ tuning              :
                 enabled: harden-lvl2
         disabled: harden-none
         default: lvl1
+
+    # Instrument control-flow architecture protection
+    - control-flow:
+        enabled: control-flow
+
+    # Enable libstdc++ assertions
+    - libstdc-assertions:
+        enabled: libstdc-assertions
+
+    # Enable protected thread cancellation handlers
+    - thread-exceptions:
+        enabled: thread-exceptions
 
     # Enable optimisation per given levels
     - optimize:
@@ -336,6 +359,10 @@ tuning              :
     - relr:
         enabled: relr
 
+    # Enable GNU2 TLS descriptors
+    - tls-gnu:
+        enabled: tls-gnu
+
     # Whether or not symbols in version scripts are allowed to be undefined
     - version-allow-undefined:
         enabled: version-allow-undefined
@@ -386,11 +413,21 @@ flags               :
         llvm:
             ld        : "-Wl,-Bsymbolic-non-weak-functions"
 
-    # Toggle fortify (ON)
-    - fortify:
-        c         : "-D_FORTIFY_SOURCE=2"
-        cxx       : "-D_FORTIFY_SOURCE=2"
-        f         : "-D_FORTIFY_SOURCE=2"
+    # Toggle fortify
+    - fortify-lvl1:
+        c         : "-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=1"
+        cxx       : "-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=1"
+        f         : "-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=1"
+
+    - fortify-lvl2:
+        c         : "-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=2"
+        cxx       : "-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=2"
+        f         : "-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=2"
+
+    - fortify-lvl3:
+        c         : "-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=3"
+        cxx       : "-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=3"
+        f         : "-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=3"
 
     # No hardening!
     - harden-none:
@@ -409,6 +446,24 @@ flags               :
         gnu:
             c         : "-fstack-protector-strong -fstack-clash-protection -fPIE --param ssp-buffer-size=4"
             cxx       : "-fstack-protector-strong -fstack-clash-protection -fPIE --param ssp-buffer-size=4"
+
+    # Instrument control-flow architecture protection (ON)
+    - control-flow:
+        c         : "-fcf-protection"
+        cxx       : "-fcf-protection"
+        f         : "-fcf-protection"
+
+    # Enable libstdc++ assertions (ON)
+    - libstdc-assertions:
+        c         : "-Wp,-D_GLIBCXX_ASSERTIONS"
+        cxx       : "-Wp,-D_GLIBCXX_ASSERTIONS"
+        f         : "-Wp,-D_GLIBCXX_ASSERTIONS"
+
+    # Enable protected thread cancellation handlers (ON)
+    - thread-exceptions:
+        c         : "-fexceptions"
+        cxx       : "-fexceptions"
+        f         : "-fexceptions"
 
     # Use section splitting, improves GC without lto only (OFF)
     - sections:
@@ -429,14 +484,14 @@ flags               :
         d         : "-O2"
         # opt-level=3 is common in the rust world so let that
         # be our generic opt case.
-        rust      : "-C opt-level=3 -C codegen-units=16"
+        rust      : "-C opt-level=3 -C codegen-units=1"
 
     # Optimize for size (OFF)
     - optimize-size:
         c     : "-Os"
         cxx   : "-Os"
         d     : "-Os"
-        rust  : "-C opt-level=s -C codegen-units=16"
+        rust  : "-C opt-level=s -C codegen-units=1"
         gnu:
             f : "-Os"
 
@@ -446,7 +501,7 @@ flags               :
         cxx       : "-O3"
         f         : "-O3"
         d         : "-O3"
-        rust      : "-C opt-level=3 -C codegen-units=16"
+        rust      : "-C opt-level=3 -C codegen-units=1"
 
     # Enable LTO optimisations (OFF)
     - lto-full:
@@ -675,6 +730,12 @@ flags               :
     # Toggle relr (ON)
     - relr:
         ld        : "-Wl,-z,pack-relative-relocs"
+
+    # Toggle gnu2 TLS descriptors (ON)
+    - tls-gnu:
+        c         : "-mtls-dialect=gnu2"
+        cxx       : "-mtls-dialect=gnu2"
+        f         : "-mtls-dialect=gnu2"
 
     # Allow undefined symbols in version scripts (ON)
     - version-allow-undefined:
