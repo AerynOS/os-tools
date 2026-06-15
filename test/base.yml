@@ -70,6 +70,7 @@ actions              :
             LDFLAGS="%(ldflags)"; export LDFLAGS
             CGO_LDFLAGS="%(ldflags) -Wl,--no-gc-sections"; export CGO_LDFLAGS
             RUSTFLAGS="%(rustflags)"; export RUSTFLAGS
+            VALAFLAGS="%(valaflags)"; export VALAFLAGS
             CC="%(cc)"; export CC
             CXX="%(cxx)"; export CXX
             OBJC="%(objc)"; export OBJC
@@ -437,6 +438,7 @@ flags               :
     - debug-std:
         c         : "-g -feliminate-unused-debug-types -fasynchronous-unwind-tables"
         cxx       : "-g -feliminate-unused-debug-types -fasynchronous-unwind-tables"
+        vala      : "-g"
 
     # Toggle fast math (OFF)
     - math:

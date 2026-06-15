@@ -379,6 +379,11 @@ fn add_tuning(
             .iter()
             .filter_map(|flag| flag.get(tuning::CompilerFlag::Rust, toolchain)),
     );
+    let valaflags = fmt_flags(
+        flags
+            .iter()
+            .filter_map(|flag| flag.get(tuning::CompilerFlag::Vala, toolchain)),
+    );
 
     if recipe.parsed.mold {
         cflags.push_str(" -fuse-ld=mold");
@@ -392,6 +397,7 @@ fn add_tuning(
     parser.add_definition("ldflags", ldflags);
     parser.add_definition("dflags", dflags);
     parser.add_definition("rustflags", rustflags);
+    parser.add_definition("valaflags", valaflags);
 
     Ok(())
 }
