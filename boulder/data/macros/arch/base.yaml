@@ -85,6 +85,7 @@ actions              :
             DFLAGS="%(dflags)"; export DFLAGS
             RUSTFLAGS="%(rustflags)"; export RUSTFLAGS
             VALAFLAGS="%(valaflags)"; export VALAFLAGS
+            GOFLAGS="%(goflags)"; export GOFLAGS
             CC="%(cc)"; export CC
             CXX="%(cxx)"; export CXX
             OBJC="%(objc)"; export OBJC
@@ -133,6 +134,8 @@ defaultTuningGroups :
     - fat-lto
     - fortify
     - frame-pointer
+    - golang-ldflags
+    - golang-modflags
     - harden
     - icf
     - libstdc-assertions
@@ -370,6 +373,15 @@ tuning              :
     - version-allow-undefined:
         enabled: version-allow-undefined
         disabled: version-no-undefined
+
+    # Enable default Golang ld flags
+    - golang-ldflags:
+        enabled: golang-ldflags
+
+    # Enable default Golang module handling
+    - golang-modflags:
+        enabled: golang-modflags
+
 flags               :
 
     # Needs overriding with -march/mtune values.
@@ -386,6 +398,7 @@ flags               :
         ld        : "-Wl,-O2,--gc-sections"
         d         : "-release -Hkeep-all-bodies -relocation-model=pic -wi"
         rust      : "-C strip=none"
+        go        : "-trimpath"
 
     - omit-frame-pointer:
         c         : "-fomit-frame-pointer -momit-leaf-frame-pointer"
@@ -441,14 +454,17 @@ flags               :
     - harden-lvl1:
         c         : "-fstack-protector --param ssp-buffer-size=32"
         cxx       : "-fstack-protector --param ssp-buffer-size=32"
+        go        : "-buildmode=pie"
 
     - harden-lvl2:
         llvm:
             c         : "-fstack-protector-strong -fstack-clash-protection -fPIE --param ssp-buffer-size=4"
             cxx       : "-fstack-protector-strong -fstack-clash-protection -fPIE --param ssp-buffer-size=4"
+            go        : "-buildmode=pie"
         gnu:
             c         : "-fstack-protector-strong -fstack-clash-protection -fPIE --param ssp-buffer-size=4"
             cxx       : "-fstack-protector-strong -fstack-clash-protection -fPIE --param ssp-buffer-size=4"
+            go        : "-buildmode=pie"
 
     # Instrument control-flow architecture protection (ON)
     - control-flow:
@@ -748,6 +764,14 @@ flags               :
     # Don't allow undefined symbols in version scripts (OFF)
     - version-no-undefined:
         ld        : "-Wl,--no-undefined-version"
+
+    # Enable module flags integrating with Boulder (ON)
+    - golang-modflags:
+        go        : "-mod=readonly -modcacherw"
+
+    # Enable linking to glibc (ON)
+    - golang-ldflags:
+        go        : "-ldflags=-linkmode=external"
 
 # Template packages
 packages          :
