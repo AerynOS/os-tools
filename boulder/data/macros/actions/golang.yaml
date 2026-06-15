@@ -1,0 +1,12 @@
+# SPDX-FileCopyrightText: 2025 AerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
+
+actions:
+    - go_mod:
+        description: Downloads Golang dependencies
+        example: |
+            %go_mod
+        command: |
+          go mod download
+        dependencies:
+            - binary(go)
