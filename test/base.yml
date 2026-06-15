@@ -71,6 +71,7 @@ actions              :
             CGO_LDFLAGS="%(ldflags) -Wl,--no-gc-sections"; export CGO_LDFLAGS
             RUSTFLAGS="%(rustflags)"; export RUSTFLAGS
             VALAFLAGS="%(valaflags)"; export VALAFLAGS
+            GOFLAGS="%(goflags)"; export GOFLAGS
             CC="%(cc)"; export CC
             CXX="%(cxx)"; export CXX
             OBJC="%(objc)"; export OBJC
