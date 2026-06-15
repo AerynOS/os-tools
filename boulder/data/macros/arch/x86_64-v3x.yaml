@@ -13,6 +13,7 @@ definitions:
     - cpp            : "%(compiler_cpp)"
     - march          : x86-64-v3
     - mtune          : znver1
+    - goamd64_arch   : "v3"
 
 flags:
 
