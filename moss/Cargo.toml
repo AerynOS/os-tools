@@ -7,6 +7,10 @@ edition.workspace = true
 version.workspace = true
 rust-version.workspace = true
 
+[package.metadata.cargo-machete]
+# Needed for unixepoch() in src/db/state/migrations/2025-03-04-201550_init/up.sql
+ignored = ["libsqlite3-sys"]
+
 [features]
 testing = []
 
@@ -61,10 +65,6 @@ astr = { workspace = true, features = ["diesel"] }
 moss = { path = ".", features = ["testing"] }
 
 tempfile.workspace = true
-
-[package.metadata.cargo-machete]
-# Needed for unixepoch() in src/db/state/migrations/2025-03-04-201550_init/up.sql
-ignored = ["libsqlite3-sys"]
 
 [lints]
 workspace = true
