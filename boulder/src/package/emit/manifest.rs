@@ -12,9 +12,9 @@ use moss::{
     package::{Meta, MissingMetaFieldError},
     util,
 };
+use snafu::{ResultExt, Snafu};
 use stone::{StoneDecodedPayload, StoneReadError, StoneWriteError};
 use tempfile::NamedTempFile;
-use thiserror::Error;
 
 use crate::{Architecture, Paths, Recipe};
 
@@ -59,9 +59,10 @@ impl<'a> Manifest<'a> {
     }
 
     pub fn write_binary(&self) -> Result<(), Error> {
-        let mut output = fs::File::create(self.output_dir.join(format!("manifest.{}.bin", self.arch)))?;
+        let mut output =
+            fs::File::create(self.output_dir.join(format!("manifest.{}.bin", self.arch))).context(IoSnafu)?;
 
-        binary::write(&mut output, &self.packages, &self.build_deps)
+        binary::write(&mut output, &self.packages, &self.build_deps).context(StoneWriterSnafu)
     }
 
     pub fn write_json(&self) -> Result<(), Error> {
@@ -84,11 +85,11 @@ impl<'a> Manifest<'a> {
     pub fn verify(&self, compare_to: &Path) -> Result<Verification, Error> {
         // Write the current manifest to a temp file & hash it
         let (current_hash, mut current_temp_file) = {
-            let mut temp_file = NamedTempFile::with_prefix("boulder-")?;
+            let mut temp_file = NamedTempFile::with_prefix("boulder-").context(IoSnafu)?;
 
             let mut writer = util::Sha256Wrapper::new(&mut temp_file);
 
-            binary::write(&mut writer, &self.packages, &self.build_deps)?;
+            binary::write(&mut writer, &self.packages, &self.build_deps).context(StoneWriterSnafu)?;
 
             let hash = writer.finalize();
 
@@ -97,9 +98,9 @@ impl<'a> Manifest<'a> {
 
         // Get the comparison hash & file
         let (compare_to_hash, mut compare_to_file) = {
-            let mut file = fs::File::open(compare_to).map_err(Error::OpenManifest)?;
+            let mut file = fs::File::open(compare_to).context(OpenManifestSnafu)?;
 
-            let hash = util::sha256_hash(&mut file).map_err(Error::HashManifest)?;
+            let hash = util::sha256_hash(&mut file).context(HashManifestSnafu)?;
 
             (hash, file)
         };
@@ -113,15 +114,16 @@ impl<'a> Manifest<'a> {
         #[allow(clippy::disallowed_types)] // needed to accept either fs_err::File or NamedTempFile
         let extract_metas = |reader: &mut std::fs::File| {
             // Reset seek position to read stone payloads
-            reader.seek(SeekFrom::Start(0))?;
+            reader.seek(SeekFrom::Start(0)).context(IoSnafu)?;
 
-            let payloads = util::stone_payloads(reader).map_err(Error::ReadStonePayloads)?;
+            let payloads = util::stone_payloads(reader).context(ReadStonePayloadsSnafu)?;
 
             let metas = payloads
                 .iter()
                 .filter_map(StoneDecodedPayload::meta)
                 .map(|payload| Meta::from_stone_payload(&payload.body).map(OrderedMeta))
-                .collect::<Result<BTreeSet<_>, _>>()?;
+                .collect::<Result<BTreeSet<_>, _>>()
+                .context(ManifestMissingMetaFieldSnafu)?;
 
             Ok(metas) as Result<BTreeSet<_>, Error>
         };
@@ -147,22 +149,22 @@ pub enum Verification {
     ContentMatch,
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Snafu)]
 pub enum Error {
-    #[error("stone binary writer")]
-    StoneWriter(#[from] StoneWriteError),
-    #[error("encode json")]
-    Json(#[from] serde_json::Error),
-    #[error("io")]
-    Io(#[from] io::Error),
-    #[error("open manifest file")]
-    OpenManifest(#[source] io::Error),
-    #[error("sha256 hash manifest")]
-    HashManifest(#[source] io::Error),
-    #[error("read stone payloads")]
-    ReadStonePayloads(#[source] StoneReadError),
-    #[error("manifest missing meta field")]
-    ManifestMissingMetaField(#[from] MissingMetaFieldError),
+    #[snafu(display("stone binary writer"))]
+    StoneWriter { source: StoneWriteError },
+    #[snafu(display("encode json"))]
+    Json { source: serde_json::Error },
+    #[snafu(display("io"))]
+    Io { source: io::Error },
+    #[snafu(display("open manifest file"))]
+    OpenManifest { source: io::Error },
+    #[snafu(display("sha256 hash manifest"))]
+    HashManifest { source: io::Error },
+    #[snafu(display("read stone payloads"))]
+    ReadStonePayloads { source: StoneReadError },
+    #[snafu(display("manifest missing meta field"))]
+    ManifestMissingMetaField { source: MissingMetaFieldError },
 }
 
 #[derive(Debug, PartialEq, Eq)]

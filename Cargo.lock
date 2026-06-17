@@ -304,6 +304,7 @@ dependencies = [
  "serde_yaml",
  "sha2",
  "similar",
+ "snafu",
  "stone",
  "stone_recipe 0.26.1",
  "strum",

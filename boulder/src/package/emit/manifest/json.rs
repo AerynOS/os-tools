@@ -11,8 +11,9 @@ use fs_err::File;
 use itertools::Itertools;
 use regex::Regex;
 use serde::Serialize;
+use snafu::ResultExt;
 
-use super::Error;
+use super::{Error, IoSnafu, JsonSnafu};
 use crate::{Recipe, package::emit};
 
 pub fn write(
@@ -90,18 +91,19 @@ pub fn write(
         source_version: recipe.parsed.source.version.clone(),
     };
 
-    let mut file = File::create(path)?;
+    let mut file = File::create(path).context(IoSnafu)?;
 
     writeln!(
         &mut file,
         "/** Human readable report. This is not consumed by boulder */"
-    )?;
+    )
+    .context(IoSnafu)?;
 
     let mut serializer =
         serde_json::Serializer::with_formatter(&mut file, serde_json::ser::PrettyFormatter::with_indent(b"\t"));
-    content.serialize(&mut serializer)?;
+    content.serialize(&mut serializer).context(JsonSnafu)?;
 
-    writeln!(&mut file)?;
+    writeln!(&mut file).context(IoSnafu)?;
 
     Ok(())
 }

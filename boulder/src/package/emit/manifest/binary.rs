@@ -5,17 +5,17 @@ use std::{collections::BTreeSet, io::Write};
 
 use moss::Dependency;
 use stone::{
-    StoneHeaderV1FileType, StonePayloadMetaPrimitive, StonePayloadMetaRecord, StonePayloadMetaTag, StoneWriter,
+    StoneHeaderV1FileType, StonePayloadMetaPrimitive, StonePayloadMetaRecord, StonePayloadMetaTag, StoneWriteError,
+    StoneWriter,
 };
 
-use super::Error;
 use crate::package::emit::Package;
 
 pub fn write<W: Write>(
     output: &mut W,
     packages: &BTreeSet<&Package<'_>>,
     build_deps: &BTreeSet<String>,
-) -> Result<(), Error> {
+) -> Result<(), StoneWriteError> {
     let mut writer = StoneWriter::new(output, StoneHeaderV1FileType::BuildManifest)?;
 
     // Add each package
