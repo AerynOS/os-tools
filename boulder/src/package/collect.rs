@@ -12,8 +12,8 @@ use astr::AStr;
 use fs_err as fs;
 use glob::Pattern;
 use nix::libc::{S_IFDIR, S_IRGRP, S_IROTH, S_IRWXU, S_IXGRP, S_IXOTH};
+use snafu::{ResultExt as _, Snafu};
 use stone::{StoneDigestWriter, StoneDigestWriterHasher, StonePayloadLayoutFile, StonePayloadLayoutRecord};
-use thiserror::Error;
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Rule {
@@ -71,7 +71,7 @@ impl Collector {
 
     /// Produce a [`PathInfo`] from the provided [`Path`]
     pub fn path(&self, path: &Path, hasher: &mut StoneDigestWriterHasher) -> Result<PathInfo, Error> {
-        let metadata = fs::metadata(path)?;
+        let metadata = fs::metadata(path).context(IoSnafu)?;
         self.path_with_metadata(path.to_path_buf(), &metadata, hasher)
     }
 
@@ -99,12 +99,15 @@ impl Collector {
         let mut paths = vec![];
 
         let dir = subdir.as_ref().map(|t| t.0.as_path()).unwrap_or(&self.root);
-        let mut entries: Vec<_> = fs::read_dir(dir)?.collect::<Result<Vec<_>, _>>()?;
+        let mut entries: Vec<_> = fs::read_dir(dir)
+            .context(IoSnafu)?
+            .collect::<Result<Vec<_>, _>>()
+            .context(IoSnafu)?;
 
         entries.sort_by_key(|entry| entry.file_name());
 
         for entry in entries {
-            let metadata = entry.metadata()?;
+            let metadata = entry.metadata().context(IoSnafu)?;
 
             let host_path = entry.path();
 
@@ -162,7 +165,7 @@ impl PathInfo {
     }
 
     pub fn restat(&mut self, hasher: &mut StoneDigestWriterHasher) -> Result<(), Error> {
-        let metadata = fs::metadata(&self.path)?;
+        let metadata = fs::metadata(&self.path).context(IoSnafu)?;
         self.layout = layout_from_metadata(&self.path, &self.target_path, &metadata, hasher)?;
         self.size = metadata.size();
         Ok(())
@@ -215,7 +218,7 @@ fn layout_from_metadata(
         mode: metadata.mode(),
         tag: 0,
         file: if file_type.is_symlink() {
-            let source = fs::read_link(path)?;
+            let source = fs::read_link(path).context(IoSnafu)?;
 
             StonePayloadLayoutFile::Symlink(source.to_string_lossy().into(), target)
         } else if file_type.is_dir() {
@@ -232,11 +235,11 @@ fn layout_from_metadata(
             hasher.reset();
 
             let mut digest_writer = StoneDigestWriter::new(io::sink(), hasher);
-            let mut file = fs::File::open(path)?;
+            let mut file = fs::File::open(path).context(IoSnafu)?;
 
             // Copy bytes to null sink so we don't
             // explode memory
-            io::copy(&mut file, &mut digest_writer)?;
+            io::copy(&mut file, &mut digest_writer).context(IoSnafu)?;
 
             let hash = hasher.digest128();
 
@@ -245,10 +248,10 @@ fn layout_from_metadata(
     })
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Snafu)]
 pub enum Error {
-    #[error("no matching path rule")]
+    #[snafu(display("no matching path rule"))]
     NoMatchingRule,
-    #[error("io")]
-    Io(#[from] io::Error),
+    #[snafu(display("io"))]
+    Io { source: io::Error },
 }
