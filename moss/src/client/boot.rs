@@ -85,13 +85,11 @@ fn kernel_files_from_state<'a>(
                     });
                 }
             }
-            StonePayloadLayoutFile::Symlink(_, target) => {
-                if pattern.match_path(target).is_some() {
-                    kernel_entries.push(KernelCandidate {
-                        path: PathBuf::from("usr").join(target),
-                        _layout: path.to_owned(),
-                    });
-                }
+            StonePayloadLayoutFile::Symlink(_, target) if pattern.match_path(target).is_some() => {
+                kernel_entries.push(KernelCandidate {
+                    path: PathBuf::from("usr").join(target),
+                    _layout: path.to_owned(),
+                });
             }
             _ => {}
         }

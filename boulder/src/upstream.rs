@@ -241,8 +241,8 @@ pub(crate) fn update_git_upstream_refs(recipe_source: &str, stored_upstreams: &[
                 "{} | Updated ref '{}' to commit {} for {}",
                 "Warning".yellow(),
                 &git.resolved_hash[..8],
-                &git.original_ref,
-                &git.url.as_str()
+                git.original_ref,
+                git.url.as_str()
             );
             refs_updated = true;
         }

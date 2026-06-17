@@ -35,7 +35,7 @@ impl Rule {
                 .unwrap_or_default()
             // If the supplied pattern is for a directory we want to match anything that's inside said directory,
             // Do this by creating a recursive glob pattern by appending `**` if the pattern already ends in a `/` or `/**` if not
-            || Pattern::new(format!("{}/**", &self.pattern.strip_suffix("/").unwrap_or(&self.pattern)).as_str())
+            || Pattern::new(format!("{}/**", self.pattern.strip_suffix("/").unwrap_or(&self.pattern)).as_str())
                 .map(|pattern| pattern.matches(&escaped_path))
                 .unwrap_or_default()
     }

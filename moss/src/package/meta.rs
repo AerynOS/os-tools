@@ -215,7 +215,7 @@ impl Meta {
     pub fn id(&self) -> Id {
         Id(format!(
             "{}-{}-{}.{}",
-            &self.name.0, &self.version_identifier, &self.source_release, &self.architecture
+            self.name.0, self.version_identifier, self.source_release, self.architecture
         )
         .into())
     }

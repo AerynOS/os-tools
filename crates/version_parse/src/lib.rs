@@ -284,160 +284,160 @@ mod tests {
             (
                 "https://download.gnome.org/sources/NetworkManager/1.50/NetworkManager-1.50.0.tar.xz",
                 Extraction {
-                    version: "1.50.0".to_string(),
-                    name: "NetworkManager".to_string(),
-                    release_series: Some("1.50".to_string()),
+                    version: "1.50.0".to_owned(),
+                    name: "NetworkManager".to_owned(),
+                    release_series: Some("1.50".to_owned()),
                 },
             ),
             (
                 "https://github.com/cli/cli/archive/refs/tags/v2.63.2.tar.gz",
                 Extraction {
-                    version: "2.63.2".to_string(),
-                    name: "cli".to_string(),
+                    version: "2.63.2".to_owned(),
+                    name: "cli".to_owned(),
                     release_series: None,
                 },
             ),
             (
                 "https://github.com/cli/cli/releases/download/v2.63.2/cli-2.63.2.tar.gz",
                 Extraction {
-                    version: "2.63.2".to_string(),
-                    name: "cli".to_string(),
+                    version: "2.63.2".to_owned(),
+                    name: "cli".to_owned(),
                     release_series: None,
                 },
             ),
             (
                 "https://www.x.org/pub/individual/xserver/xwayland-24.1.4.tar.xz",
                 Extraction {
-                    version: "24.1.4".to_string(),
-                    name: "xwayland".to_string(),
+                    version: "24.1.4".to_owned(),
+                    name: "xwayland".to_owned(),
                     release_series: None,
                 },
             ),
             (
                 "https://download.gnome.org/sources/gtk+/3.24/gtk+-3.24.33.tar.xz",
                 Extraction {
-                    version: "3.24.33".to_string(),
-                    name: "gtk+".to_string(),
-                    release_series: Some("3.24".to_string()),
+                    version: "3.24.33".to_owned(),
+                    name: "gtk+".to_owned(),
+                    release_series: Some("3.24".to_owned()),
                 },
             ),
             (
                 "https://www.nano-editor.org/dist/v9/nano-9.3.1.tar.xz",
                 Extraction {
-                    version: "9.3.1".to_string(),
-                    name: "nano".to_string(),
-                    release_series: Some("9".to_string()),
+                    version: "9.3.1".to_owned(),
+                    name: "nano".to_owned(),
+                    release_series: Some("9".to_owned()),
                 },
             ),
             (
                 "https://www.nano-editor.org/dist/v8/nano-8.3.tar.xz",
                 Extraction {
-                    version: "8.3".to_string(),
-                    name: "nano".to_string(),
-                    release_series: Some("8".to_string()),
+                    version: "8.3".to_owned(),
+                    name: "nano".to_owned(),
+                    release_series: Some("8".to_owned()),
                 },
             ),
             (
                 "https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.13.4.tar.xz",
                 Extraction {
-                    version: "6.13.4".to_string(),
-                    name: "linux".to_string(),
+                    version: "6.13.4".to_owned(),
+                    name: "linux".to_owned(),
                     release_series: None, // chars in sub-versions not handled
                 },
             ),
             (
                 "https://github.com/intel/Intel-Linux-Processor-Microcode-Data-Files/archive/refs/tags/microcode-20250211.tar.gz",
                 Extraction {
-                    version: "20250211".to_string(),
-                    name: "Intel-Linux-Processor-Microcode-Data-Files".to_string(),
+                    version: "20250211".to_owned(),
+                    name: "Intel-Linux-Processor-Microcode-Data-Files".to_owned(),
                     release_series: None,
                 },
             ),
             (
                 "https://download.gnome.org/sources/gnome-disk-utility/46/gnome-disk-utility-46.1.tar.xz",
                 Extraction {
-                    version: "46.1".to_string(),
-                    name: "gnome-disk-utility".to_string(),
-                    release_series: Some("46".to_string()),
+                    version: "46.1".to_owned(),
+                    name: "gnome-disk-utility".to_owned(),
+                    release_series: Some("46".to_owned()),
                 },
             ),
             (
                 "https://thrysoee.dk/editline/libedit-20221030-3.1.tar.gz",
                 Extraction {
-                    version: "20221030-3.1".to_string(),
-                    name: "libedit".to_string(),
+                    version: "20221030-3.1".to_owned(),
+                    name: "libedit".to_owned(),
                     release_series: None,
                 },
             ),
             (
                 "https://www.sudo.ws/dist/sudo-1.9.16p2.tar.gz",
                 Extraction {
-                    version: "1.9.16p2".to_string(),
-                    name: "sudo".to_string(),
+                    version: "1.9.16p2".to_owned(),
+                    name: "sudo".to_owned(),
                     release_series: None,
                 },
             ),
             (
                 "https://download.nvidia.com/XFree86/nvidia-persistenced/nvidia-persistenced-570.86.16.tar.bz2",
                 Extraction {
-                    version: "570.86.16".to_string(),
-                    name: "nvidia-persistenced".to_string(),
+                    version: "570.86.16".to_owned(),
+                    name: "nvidia-persistenced".to_owned(),
                     release_series: None,
                 },
             ),
             (
                 "https://us.download.nvidia.com/XFree86/Linux-x86_64/570.86.16/NVIDIA-Linux-x86_64-570.86.16.run",
                 Extraction {
-                    version: "570.86.16".to_string(),
-                    name: "NVIDIA-Linux-x86_64".to_string(),
-                    release_series: Some("570.86.16".to_string()),
+                    version: "570.86.16".to_owned(),
+                    name: "NVIDIA-Linux-x86_64".to_owned(),
+                    release_series: Some("570.86.16".to_owned()),
                 },
             ),
             (
                 "https://github.com/pop-os/cosmic-applets/archive/refs/tags/epoch-1.0.0-alpha.6.tar.gz",
                 Extraction {
-                    version: "1.0.0-alpha.6".to_string(),
-                    name: "cosmic-applets".to_string(),
+                    version: "1.0.0-alpha.6".to_owned(),
+                    name: "cosmic-applets".to_owned(),
                     release_series: None,
                 },
             ),
             (
                 "https://codeberg.org/GramEditor/gram/archive/1.2.1.tar.gz",
                 Extraction {
-                    version: "1.2.1".to_string(),
-                    name: "gram".to_string(),
+                    version: "1.2.1".to_owned(),
+                    name: "gram".to_owned(),
                     release_series: None,
                 },
             ),
             (
                 "https://gitlab.com/serebit/wraith-master/-/archive/v1.2.1/wraith-master-v1.2.1.tar.gz",
                 Extraction {
-                    version: "1.2.1".to_string(),
-                    name: "wraith-master".to_string(),
+                    version: "1.2.1".to_owned(),
+                    name: "wraith-master".to_owned(),
                     release_series: None,
                 },
             ),
             (
                 "https://gitlab.com/flightgear/flightgear/-/archive/2024.1.5/flightgear-2024.1.5.tar.gz?ref_type=tags",
                 Extraction {
-                    version: "2024.1.5".to_string(),
-                    name: "flightgear".to_string(),
+                    version: "2024.1.5".to_owned(),
+                    name: "flightgear".to_owned(),
                     release_series: None,
                 },
             ),
             (
                 "https://github.com/protocolbuffers/protobuf/releases/download/v35.0/protobuf-35.0.bazel.tar.gz",
                 Extraction {
-                    version: "35.0".to_string(),
-                    name: "protobuf".to_string(),
+                    version: "35.0".to_owned(),
+                    name: "protobuf".to_owned(),
                     release_series: None,
                 },
             ),
             (
                 "https://github.com/unicode-org/icu/releases/download/release-78.3/icu4c-78.3-sources.tgz",
                 Extraction {
-                    version: "78.3".to_string(),
-                    name: "icu".to_string(),
+                    version: "78.3".to_owned(),
+                    name: "icu".to_owned(),
                     release_series: None,
                 },
             ),
@@ -445,9 +445,9 @@ mod tests {
 
         let extractor = VersionExtractor::new();
         for (path, expected) in known_good {
-            eprintln!("Testing path: {}", path);
+            eprintln!("Testing path: {path}");
             let result = extractor.extract(path).expect("Failed to extract version");
-            eprintln!("Expected: {:?}, got: {:?}", expected, result);
+            eprintln!("Expected: {expected:?}, got: {result:?}");
             assert_eq!(result, expected);
         }
     }

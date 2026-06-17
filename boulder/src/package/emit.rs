@@ -260,7 +260,7 @@ fn emit_package(paths: &Paths, package: &Package<'_>) -> Result<(), Error> {
     // Only add content payload if we have some files
     if !files.is_empty() {
         // Temp file for building content payload
-        let temp_content_path = format!("/tmp/{}.tmp", &filename);
+        let temp_content_path = format!("/tmp/{filename}.tmp");
         let mut temp_content = File::options()
             .read(true)
             .append(true)
