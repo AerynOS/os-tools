@@ -132,7 +132,7 @@ impl Plugin {
 
 #[cfg(any(test, feature = "testing"))]
 pub mod test {
-    use super::*;
+    use super::{Package, Provider, package};
 
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub struct Test {
