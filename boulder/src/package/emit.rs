@@ -11,8 +11,8 @@ use fs_err::{self as fs, File};
 use itertools::Itertools;
 use moss::{Dependency, Provider, package::Meta, util};
 use regex::Regex;
+use snafu::{ResultExt, Snafu};
 use stone::{StoneHeaderV1FileType, StoneWriteError, StoneWriter};
-use thiserror::Error;
 use tui::{ProgressBar, ProgressStyle, Styled};
 
 use self::manifest::Manifest;
@@ -163,9 +163,9 @@ pub fn emit(paths: &Paths, recipe: &Recipe, packages: &[Package<'_>]) -> Result<
         // of manifest files
         emit_manifests = false;
 
-        match manifest.verify(guest_path)? {
+        match manifest.verify(guest_path).context(ManifestSnafu)? {
             manifest::Verification::Mismatch => {
-                return Err(Error::VerificationMismatch(host_path.to_owned()));
+                return VerificationMismatchSnafu { host_path }.fail();
             }
             manifest::Verification::HashMatch { hash } => {
                 println!(
@@ -191,8 +191,8 @@ pub fn emit(paths: &Paths, recipe: &Recipe, packages: &[Package<'_>]) -> Result<
     }
 
     if emit_manifests {
-        manifest.write_binary()?;
-        manifest.write_json()?;
+        manifest.write_binary().context(ManifestSnafu)?;
+        manifest.write_json().context(ManifestSnafu)?;
     }
 
     println!();
@@ -231,17 +231,19 @@ fn emit_package(paths: &Paths, package: &Package<'_>) -> Result<(), Error> {
     // Output file to artefacts directory
     let out_path = paths.artefacts().guest.join(&filename);
     if out_path.exists() {
-        fs::remove_file(&out_path)?;
+        fs::remove_file(&out_path).context(IoSnafu)?;
     }
-    let mut out_file = File::create(out_path)?;
+    let mut out_file = File::create(out_path).context(IoSnafu)?;
 
     // Create stone binary writer
-    let mut writer = StoneWriter::new(&mut out_file, StoneHeaderV1FileType::Binary)?;
+    let mut writer = StoneWriter::new(&mut out_file, StoneHeaderV1FileType::Binary).context(StoneBinaryWriterSnafu)?;
 
     // Add metadata
     {
         let meta = package.meta();
-        writer.add_payload(meta.to_stone_payload().as_slice())?;
+        writer
+            .add_payload(meta.to_stone_payload().as_slice())
+            .context(StoneBinaryWriterSnafu)?;
     }
 
     // Add layouts
@@ -253,7 +255,7 @@ fn emit_package(paths: &Paths, package: &Package<'_>) -> Result<(), Error> {
             .map(|p| p.layout.clone())
             .collect::<Vec<_>>();
         if !layouts.is_empty() {
-            writer.add_payload(layouts.as_slice())?;
+            writer.add_payload(layouts.as_slice()).context(StoneBinaryWriterSnafu)?;
         }
     }
 
@@ -265,27 +267,31 @@ fn emit_package(paths: &Paths, package: &Package<'_>) -> Result<(), Error> {
             .read(true)
             .append(true)
             .create(true)
-            .open(&temp_content_path)?;
+            .open(&temp_content_path)
+            .context(IoSnafu)?;
 
         // Convert to content writer using pledged size = total size of all files
-        let mut writer =
-            writer.with_content(&mut temp_content, Some(total_file_size), util::num_cpus().get() as u32)?;
+        let mut writer = writer
+            .with_content(&mut temp_content, Some(total_file_size), util::num_cpus().get() as u32)
+            .context(StoneBinaryWriterSnafu)?;
 
         for info in files {
-            let file = File::open(&info.path)?;
-            writer.add_content(&mut pb.wrap_read(&file))?;
+            let file = File::open(&info.path).context(IoSnafu)?;
+            writer
+                .add_content(&mut pb.wrap_read(&file))
+                .context(StoneBinaryWriterSnafu)?;
         }
 
         // Finalize & flush
-        writer.finalize()?;
-        out_file.flush()?;
+        writer.finalize().context(StoneBinaryWriterSnafu)?;
+        out_file.flush().context(IoSnafu)?;
 
         // Remove temp content file
-        fs::remove_file(temp_content_path)?;
+        fs::remove_file(temp_content_path).context(IoSnafu)?;
     } else {
         // Finalize & flush
-        writer.finalize()?;
-        out_file.flush()?;
+        writer.finalize().context(StoneBinaryWriterSnafu)?;
+        out_file.flush().context(IoSnafu)?;
     }
 
     pb.suspend(|| println!("{} {filename}", "Emitted".green()));
@@ -294,14 +300,14 @@ fn emit_package(paths: &Paths, package: &Package<'_>) -> Result<(), Error> {
     Ok(())
 }
 
-#[derive(Debug, Error)]
+#[derive(Debug, Snafu)]
 pub enum Error {
-    #[error("stone binary writer")]
-    StoneBinaryWriter(#[from] StoneWriteError),
-    #[error("manifest")]
-    Manifest(#[from] manifest::Error),
-    #[error("io")]
-    Io(#[from] io::Error),
-    #[error("Built manifest does not match verification manifest {0:?}")]
-    VerificationMismatch(PathBuf),
+    #[snafu(display("stone binary writer"))]
+    StoneBinaryWriter { source: StoneWriteError },
+    #[snafu(display("manifest"))]
+    Manifest { source: manifest::Error },
+    #[snafu(display("io"))]
+    Io { source: io::Error },
+    #[snafu(display("Built manifest does not match verification manifest {host_path:?}"))]
+    VerificationMismatch { host_path: PathBuf },
 }
