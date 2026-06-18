@@ -135,7 +135,7 @@ checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 
 [[package]]
 name = "astr"
-version = "0.26.1"
+version = "0.26.6"
 dependencies = [
  "diesel",
  "stable_deref_trait",
@@ -278,7 +278,7 @@ dependencies = [
 
 [[package]]
 name = "boulder"
-version = "0.26.1"
+version = "0.26.6"
 dependencies = [
  "astr",
  "chrono",
@@ -599,7 +599,7 @@ dependencies = [
 
 [[package]]
 name = "config"
-version = "0.26.1"
+version = "0.26.6"
 dependencies = [
  "dirs",
  "fs-err",
@@ -630,7 +630,7 @@ checksum = "3d52eff69cd5e647efe296129160853a42795992097e8af39800e1060caeea9b"
 
 [[package]]
 name = "container"
-version = "0.26.1"
+version = "0.26.6"
 dependencies = [
  "fs-err",
  "nc",
@@ -812,7 +812,7 @@ dependencies = [
 
 [[package]]
 name = "dag"
-version = "0.26.1"
+version = "0.26.6"
 dependencies = [
  "petgraph",
 ]
@@ -1061,7 +1061,7 @@ checksum = "66b7e2430c6dff6a955451e2cfc438f09cea1965a9d6f87f7e3b90decc014099"
 [[package]]
 name = "ent_core"
 version = "0.25.6"
-source = "git+https://github.com/AerynOS/ent.git?rev=fdb389a2ee49da8cc753dd32dc5ab8f8e9aebb04#fdb389a2ee49da8cc753dd32dc5ab8f8e9aebb04"
+source = "git+https://github.com/AerynOS/ent.git?rev=42416ecae36c0f29e07647747147672448241f85#42416ecae36c0f29e07647747147672448241f85"
 dependencies = [
  "inventory",
  "reqwest",
@@ -1170,7 +1170,7 @@ dependencies = [
 
 [[package]]
 name = "fnmatch"
-version = "0.26.1"
+version = "0.26.6"
 dependencies = [
  "regex",
  "serde_core",
@@ -1346,7 +1346,7 @@ dependencies = [
 
 [[package]]
 name = "gitwrap"
-version = "0.26.1"
+version = "0.26.6"
 dependencies = [
  "thiserror 2.0.18",
  "tokio",
@@ -1914,7 +1914,7 @@ dependencies = [
 
 [[package]]
 name = "libstone"
-version = "0.26.1"
+version = "0.26.6"
 dependencies = [
  "cbindgen",
  "libc",
@@ -2063,7 +2063,7 @@ dependencies = [
 
 [[package]]
 name = "moss"
-version = "0.26.1"
+version = "0.26.6"
 dependencies = [
  "arc-swap",
  "astr",
@@ -3133,7 +3133,7 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 
 [[package]]
 name = "stone"
-version = "0.26.1"
+version = "0.26.6"
 dependencies = [
  "astr",
  "criterion",
@@ -3146,7 +3146,7 @@ dependencies = [
 
 [[package]]
 name = "stone_recipe"
-version = "0.26.1"
+version = "0.26.6"
 dependencies = [
  "kdl",
  "nom",
@@ -3511,7 +3511,7 @@ checksum = "d282ade6016312faf3e41e57ebbba0c073e4056dab1232ab1cb624199648f8ed"
 
 [[package]]
 name = "tools_buildinfo"
-version = "0.26.1"
+version = "0.26.6"
 dependencies = [
  "chrono",
  "thiserror 2.0.18",
@@ -3639,7 +3639,7 @@ dependencies = [
 
 [[package]]
 name = "tracing_common"
-version = "0.26.1"
+version = "0.26.6"
 dependencies = [
  "tracing",
  "tracing-subscriber",
@@ -3647,7 +3647,7 @@ dependencies = [
 
 [[package]]
 name = "triggers"
-version = "0.26.1"
+version = "0.26.6"
 dependencies = [
  "dag",
  "fnmatch",
@@ -3670,7 +3670,7 @@ checksum = "e421abadd41a4225275504ea4d6566923418b7f05506fbc9c0fe86ba7396114b"
 
 [[package]]
 name = "tui"
-version = "0.26.1"
+version = "0.26.6"
 dependencies = [
  "crossterm",
  "dialoguer",
@@ -3799,7 +3799,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "version_parse"
-version = "0.26.1"
+version = "0.26.6"
 dependencies = [
  "regex",
  "snafu",

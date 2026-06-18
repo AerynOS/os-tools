@@ -141,6 +141,12 @@ pub fn handle(command: Command, env: Env, yes: bool, verbose: bool) -> Result<()
 }
 
 fn detect_update(recipe_path: &Path, parsed_recipe: &recipe::Parsed, verbose: bool) -> Result<DetectedUpdate, Error> {
+    // Set up reqwest client for retries
+    let client = reqwest::ClientBuilder::new()
+        .timeout(Duration::from_secs(30))
+        .connect_timeout(Duration::from_secs(10))
+        .build()?;
+
     // Setup ent parser
     // TODO: Can we avoid the inventory dep and parse the stone directly?
     let registration = inventory::iter::<ParserRegistration>
@@ -157,7 +163,7 @@ fn detect_update(recipe_path: &Path, parsed_recipe: &recipe::Parsed, verbose: bo
     };
 
     // Call the release-monitoring.org API using the ID found in monitoring.yaml
-    let response = runtime::block_on(get_latest_version(monitoring.project_id))?;
+    let response = runtime::block_on(get_latest_version(&client, monitoring.project_id))?;
 
     let current_version = &parsed_recipe.source.version;
 

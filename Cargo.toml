@@ -7,7 +7,7 @@ default-members = ["moss"]
 resolver = "3"
 
 [workspace.package]
-version = "0.26.1"
+version = "0.26.6"
 edition = "2024"
 rust-version = "1.88"
 
@@ -37,7 +37,7 @@ diesel = { version = "2.2.1", features = [
 diesel_migrations = "2.2.0"
 dirs = "6.0.0"
 elf = "0.8.0"
-ent_core = { git = "https://github.com/AerynOS/ent.git", rev = "fdb389a2ee49da8cc753dd32dc5ab8f8e9aebb04" }
+ent_core = { git = "https://github.com/AerynOS/ent.git", rev = "42416ecae36c0f29e07647747147672448241f85" }
 indicatif = "0.18.0"
 inventory = "0.3.22"
 itertools = "0.14.0"
@@ -165,7 +165,7 @@ opt-level = 2
 strip = "none"
 
 # Circular repo dependency :(
-[patch."https://github.com/AerynOS/tools"]
+[patch."https://github.com/AerynOS/os-tools"]
 stone_recipe = { path = "./crates/stone_recipe" }
 
 [patch.crates-io]
