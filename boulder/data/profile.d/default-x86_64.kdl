@@ -1,0 +1,15 @@
+// SPDX-FileCopyrightText: 2024 AerynOS Developers
+// SPDX-License-Identifier: MPL-2.0
+
+default-x86_64 {
+  repositories {
+    volatile {
+      description "AerynOS volatile stream (CDN)"
+      base-uri "https://cdn.aerynos.dev/"
+      channel "main"
+      version "stream/volatile"
+      arch "x86_64"
+      priority 0
+    }
+  }
+}

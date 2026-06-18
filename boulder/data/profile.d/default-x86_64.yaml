@@ -1,9 +1,0 @@
-# SPDX-FileCopyrightText: 2024 AerynOS Developers
-# SPDX-License-Identifier: MPL-2.0
-
-default-x86_64:
-  repositories:
-    volatile:
-      uri: "https://cdn.aerynos.dev/stream/volatile/x86_64/stone.index"
-      description: "AerynOS volatile stream (CDN)"
-      priority: 0
