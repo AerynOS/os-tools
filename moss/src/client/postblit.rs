@@ -132,12 +132,12 @@ pub(super) fn triggers<'a>(
         TriggerScope::Transaction(..) => config::Manager::custom(&full_trigger_path)
             .load::<TransactionTrigger>()
             .into_iter()
-            .map(|t| t.0)
+            .map(|l| l.value.0)
             .collect_vec(),
         TriggerScope::System(..) => config::Manager::custom(&full_trigger_path)
             .load::<SystemTrigger>()
             .into_iter()
-            .map(|t| t.0)
+            .map(|l| l.value.0)
             .collect_vec(),
     };
 

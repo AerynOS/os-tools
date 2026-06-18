@@ -47,11 +47,12 @@ use crate::{
     registry::plugin::{self, Plugin},
     repository, runtime, signal,
     state::{self, Selection},
-    system_model,
+    system_model::{self, LoadedSystemModel},
 };
 
 pub use self::extract::extract;
 pub use self::index::index;
+pub use self::self_upgrade::self_upgrade;
 
 mod boot;
 mod cache;
@@ -59,6 +60,7 @@ mod fetch;
 mod install;
 mod postblit;
 mod remove;
+mod self_upgrade;
 mod sync;
 mod verify;
 
@@ -114,15 +116,11 @@ impl ClientBuilder {
         let layout_db = db::layout::Database::new(self.installation.db_path("layout").to_str().unwrap_or_default())?;
 
         let repositories = if let Some(repos) = self.repositories {
-            repository::Manager::explicit(&self.client_name, repos, self.installation.clone())?
+            repository::Manager::with_explicit(&self.client_name, repos, self.installation.clone())?
         } else if let Some(system_model) = &self.installation.system_model {
-            repository::Manager::explicit(
-                &self.client_name,
-                system_model.repositories.clone(),
-                self.installation.clone(),
-            )?
+            repository::Manager::with_system_model(&self.client_name, system_model.clone(), self.installation.clone())?
         } else {
-            repository::Manager::system(config.clone(), self.installation.clone())?
+            repository::Manager::with_config_manager(config.clone(), self.installation.clone())?
         };
 
         let registry = build_registry(&self.installation, &repositories, &install_db, &state_db)?;
@@ -242,7 +240,8 @@ impl Client {
         // Reload manager if not explicit to pickup config changes
         // then refresh indexes
         if !self.repositories.is_explicit() {
-            self.repositories = repository::Manager::system(self.config.clone(), self.installation.clone())?;
+            self.repositories =
+                repository::Manager::with_config_manager(self.config.clone(), self.installation.clone())?;
         };
         self.repositories.refresh_all().await?;
 
@@ -860,7 +859,7 @@ impl Client {
 
     fn load_or_create_system_model(&self, path: PathBuf, state: &State) -> Result<SystemModel, Error> {
         match system_model::load(&path).map_err(Error::LoadSystemModel)? {
-            Some(system_model) => Ok(system_model),
+            Some(system_model) => Ok(system_model.into()),
             None => {
                 let active_repos = self
                     .repositories
@@ -946,7 +945,7 @@ impl Client {
         let state_db = db::state::Database::new(":memory:")?;
         let layout_db = db::layout::Database::new(":memory:")?;
 
-        let repositories = repository::Manager::system(config.clone(), installation.clone())?;
+        let repositories = repository::Manager::with_config_manager(config.clone(), installation.clone())?;
 
         Ok(Client {
             config,
@@ -1270,7 +1269,7 @@ fn record_os_release(root: &Path) -> Result<(), Error> {
 }
 
 fn update_or_create_system_model(
-    current: Option<SystemModel>,
+    current: Option<LoadedSystemModel>,
     repositories: &repository::Manager,
     packages: &[Package],
 ) -> Result<SystemModel, Error> {
@@ -1281,7 +1280,9 @@ fn update_or_create_system_model(
 
     match current {
         // Update existing w/ incoming packages
-        Some(existing) => existing.update(packages).map_err(Error::UpdateSystemModel),
+        Some(existing) => SystemModel::from(existing)
+            .sync_packages(packages)
+            .map_err(Error::UpdateSystemModel),
 
         // Generate a fresh system-model file
         None => {

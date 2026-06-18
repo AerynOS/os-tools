@@ -6,6 +6,7 @@ use std::{collections::BTreeMap, io};
 use clap::Parser;
 use itertools::Itertools;
 use thiserror::Error;
+use tui::Styled;
 use url::Url;
 
 use crate::{Env, Profile, profile};
@@ -36,7 +37,8 @@ pub enum Subcommand {
             "Repositories to add to profile.\n",
             "It accepts a space-separated list of repository properties.\n",
             "Each property is then separated by a comma.\n",
-            "\"name\" and \"uri\" are mandatory properties.\n\n",
+            "\"name\" and \"uri\" or \"base-uri\" are mandatory properties.\n\n",
+            "Example: --repo name=volatile,base-uri=https://cdn.aerynos.dev,version=stream/unstable,priority=100\n",
             "Example: --repo name=volatile,uri=https://cdn.aerynos.dev/unstable/x86_64/stone.index,priority=100")
         )]
         repos: Vec<(repository::Id, Repository)>,
@@ -56,11 +58,47 @@ fn parse_repository(s: &str) -> Result<(repository::Id, Repository), String> {
         .collect::<BTreeMap<_, _>>();
 
     let id = repository::Id::new(key_values.get("name").ok_or("missing name")?);
-    let uri = key_values
+
+    let source = if let Some(uri) = key_values
         .get("uri")
-        .ok_or("missing uri")?
-        .parse::<Url>()
-        .map_err(|e| e.to_string())?;
+        // .ok_or("missing uri")?
+        .map(|uri| uri.parse::<Url>())
+        .transpose()
+        .map_err(|e| e.to_string())?
+    {
+        repository::Source::DirectIndex(uri)
+    } else {
+        let base_uri = key_values
+            .get("base-uri")
+            .ok_or("one of uri or base-uri must be provided")?
+            .parse::<Url>()
+            .map_err(|e| e.to_string())?;
+        let channel = repository::format::Identifier::try_from(
+            key_values
+                .get("channel")
+                .copied()
+                .unwrap_or(repository::DEFAULT_CHANNEL),
+        )
+        .map_err(|err| err.to_string())?;
+        let version = key_values
+            .get("version")
+            .ok_or("version is required with base-uri")?
+            .parse::<repository::format::ScopedIdentifier>()
+            .map_err(|err| err.to_string())?;
+        let arch = key_values
+            .get("arch")
+            .copied()
+            .unwrap_or(repository::DEFAULT_ARCH)
+            .to_owned();
+
+        repository::Source::RootIndex(repository::RootIndexSource {
+            base_uri,
+            channel,
+            version,
+            arch,
+        })
+    };
+
     let priority = key_values
         .get("priority")
         .map(|p| p.parse::<u64>())
@@ -72,7 +110,7 @@ fn parse_repository(s: &str) -> Result<(repository::Id, Repository), String> {
         id,
         Repository {
             description: String::default(),
-            uri,
+            source,
             priority: repository::Priority::new(priority),
             active: true,
         },
@@ -103,7 +141,27 @@ pub fn list(manager: profile::Manager<'_>) -> Result<(), Error> {
             .iter()
             .sorted_by(|(_, a), (_, b)| a.priority.cmp(&b.priority).reverse())
         {
-            println!(" - {id} = {} [{}]", repo.uri, repo.priority);
+            let disabled = if !repo.active {
+                " (disabled)".dim().to_string()
+            } else {
+                String::new()
+            };
+
+            // TODO: Refactor this in future unit of work to print KDL encoded
+            // documents for each repo. The below addition of `RootIndexSource`
+            // is a temporary fix, not the desired future state
+            match &repo.source {
+                repository::Source::DirectIndex(uri) => println!(" - {id} = {uri} [{}]{disabled}", repo.priority),
+                repository::Source::RootIndex(repository::RootIndexSource {
+                    base_uri,
+                    channel,
+                    version,
+                    arch,
+                }) => println!(
+                    " - {id} = (base-uri={base_uri}, channel={channel}, version={version}, arch={arch}) [{}]{disabled}",
+                    repo.priority
+                ),
+            }
         }
     }
 

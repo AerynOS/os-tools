@@ -11,7 +11,10 @@ use nix::unistd::{AccessFlags, Uid, access};
 use thiserror::Error;
 use tui::Styled;
 
-use crate::{SystemModel, state, system_model};
+use crate::{
+    state,
+    system_model::{self, LoadedSystemModel},
+};
 
 mod lockfile;
 
@@ -42,7 +45,7 @@ pub struct Installation {
     pub cache_dir: Option<PathBuf>,
 
     /// If defined, the system model of the installation
-    pub system_model: Option<SystemModel>,
+    pub system_model: Option<LoadedSystemModel>,
 
     /// Acquired locks that guarantee exclusive access
     /// to the installation for mutable operations

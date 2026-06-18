@@ -36,6 +36,7 @@ fnmatch = { path = "../crates/fnmatch" }
 fs-err.workspace = true
 futures-util.workspace = true
 hex.workspace = true
+indexmap.workspace = true
 kdl.workspace = true
 libsqlite3-sys.workspace = true
 log.workspace = true
@@ -44,6 +45,9 @@ os-info.workspace = true
 rayon.workspace = true
 reqwest.workspace = true
 serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+similar.workspace = true
 sha2.workspace = true
 snafu.workspace = true
 strum.workspace = true
@@ -56,6 +60,8 @@ url.workspace = true
 xxhash-rust.workspace = true
 zbus.workspace = true
 astr = { workspace = true, features = ["diesel"] }
+arc-swap.workspace = true
+tempfile.workspace = true
 
 [dev-dependencies]
 moss = { path = ".", features = ["testing"] }

@@ -7,9 +7,10 @@ use kdl::{FormatConfig, KdlDocument, KdlNode, KdlNodeFormat};
 
 use super::decode::{self, decode_package};
 use super::encode::push_child;
-use crate::Provider;
+use crate::system_model::encode::push_repository_fields;
+use crate::{Provider, Repository, repository};
 
-pub fn update<'a>(
+pub fn sync_packages<'a>(
     content: &str,
     packages_to_remove: &BTreeSet<&Provider>,
     packages_to_add: impl Iterator<Item = &'a str>,
@@ -55,6 +56,27 @@ pub fn update<'a>(
     Ok(document.to_string())
 }
 
+pub fn update_repositories<'a>(
+    content: &str,
+    repositories_to_update: impl Iterator<Item = (&'a repository::Id, &'a Repository)>,
+) -> Result<String, decode::Error> {
+    let mut document: KdlDocument = content.parse().map_err(decode::Error::ParseKdlDocument)?;
+
+    if let Some(existing_repos) = document.get_mut("repositories")
+        && let Some(children) = existing_repos.children_mut()
+    {
+        for (id, repo) in repositories_to_update {
+            if let Some(node) = children.get_mut(id.as_ref()) {
+                *node = KdlNode::new(node.name().clone());
+                push_repository_fields(node, repo);
+                node.autoformat_config(&FormatConfig::builder().indent_level(1).build());
+            }
+        }
+    }
+
+    Ok(document.to_string())
+}
+
 #[cfg(test)]
 mod test {
     use crate::{Package, package, system_model};
@@ -91,7 +113,7 @@ packages {
 
         let system_model = system_model::decode(CONTENT).unwrap();
 
-        let updated = system_model.update(&[]).unwrap();
+        let updated = system_model.sync_packages(&[]).unwrap();
 
         assert_eq!(updated.encoded, EXPECTED);
     }
@@ -121,7 +143,7 @@ packages {
         let system_model = system_model::decode(CONTENT).unwrap();
 
         let updated = system_model
-            .update(&[
+            .sync_packages(&[
                 // Original
                 package("a"),
                 package("b"),
@@ -160,7 +182,7 @@ packages {
         let system_model = system_model::decode(CONTENT).unwrap();
 
         let updated = system_model
-            .update(&[
+            .sync_packages(&[
                 // Original
                 package("a"),
                 package("b"),

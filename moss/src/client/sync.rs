@@ -15,8 +15,11 @@ use tui::{
 };
 
 use crate::{
-    Client, Package, Provider, SystemModel, client, db, package, registry::transaction, runtime, state::Selection,
-    system_model,
+    Client, Package, Provider, client, db, package,
+    registry::transaction,
+    runtime,
+    state::Selection,
+    system_model::{self, LoadedSystemModel},
 };
 
 pub fn sync(client: &Client, yes: bool, simulate: bool) -> Result<Timing, Error> {
@@ -257,7 +260,7 @@ fn resolve_with_installed(client: &Client, packages: &[Package]) -> Result<Vec<P
 /// System model is the source of truth here vs "implicit" mode which relies on the active
 /// state + configured repos as the source of truth
 #[tracing::instrument(skip_all)]
-fn resolve_with_system_model(client: &Client, system_model: &SystemModel) -> Result<Vec<Package>, Error> {
+fn resolve_with_system_model(client: &Client, system_model: &LoadedSystemModel) -> Result<Vec<Package>, Error> {
     // Lookup the available package for each
     let packages = system_model
         .packages
