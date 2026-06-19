@@ -488,17 +488,13 @@ impl Client {
         for (i, trigger) in progress.wrap_iter(triggers.iter()).enumerate() {
             trigger.execute()?;
 
-            let trigger_command = match trigger.handler() {
-                triggers::format::Handler::Run { run, .. } => run.clone(),
-                triggers::format::Handler::Delete { .. } => "delete operation".to_owned(),
-            };
             info!(
                 progress = (i + 1) as f32 / triggers.len() as f32,
                 current = i + 1,
                 total = triggers.len(),
                 event_type = "progress_update",
-                "Executing {}",
-                trigger_command
+                "Executing `{}`",
+                trigger.handler()
             );
         }
 

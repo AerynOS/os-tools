@@ -5,7 +5,7 @@
 // but we don't Ord or Hash off that field
 #![allow(clippy::mutable_key_type)]
 
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fmt};
 
 use fnmatch::Pattern;
 use serde::Deserialize;
@@ -24,6 +24,28 @@ pub enum PathKind {
 pub enum Handler {
     Run { run: String, args: Vec<String> },
     Delete { delete: Vec<String> },
+}
+
+impl fmt::Display for Handler {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let args = match self {
+            Handler::Run { run, args } => {
+                f.write_str(run)?;
+                args
+            }
+            Handler::Delete { delete } => {
+                f.write_str("rm --")?;
+                delete
+            }
+        };
+
+        // Note: No shell quoting for simplicity.
+        // Could use the shell-quote crate if we wanted to be more correct.
+        for arg in args {
+            write!(f, " {arg}")?;
+        }
+        Ok(())
+    }
 }
 
 #[derive(Debug, Deserialize, Clone, PartialEq, Eq, PartialOrd, Ord)]
