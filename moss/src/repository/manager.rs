@@ -57,8 +57,8 @@ pub struct Manager {
 }
 
 impl Manager {
-    pub fn is_explicit(&self) -> bool {
-        matches!(*self.source, Source::Explicit { .. })
+    pub fn is_config_source(&self) -> bool {
+        matches!(*self.source, Source::ConfigManager { .. })
     }
 
     /// Create a [`Manager`] for the supplied [`Installation`] using repositories loaded
