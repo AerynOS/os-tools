@@ -466,11 +466,11 @@ impl Client {
         );
 
         let phase_name = match &scope {
-            TriggerScope::Transaction(_, _) => {
+            TriggerScope::Transaction(..) => {
                 progress.set_message("Running transaction-scope triggers");
                 "transaction-scope-triggers"
             }
-            TriggerScope::System(_, _) => {
+            TriggerScope::System(..) => {
                 progress.set_message("Running system-scope triggers");
                 "system-scope-triggers"
             }

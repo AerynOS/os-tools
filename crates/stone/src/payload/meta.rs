@@ -226,8 +226,8 @@ impl Record for StonePayloadMetaRecord {
             StonePayloadMetaPrimitive::Int64(_) => 7,
             StonePayloadMetaPrimitive::Uint64(_) => 8,
             StonePayloadMetaPrimitive::String(_) => 9,
-            StonePayloadMetaPrimitive::Dependency(_, _) => 10,
-            StonePayloadMetaPrimitive::Provider(_, _) => 11,
+            StonePayloadMetaPrimitive::Dependency(..) => 10,
+            StonePayloadMetaPrimitive::Provider(..) => 11,
             StonePayloadMetaPrimitive::Unknown(..) => 255,
         };
 
