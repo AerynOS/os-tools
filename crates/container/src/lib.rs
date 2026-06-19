@@ -187,7 +187,7 @@ impl Container {
 
         match status {
             WaitStatus::Exited(_, 0) => Ok(()),
-            WaitStatus::Exited(_, _) => {
+            WaitStatus::Exited(..) => {
                 let mut error = String::new();
                 let mut buffer = [0u8; 1024];
 
@@ -204,8 +204,8 @@ impl Container {
                 Err(Error::Failure { message: error })
             }
             WaitStatus::Signaled(_, signal, _) => Err(Error::Signaled { signal }),
-            WaitStatus::Stopped(_, _)
-            | WaitStatus::PtraceEvent(_, _, _)
+            WaitStatus::Stopped(..)
+            | WaitStatus::PtraceEvent(..)
             | WaitStatus::PtraceSyscall(_)
             | WaitStatus::Continued(_)
             | WaitStatus::StillAlive => Err(Error::UnknownExit),

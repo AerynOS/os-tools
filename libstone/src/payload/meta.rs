@@ -25,8 +25,8 @@ impl From<&stone::StonePayloadMetaRecord> for StonePayloadMetaRecord {
                 stone::StonePayloadMetaPrimitive::Int64(_) => StonePayloadMetaPrimitiveType::Int64,
                 stone::StonePayloadMetaPrimitive::Uint64(_) => StonePayloadMetaPrimitiveType::Uint64,
                 stone::StonePayloadMetaPrimitive::String(_) => StonePayloadMetaPrimitiveType::String,
-                stone::StonePayloadMetaPrimitive::Dependency(_, _) => StonePayloadMetaPrimitiveType::Dependency,
-                stone::StonePayloadMetaPrimitive::Provider(_, _) => StonePayloadMetaPrimitiveType::Provider,
+                stone::StonePayloadMetaPrimitive::Dependency(..) => StonePayloadMetaPrimitiveType::Dependency,
+                stone::StonePayloadMetaPrimitive::Provider(..) => StonePayloadMetaPrimitiveType::Provider,
                 stone::StonePayloadMetaPrimitive::Unknown(_) => StonePayloadMetaPrimitiveType::Unknown,
             },
             primitive_payload: match &record.primitive {

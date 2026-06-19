@@ -172,7 +172,7 @@ impl PathInfo {
     }
 
     pub fn is_file(&self) -> bool {
-        matches!(self.layout.file, StonePayloadLayoutFile::Regular(_, _))
+        matches!(self.layout.file, StonePayloadLayoutFile::Regular(..))
     }
 
     pub fn file_hash(&self) -> Option<u128> {
