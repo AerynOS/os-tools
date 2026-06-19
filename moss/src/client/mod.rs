@@ -237,9 +237,9 @@ impl Client {
     /// Reload all configured repositories and refreshes their index file, then update
     /// registry with all active repositories.
     pub async fn refresh_repositories(&mut self) -> Result<(), Error> {
-        // Reload manager if not explicit to pickup config changes
+        // Reload manager if config sourced to pickup config changes
         // then refresh indexes
-        if !self.repositories.is_explicit() {
+        if self.repositories.is_config_source() {
             self.repositories =
                 repository::Manager::with_config_manager(self.config.clone(), self.installation.clone())?;
         };
