@@ -15,6 +15,7 @@ definitions:
     - mtune          : i686
     - target_triple  : "i686-unknown-linux-gnu"
     - pkgconfigpath  : "%(libdir)/pkgconfig:/usr/share/pkgconfig:%(prefix)/lib/pkgconfig"
+    - goamd64_arch   : "v2"
 
 flags:
 
