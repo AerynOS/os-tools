@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2023 AerynOS Developers
 // SPDX-License-Identifier: MPL-2.0
 
-use std::io::Write;
+use std::{hash::Hash, io::Write};
 
 use chrono::{DateTime, Utc};
 use derive_more::{Debug, Display, From, Into};
@@ -54,6 +54,12 @@ pub struct State {
     pub kind: Kind,
 }
 
+impl Hash for State {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+    }
+}
+
 /// The Selection records the presence of a package ID in a [`State`]
 /// It also records whether it was selected as a transitive dependency,
 /// along with an optional human-readable reason
@@ -69,15 +75,6 @@ pub struct Selection {
 impl Selection {
     /// Construct a new explicit Selection to indicate user intent
     pub fn explicit(package: package::Id) -> Self {
-        Self {
-            package,
-            explicit: true,
-            reason: None,
-        }
-    }
-
-    /// Construct a new transitive Selection to mark automatic installation
-    pub fn transitive(package: package::Id) -> Self {
         Self {
             package,
             explicit: true,

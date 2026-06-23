@@ -6,38 +6,29 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use chrono::{DateTime, Utc};
-use diesel::SqliteConnection;
 use thiserror::Error;
 
 pub mod layout;
 pub mod meta;
+mod migrations;
 pub mod state;
 
-/// Max number of variables (binds) for a prepared statement
-///
-/// https://www.sqlite.org/limits.html#max_variable_number
-const MAX_VARIABLE_NUMBER: usize = 32766;
-
 #[derive(Clone)]
-struct Connection(Arc<Mutex<SqliteConnection>>);
+struct Connection(Arc<Mutex<rusqlite::Connection>>);
 
 impl Connection {
-    fn new(connection: SqliteConnection) -> Self {
+    fn new(connection: rusqlite::Connection) -> Self {
         Self(Arc::new(Mutex::new(connection)))
     }
 
-    fn exec<T>(&self, f: impl FnOnce(&mut SqliteConnection) -> T) -> T {
-        let mut _guard = self.0.lock().expect("mutex guard");
-        f(&mut _guard)
+    fn exec<T>(&self, f: impl FnOnce(&rusqlite::Connection) -> T) -> T {
+        let _guard = self.0.lock().expect("mutex guard");
+        f(&_guard)
     }
 
-    fn exclusive_tx<T, E>(&self, f: impl FnOnce(&mut SqliteConnection) -> Result<T, E>) -> Result<T, E>
-    where
-        E: From<diesel::result::Error>,
-    {
+    fn exec_mut<T>(&self, f: impl FnOnce(&mut rusqlite::Connection) -> T) -> T {
         let mut _guard = self.0.lock().expect("mutex guard");
-        _guard.exclusive_transaction(|tx| f(tx))
+        f(&mut _guard)
     }
 }
 
@@ -47,30 +38,12 @@ impl fmt::Debug for Connection {
     }
 }
 
-pub struct Timestamp(pub DateTime<Utc>);
-
-impl TryFrom<i64> for Timestamp {
-    type Error = Error;
-
-    fn try_from(value: i64) -> Result<Self, Self::Error> {
-        Ok(Self(
-            DateTime::<Utc>::from_timestamp(value, 0).ok_or(Error::InvalidTimestamp(value))?,
-        ))
-    }
-}
-
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("Row not found")]
     RowNotFound,
-    #[error("failed to decode layout entry")]
-    LayoutEntryDecode,
-    #[error("invalid timestamp: {0}")]
-    InvalidTimestamp(i64),
-    #[error("diesel")]
-    Diesel(#[from] diesel::result::Error),
-    #[error("diesel connection")]
-    Connection(#[from] diesel::ConnectionError),
-    #[error("diesel migration")]
-    Migration(#[source] Box<dyn std::error::Error + Send + Sync + 'static>),
+    #[error("invalid {0}: {1}")]
+    Decode(&'static str, String),
+    #[error(transparent)]
+    Dbms(#[from] rusqlite::Error),
 }

@@ -30,11 +30,6 @@ derive_more = { version = "2.0.1", features = [
     "as_ref",
 ] }
 dialoguer = "0.12.0"
-diesel = { version = "2.2.1", features = [
-    "sqlite",
-    "returning_clauses_for_sqlite_3_35",
-] }
-diesel_migrations = "2.2.0"
 dirs = "6.0.0"
 elf = "0.8.0"
 ent_core = { git = "https://github.com/AerynOS/ent.git", rev = "42416ecae36c0f29e07647747147672448241f85" }
@@ -79,6 +74,12 @@ reqwest = { version = "0.13.2", default-features = false, features = [
     "zstd",
     "blocking",
     "json",
+] }
+rusqlite = { version = "0.39.0", features = [
+    "array",
+    "bundled",
+    "chrono",
+    "limits",
 ] }
 serde = { version = "1.0.223", features = ["derive"] }
 serde_core = "1.0.223"
