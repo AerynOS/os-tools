@@ -16,7 +16,7 @@ use crate::{Dependency, Provider, dependency};
 pub struct Id(pub(super) AStr);
 
 /// The name of a [`super::Package`]
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, From, Into, Display)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, From, Into, Display)]
 pub struct Name(String);
 
 impl Name {
@@ -30,7 +30,7 @@ impl Name {
 }
 
 /// The metadata of a [`super::Package`]
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Meta {
     /// Package name
     pub name: Name,

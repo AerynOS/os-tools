@@ -1,14 +1,16 @@
 // SPDX-FileCopyrightText: 2023 AerynOS Developers
 // SPDX-License-Identifier: MPL-2.0
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::iter;
 use std::rc::Rc;
 
 use indoc::indoc;
 use itertools::Itertools;
+use rusqlite::Rows;
 use rusqlite::limits::Limit::SQLITE_LIMIT_VARIABLE_NUMBER;
 use rusqlite::types::{ToSqlOutput, Value, ValueRef};
+use serde::de;
 
 use crate::db::{Connection, migrations::Migrations};
 use crate::package::{self, Meta};
@@ -239,23 +241,139 @@ impl Database {
         let ids: Rc<Vec<Value>> = Rc::new(packages.into_iter().map(|id| Value::from(id.to_string())).collect());
         Ok(conn.execute("DELETE FROM meta WHERE package IN rarray(?)", [ids])?).map(|_| ())
     }
+
+    fn gettt(&self, filter: Filter<'_>) -> Result<Vec<(package::Id, Meta)>, Error> {
+        #[derive(PartialEq, Eq, Hash)]
+        enum Table {
+            Meta,
+            Licenses,
+            Deps,
+            Providers,
+            Conflicts,
+        }
+        let mut unvisited_tables = HashSet::<Table>::from_iter([
+            Table::Meta,
+            Table::Licenses,
+            Table::Deps,
+            Table::Providers,
+            Table::Conflicts,
+        ]);
+
+        let mut metas = HashMap::<package::Id, Meta>::new();
+        self.conn.exec_mut(|conn| {
+            // Add a partial entry into `metas`.
+            match filter {
+                Filter::Provider(provider) => {
+                    unvisited_tables.remove(&Table::Providers);
+                    let mut stmt = conn.prepare("SELECT * FROM meta_providers WHERE provider = ?")?;
+                    append_providers(&mut metas, stmt.query([provider.to_string()])?)?;
+                }
+                Filter::Dependency(dependency) => {
+                    unvisited_tables.remove(&Table::Deps);
+                    let mut stmt = conn.prepare("SELECT * FROM meta_dependencies WHERE dependency = ?")?;
+                    append_dependencies(&mut metas, stmt.query([dependency.to_string()])?)?;
+                }
+                Filter::Name(name) => {
+                    unvisited_tables.remove(&Table::Meta);
+                    let mut stmt = conn.prepare("SELECT * FROM meta WHERE name = ?")?;
+                    update_metas(&mut metas, stmt.query([name.to_string()])?)?;
+                }
+                Filter::Keyword(kw) => {
+                    unvisited_tables.remove(&Table::Meta);
+                    let mut stmt = conn.prepare(
+                        "SELECT * FROM meta WHERE name LIKE concat('%', ?1, '%') OR summary LIKE concat('%', ?1, '%')",
+                    )?;
+                    update_metas(&mut metas, stmt.query([kw.to_string()])?)?;
+                }
+                Filter::All => {
+                    unvisited_tables.remove(&Table::Meta);
+                    let mut stmt = conn.prepare("SELECT * FROM meta").unwrap();
+                    update_metas(&mut metas, stmt.query([])?)?;
+                }
+            };
+
+            // // Query the other tables until we're completed building
+            // // the Meta objects.
+            for table in unvisited_tables {
+                match table {
+                    Table::Meta => todo!(),
+                    Table::Licenses => todo!(),
+                    Table::Deps => todo!(),
+                    Table::Providers => todo!(),
+                    Table::Conflicts => todo!(),
+                }
+            }
+
+            Ok(Vec::new())
+        })
+    }
+}
+
+fn append_providers(metas: &mut HashMap<package::Id, Meta>, rows: Rows<'_>) -> Result<(), Error> {
+    let rows = rows.mapped(|row| {
+        Ok((
+            package::Id::from(row.get::<_, String>("package")?),
+            Provider::try_from(row.get::<_, String>("provider")?)?,
+        ))
+    });
+    for row in rows {
+        let (id, prov) = row?;
+        metas.entry(id).or_default().providers.insert(prov);
+    }
+    Ok(())
+}
+
+fn append_dependencies(metas: &mut HashMap<package::Id, Meta>, rows: Rows<'_>) -> Result<(), Error> {
+    let rows = rows.mapped(|row| {
+        Ok((
+            package::Id::from(row.get::<_, String>("package")?),
+            Dependency::try_from(row.get::<_, String>("dependency")?)?,
+        ))
+    });
+    for row in rows {
+        let (id, dep) = row?;
+        metas.entry(id).or_default().dependencies.insert(dep);
+    }
+    Ok(())
+}
+
+fn update_metas(metas: &mut HashMap<package::Id, Meta>, rows: Rows<'_>) -> Result<(), Error> {
+    let rows = rows.mapped(|row| {
+        Ok((
+            package::Id::from(row.get::<_, String>("package")?),
+            Meta::try_from(row)?,
+        ))
+    });
+    for row in rows {
+        let (id, partial_meta) = row?;
+        let old_meta = metas.remove(&id).unwrap_or_default();
+        metas.insert(
+            id,
+            Meta {
+                licenses: old_meta.licenses,
+                providers: old_meta.providers,
+                dependencies: old_meta.dependencies,
+                conflicts: old_meta.conflicts,
+                ..partial_meta
+            },
+        );
+    }
+    Ok(())
 }
 
 const META_QUERY: &str = indoc! {"
     SELECT
         m.*,
-        json_group_array(DISTINCT ml.license)
-            FILTER (WHERE ml.license IS NOT NULL)    AS licenses,
+        json_group_array(DISTINCT ml.license) AS licenses,
         json_group_array(DISTINCT md.dependency)
             FILTER (WHERE md.dependency IS NOT NULL) AS dependencies,
-        json_group_array(DISTINCT mp.provider)
-            FILTER (WHERE mp.provider IS NOT NULL)   AS providers,
+        json_group_array(DISTINCT mp.provider)  AS providers,
         json_group_array(DISTINCT mc.conflict)
             FILTER (WHERE mc.conflict IS NOT NULL)   AS conflicts
     FROM meta m
-    LEFT JOIN meta_licenses ml ON m.package = ml.package
+    JOIN meta_licenses ml ON m.package = ml.package
     LEFT JOIN meta_dependencies md ON m.package = md.package
-    LEFT JOIN meta_providers mp ON m.package = mp.package
+    JOIN meta_providers mp ON m.package = mp.package
     LEFT JOIN meta_conflicts mc ON m.package = mc.package
 "};
 
