@@ -157,6 +157,9 @@ fn generate_completions(cmd: &mut Command, dir: &Path) -> io::Result<()> {
 
 /// Process all CLI arguments
 pub fn process() -> Result<(), Error> {
+    // Necessary for dynamic completions
+    clap_complete::CompleteEnv::with_factory(command).complete();
+
     let args = replace_aliases(env::args());
     let matches = command().get_matches_from(args);
 

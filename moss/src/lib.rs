@@ -14,6 +14,7 @@ pub use self::system_model::SystemModel;
 pub mod client;
 pub mod db;
 pub mod dependency;
+pub mod dynamic_completion;
 pub mod environment;
 pub mod installation;
 pub mod package;
