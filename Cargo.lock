@@ -2089,6 +2089,7 @@ dependencies = [
  "clap_mangen",
  "config",
  "container",
+ "criterion",
  "dag",
  "derive_more",
  "diesel",
