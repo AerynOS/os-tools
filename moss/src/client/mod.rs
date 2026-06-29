@@ -340,6 +340,14 @@ impl Client {
         self.registry.by_keyword(keyword, flags)
     }
 
+    pub fn prefix_search<'a>(
+        &'a self,
+        prefix: &'a str,
+        flags: package::Flags,
+    ) -> impl Iterator<Item = package::Name> + 'a {
+        self.registry.prefix_search(prefix, flags)
+    }
+
     /// Activates the provided state and runs system triggers once applied.
     ///
     /// The current state gets archived.\

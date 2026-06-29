@@ -5,9 +5,9 @@ use super::{Installation, client::Client, package};
 
 fn generate_results(client: Client, flags: package::Flags, prefix: &str) -> Vec<CompletionCandidate> {
     client
-        .list_packages(flags)
-        .filter(|package| package.meta.name.as_str().starts_with(prefix))
-        .map(|package| CompletionCandidate::from(package.meta.name.as_str()))
+        .prefix_search(prefix, flags)
+        .filter(|name| name.as_str().starts_with(prefix))
+        .map(|name| CompletionCandidate::from(name.as_str()))
         .collect()
 }
 

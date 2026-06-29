@@ -113,6 +113,29 @@ impl Active {
         }
     }
 
+    pub fn query_prefix(&self, prefix: &str, flags: package::Flags) -> Vec<package::Name> {
+        self.query_package_name_only(flags, Some(db::meta::Filter::Keyword(prefix)))
+    }
+
+    fn query_package_name_only(
+        &self,
+        flags: package::Flags,
+        filter: Option<db::meta::Filter<'_>>,
+    ) -> Vec<package::Name> {
+        if flags.installed || flags == package::Flags::default() {
+            // TODO: Error handling
+            match self.db.query_prefix(filter) {
+                Ok(packages) => packages,
+                Err(error) => {
+                    warn!("failed to query repository packages: {error}");
+                    vec![]
+                }
+            }
+        } else {
+            vec![]
+        }
+    }
+
     pub fn priority(&self) -> u64 {
         u64::MAX
     }

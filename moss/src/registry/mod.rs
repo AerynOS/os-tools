@@ -75,6 +75,14 @@ impl Registry {
         self.query(move |plugin| plugin.query_keyword(keyword, flags))
     }
 
+    pub fn prefix_search<'a>(
+        &'a self,
+        prefix: &'a str,
+        flags: package::Flags,
+    ) -> impl Iterator<Item = package::Name> + 'a {
+        self.query(move |plugin| plugin.query_prefix(prefix, flags))
+    }
+
     /// Return a sorted stream of [`Package`] matching the given [`Flags`]
     ///
     /// [`Flags`]: package::Flags

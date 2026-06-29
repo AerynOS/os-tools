@@ -61,6 +61,17 @@ impl Plugin {
         })
     }
 
+    pub fn query_prefix(&self, prefix: &str, flags: package::Flags) -> Vec<package::Name> {
+        match self {
+            Plugin::Active(plugin) => plugin.query_prefix(prefix, flags),
+            Plugin::Cobble(plugin) => plugin.query_prefix(prefix, flags),
+            Plugin::Repository(plugin) => plugin.query_prefix(prefix, flags),
+
+            #[cfg(any(test, feature = "testing"))]
+            Plugin::Test(_plugin) => vec![],
+        }
+    }
+
     pub fn query_keyword(&self, keyword: &str, flags: package::Flags) -> package::Sorted<Vec<Package>> {
         package::Sorted::new(match self {
             Plugin::Active(plugin) => plugin.query_keyword(keyword, flags),
