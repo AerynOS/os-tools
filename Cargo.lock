@@ -316,6 +316,7 @@ dependencies = [
  "snafu",
  "stone",
  "stone_recipe",
+ "stone_script",
  "strum",
  "tempfile",
  "thiserror 2.0.18",
@@ -3157,6 +3158,14 @@ dependencies = [
  "strum",
  "thiserror 2.0.18",
  "url",
+]
+
+[[package]]
+name = "stone_script"
+version = "0.26.6"
+dependencies = [
+ "nom",
+ "snafu",
 ]
 
 [[package]]
