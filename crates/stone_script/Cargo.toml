@@ -1,0 +1,15 @@
+# SPDX-FileCopyrightText: 2026 AerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
+
+[package]
+name = "stone_script"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+nom.workspace = true
+snafu.workspace = true
+
+[lints]
+workspace = true
