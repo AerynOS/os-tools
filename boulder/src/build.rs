@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use std::{
-    io,
+    io::{self, Write},
     os::unix::process::ExitStatusExt,
     path::{Path, PathBuf},
     process, thread,
@@ -263,7 +263,6 @@ impl Builder {
                                 let script_path = "/tmp/script";
 
                                 {
-                                    use std::io::Write as _;
                                     let mut file = fs::File::create(script_path)?;
                                     writeln!(file, "{prefix}\n{content}\n")?;
                                 }
