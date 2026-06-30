@@ -112,14 +112,12 @@ impl ScriptContext {
                             source: EvalError::BuiltinsNotAllowed,
                             trace: unwind_stack(&mut stack),
                         });
-                    } else if let Some(value) = env.builtins.get(name) {
-                        self.output.push_str(value);
-                    } else {
-                        return Err(Error::Eval {
-                            source: EvalError::UndefinedBuiltin { name: name.to_owned() },
-                            trace: unwind_stack(&mut stack),
-                        });
                     }
+                    let value = env.builtins.get(name).ok_or_else(|| Error::Eval {
+                        source: EvalError::UndefinedBuiltin { name: name.to_owned() },
+                        trace: unwind_stack(&mut stack),
+                    })?;
+                    self.output.push_str(value);
                 }
                 Fragment::Definition(name) => {
                     if let Some(definition) = env.definitions.get(name) {
@@ -141,24 +139,21 @@ impl ScriptContext {
                     }
                 }
                 Fragment::Action(name) => {
-                    if let Some(action) = env.actions.get(name) {
-                        if stack.len() >= MAX_DEPTH {
-                            return Err(Error::Eval {
-                                source: EvalError::TooDeep,
-                                trace: unwind_stack(&mut stack),
-                            });
-                        }
-                        self.dependencies.extend(action.dependencies.iter().cloned());
-                        stack.push(Frame {
-                            expr: &action.value,
-                            progress: 0,
-                        });
-                    } else {
+                    let action = env.actions.get(name).ok_or_else(|| Error::Eval {
+                        source: EvalError::UndefinedAction { name: name.to_owned() },
+                        trace: unwind_stack(&mut stack),
+                    })?;
+                    if stack.len() >= MAX_DEPTH {
                         return Err(Error::Eval {
-                            source: EvalError::UndefinedAction { name: name.to_owned() },
+                            source: EvalError::TooDeep,
                             trace: unwind_stack(&mut stack),
                         });
                     }
+                    self.dependencies.extend(action.dependencies.iter().cloned());
+                    stack.push(Frame {
+                        expr: &action.value,
+                        progress: 0,
+                    });
                 }
                 Fragment::Breakpoint { line_num, exit } => {
                     self.finish();

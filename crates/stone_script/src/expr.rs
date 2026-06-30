@@ -179,7 +179,7 @@ impl Expr {
     /// Concatenate two exprs, one after the other
     pub fn concat(&self, other: &Expr) -> Expr {
         Expr {
-            fragments: self.fragments.iter().chain(other.fragments.iter()).cloned().collect(),
+            fragments: std::iter::chain(&self.fragments, &other.fragments).cloned().collect(),
         }
     }
 }

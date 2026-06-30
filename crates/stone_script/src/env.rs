@@ -97,8 +97,8 @@ impl ScriptEnv {
     /// let mut env = ScriptEnv::new();
     ///
     /// env.add_definition("rustflags", Definition {
-    ///   doc: None,
-    ///   value: Expr::parse("-C opt-level=3").unwrap(),
+    ///     doc: None,
+    ///     value: Expr::parse("-C opt-level=3").unwrap(),
     /// });
     /// ```
     pub fn add_definition(&mut self, name: impl ToString, definition: Definition) {
@@ -113,10 +113,10 @@ impl ScriptEnv {
     /// let mut env = ScriptEnv::new();
     ///
     /// env.add_action("compile", Action {
-    ///   doc: None,
-    ///   example: None,
-    ///   dependencies: vec!["binary(rustc)".to_owned()],
-    ///   value: Expr::parse("%(rustc) %(rustflags)").unwrap(),
+    ///     doc: None,
+    ///     example: None,
+    ///     dependencies: vec!["binary(rustc)".to_owned()],
+    ///     value: Expr::parse("%(rustc) %(rustflags)").unwrap(),
     /// });
     /// ```
     pub fn add_action(&mut self, name: impl ToString, action: Action) {
