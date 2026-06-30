@@ -40,7 +40,7 @@ pub fn handle(command: Command, env: Env) -> Result<(), Error> {
     // The phase doesn't matter, but we use `prepare`
     // since it uses hardcoded content that's always
     // available to create a script from
-    let script = build::job::Phase::Prepare
+    let env = build::job::Phase::Prepare
         .script(
             BuildTarget::Native(architecture::host()),
             None,
@@ -51,7 +51,7 @@ pub fn handle(command: Command, env: Env) -> Result<(), Error> {
         )
         .map_err(Error::BuildScript)?
         .expect("script always available for prepare phase");
-    let profile = &build::format_profile(&script);
+    let profile = &build::format_profile(&env)?;
 
     let home = &paths.build().guest;
 
@@ -88,4 +88,6 @@ pub enum Error {
     Recipe(#[from] recipe::Error),
     #[error("io")]
     Io(#[from] io::Error),
+    #[error("build")]
+    Build(#[from] build::Error),
 }

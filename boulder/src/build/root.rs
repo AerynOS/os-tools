@@ -45,7 +45,8 @@ pub fn populate(
     timing.finish(initialize_timer);
 
     // Install packages
-    let install_timing = moss_client.install(&packages, true, false)?;
+    let pkgs: Vec<&str> = packages.iter().map(|s| s.as_ref()).collect();
+    let install_timing = moss_client.install(&pkgs, true, false)?;
 
     timing.record(timing::Populate::Resolve, install_timing.resolve);
     timing.record(timing::Populate::Fetch, install_timing.fetch);
@@ -105,7 +106,7 @@ fn clean(builder: &Builder) -> Result<(), Error> {
     Ok(())
 }
 
-fn packages(builder: &Builder) -> Vec<&str> {
+fn packages(builder: &Builder) -> Vec<String> {
     let mut packages = BASE_PACKAGES.to_vec();
 
     match builder.recipe.parsed.options.toolchain {
@@ -200,6 +201,7 @@ fn packages(builder: &Builder) -> Vec<&str> {
 
     packages
         .into_iter()
+        .map(|p| p.to_owned())
         .chain(extra_deps)
         // Remove dupes
         .collect::<BTreeSet<_>>()
