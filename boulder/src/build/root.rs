@@ -19,8 +19,9 @@ pub fn populate(
     timing: &mut Timing,
     initialize_timer: timing::Timer,
     update_repos: bool,
+    extra_deps: impl IntoIterator<Item = String>,
 ) -> Result<(), Error> {
-    let packages = packages(builder);
+    let packages = packages(builder, extra_deps);
 
     let rootfs = builder.paths.rootfs().host;
 
@@ -106,7 +107,7 @@ fn clean(builder: &Builder) -> Result<(), Error> {
     Ok(())
 }
 
-fn packages(builder: &Builder) -> Vec<String> {
+fn packages(builder: &Builder, extra_deps: impl IntoIterator<Item = String>) -> Vec<String> {
     let mut packages = BASE_PACKAGES.to_vec();
 
     match builder.recipe.parsed.options.toolchain {
@@ -195,9 +196,6 @@ fn packages(builder: &Builder) -> Vec<String> {
             }
         }
     }
-
-    // Dependencies from all scripts in the builder
-    let extra_deps = builder.extra_deps();
 
     packages
         .into_iter()

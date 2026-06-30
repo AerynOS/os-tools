@@ -102,16 +102,16 @@ impl Builder {
         })
     }
 
-    pub fn extra_deps(&self) -> Vec<String> {
+    pub fn extra_deps(&self) -> Result<Vec<String>, Error> {
         let mut ctx = stone_script::ScriptContext::new();
         for target in &self.targets {
             for job in &target.jobs {
                 for script in job.phases.values() {
-                    ctx.eval(&script.env, &script.expr).unwrap();
+                    ctx.eval(&script.env, &script.expr)?;
                 }
             }
         }
-        ctx.dependencies.into_iter().collect()
+        Ok(ctx.dependencies.into_iter().collect())
     }
 
     pub fn setup(
@@ -126,8 +126,18 @@ impl Builder {
         // Recreate rootfs
         root::recreate(self)?;
 
+        // Get extra deps
+        let extra_deps = self.extra_deps()?;
+
         // Populate rootfs
-        root::populate(self, self.repos.clone(), timing, initialize_timer, update_repos)?;
+        root::populate(
+            self,
+            self.repos.clone(),
+            timing,
+            initialize_timer,
+            update_repos,
+            extra_deps,
+        )?;
 
         let timer = timing.begin(timing::Kind::Fetch);
 
