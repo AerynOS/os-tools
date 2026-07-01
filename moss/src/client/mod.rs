@@ -935,12 +935,17 @@ impl Client {
     }
 
     #[cfg(any(test, feature = "testing"))]
-    pub fn mocked(installation: Installation, registry: Registry) -> Result<Client, Error> {
+    pub fn mocked(
+        installation: Installation,
+        registry: Registry,
+        layouts: Vec<(package::Id, StonePayloadLayoutRecord)>,
+    ) -> Result<Client, Error> {
         let config = config::Manager::system(&installation.root, "moss");
         let install_db = db::meta::Database::new(":memory:")?;
         let state_db = db::state::Database::new(":memory:")?;
         let layout_db = db::layout::Database::new(":memory:")?;
 
+        layout_db.batch_add(layouts.iter().map(|(id, layout)| (id, layout)))?;
         let repositories = repository::Manager::with_config_manager(config.clone(), installation.clone())?;
 
         Ok(Client {
