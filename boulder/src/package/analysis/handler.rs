@@ -168,20 +168,8 @@ pub fn compressman(bucket: &mut BucketMut<'_>, info: &mut PathInfo) -> Result<Re
         return Ok(Decision::NextHandler.into());
     }
 
-    // TODO: Replace usage with .with_added_extension() when it becomes stable #127292
-    fn with_added_extension(path: &Path, extension: &str) -> PathBuf {
-        match path.file_name() {
-            Some(file_name) => {
-                let mut file_name = file_name.to_owned();
-                file_name.push(extension);
-                path.with_file_name(file_name)
-            }
-            None => path.to_owned(),
-        }
-    }
-
-    pub fn compress_file_zstd(path: &PathBuf) -> Result<PathBuf, BoxError> {
-        let output_path = with_added_extension(path, ".zst");
+    pub fn compress_file_zstd(path: &Path) -> Result<PathBuf, BoxError> {
+        let output_path = path.with_added_extension(".zst");
         let mut reader = BufReader::new(File::open(path)?);
         let mut writer = BufWriter::new(File::create(&output_path)?);
 
@@ -200,11 +188,11 @@ pub fn compressman(bucket: &mut BucketMut<'_>, info: &mut PathInfo) -> Result<Re
 
     let uncompressed_file = fs::canonicalize(&info.path)?;
     /* we are deducing this in advance to have something against which to symlink */
-    let compressed_zst_file = with_added_extension(&uncompressed_file, ".zst");
+    let compressed_zst_file = uncompressed_file.with_added_extension(".zst");
 
     /* If we have a man/info symlink then update the link to the compressed file */
     if info.path.is_symlink() {
-        let new_zst_symlink = with_added_extension(&info.path, ".zst");
+        let new_zst_symlink = info.path.with_added_extension(".zst");
 
         /*
          * Depending on the order in which the files get analysed,
