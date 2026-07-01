@@ -19,7 +19,7 @@ camino = "1.1.10"
 chrono = "0.4.38"
 clap = { version = "4.5.8", features = ["derive", "string"] }
 clap_complete = "4.5.37"
-clap_mangen = "0.2.24"
+clap_mangen = "0.3.0"
 criterion = { version = "0.8.2", features = ["html_reports"] }
 crossterm = "0.29.0"
 derive_more = { version = "2.0.1", features = [
@@ -40,7 +40,7 @@ elf = "0.8.0"
 ent_core = { git = "https://github.com/AerynOS/ent.git", rev = "42416ecae36c0f29e07647747147672448241f85" }
 indicatif = "0.18.0"
 inventory = "0.3.22"
-itertools = "0.14.0"
+itertools = "0.15.0"
 filetime = "0.2.24"
 fs-err = { version = "3.3.0", features = ["tokio"] }
 
@@ -49,11 +49,11 @@ glob = "0.3.1"
 hex = "0.4.3"
 humansize = "2.1.3"
 indextree = "4.6.1"
-libsqlite3-sys = { version = "0.35.0", features = ["bundled"] }
+libsqlite3-sys = { version = "0.37.0", features = ["bundled"] }
 log = "0.4.22"
 nc = "0.9.7"
-nom = "7.1.3"
-nix = { version = "0.27.1", features = [
+nom = "8.0.0"
+nix = { version = "0.31.2", features = [
     "user",
     "fs",
     "sched",
@@ -84,10 +84,10 @@ serde = { version = "1.0.223", features = ["derive"] }
 serde_core = "1.0.223"
 serde_json = "1.0.145"
 serde_yaml = "0.9.34"
-sha2 = "0.10.8"
+sha2 = "0.11.0"
 similar = "3"
 snafu = "0.9.0"
-strum = { version = "0.27.1", features = ["derive"] }
+strum = { version = "0.28.0", features = ["derive"] }
 thiserror = "2.0.3"
 thread-priority = "3.0.0"
 tokio = { version = "1.38.0", features = ["full"] }
