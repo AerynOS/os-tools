@@ -149,5 +149,14 @@ mod test {
                 Token::Definition("cc"),
             ],
         );
+
+        token_test(
+            "-fprofile-generate=%(pgo_dir)/IR",
+            &[
+                Token::Plain("-fprofile-generate="),
+                Token::Definition("pgo_dir"),
+                Token::Plain("/IR"),
+            ],
+        );
     }
 }

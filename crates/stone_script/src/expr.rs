@@ -205,6 +205,7 @@ mod tests {
         roundtrip_test(
             "hello mr. goose\n\ni am writing to you regarding %(topic),\nyou have voted %(vote) on %(topic), and i am not happy with this\n\ni will never vote for  you again\n\nunkind regards,\negg",
         );
+        roundtrip_test("-fprofile-generate=%(pgo_dir)/IR");
 
         // TODO(lumi): roundtrip tests don't currently work with escapes
         // roundtrip_test("we're all 100%% meowed with no way out");

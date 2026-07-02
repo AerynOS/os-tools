@@ -336,4 +336,24 @@ mod test {
         assert_eq!(trace.frames[2], "definition \"cc\"");
         assert_eq!(trace.frames[3], "action \"compile\"");
     }
+
+    #[test]
+    fn test_case_pgo_dir() {
+        let mut env = ScriptEnv::new();
+
+        env.add_definition(
+            "pgo_dir",
+            Definition {
+                doc: None,
+                value: Expr::parse("/mason/build/x86_64-pgo").unwrap(),
+            },
+        );
+
+        let mut ctx = ScriptContext::new();
+
+        ctx.eval(&env, &Expr::parse("-fprofile-generate=%(pgo_dir)/IR").unwrap())
+            .unwrap();
+
+        assert_eq!(ctx.flush_to_string(), "-fprofile-generate=/mason/build/x86_64-pgo/IR");
+    }
 }
