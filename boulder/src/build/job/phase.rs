@@ -385,14 +385,14 @@ fn add_tuning(
         rustflags.push_str(" -Clink-arg=-fuse-ld=mold");
     }
 
-    env.add_builtin_string("cflags", cflags);
-    env.add_builtin_string("cxxflags", cxxflags);
-    env.add_builtin_string("fflags", fflags);
-    env.add_builtin_string("ldflags", ldflags);
-    env.add_builtin_string("dflags", dflags);
-    env.add_builtin_string("rustflags", rustflags);
-    env.add_builtin_string("valaflags", valaflags);
-    env.add_builtin_string("goflags", goflags);
+    env.add_builtin("cflags", stone_script::Expr::parse(&cflags)?);
+    env.add_builtin("cxxflags", stone_script::Expr::parse(&cxxflags)?);
+    env.add_builtin("fflags", stone_script::Expr::parse(&fflags)?);
+    env.add_builtin("ldflags", stone_script::Expr::parse(&ldflags)?);
+    env.add_builtin("dflags", stone_script::Expr::parse(&dflags)?);
+    env.add_builtin("rustflags", stone_script::Expr::parse(&rustflags)?);
+    env.add_builtin("valaflags", stone_script::Expr::parse(&valaflags)?);
+    env.add_builtin("goflags", stone_script::Expr::parse(&goflags)?);
 
     Ok(())
 }
