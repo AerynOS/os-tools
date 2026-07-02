@@ -117,7 +117,16 @@ impl ScriptContext {
                         source: EvalError::UndefinedBuiltin { name: name.to_owned() },
                         trace: unwind_stack(&mut stack),
                     })?;
-                    self.output.push_str(value);
+                    if stack.len() >= MAX_DEPTH {
+                        return Err(Error::Eval {
+                            source: EvalError::TooDeep,
+                            trace: unwind_stack(&mut stack),
+                        });
+                    }
+                    stack.push(Frame {
+                        expr: &value,
+                        progress: 0,
+                    });
                 }
                 Fragment::Definition(name) => {
                     if let Some(definition) = env.definitions.get(name) {
@@ -206,7 +215,7 @@ pub struct StackTrace {
 
 #[cfg(test)]
 mod test {
-    use crate::Definition;
+    use crate::env::{Action, Definition};
 
     use super::*;
 
@@ -274,7 +283,23 @@ mod test {
     }
 
     #[test]
-    fn stack_overflow_works() {
+    fn stack_overflow_works_with_builtin() {
+        let mut ctx = ScriptContext::new();
+        ctx.always_allow_builtins = true;
+        let mut env = ScriptEnv::new();
+        env.add_builtin("kaboom", Expr::parse("%(_kaboom)").unwrap());
+        let expr = Expr::parse("%(_kaboom)").unwrap();
+        std::assert_matches!(
+            ctx.eval(&env, &expr),
+            Err(Error::Eval {
+                source: EvalError::TooDeep,
+                ..
+            })
+        );
+    }
+
+    #[test]
+    fn stack_overflow_works_with_definition() {
         let mut ctx = ScriptContext::new();
         let mut env = ScriptEnv::new();
         env.add_definition(
@@ -295,12 +320,66 @@ mod test {
     }
 
     #[test]
+    fn stack_overflow_works_with_action() {
+        let mut ctx = ScriptContext::new();
+        let mut env = ScriptEnv::new();
+        env.add_action(
+            "kaboom",
+            Action {
+                doc: None,
+                example: None,
+                dependencies: Vec::new(),
+                value: Expr::parse("%kaboom").unwrap(),
+            },
+        );
+        let expr = Expr::parse("%kaboom").unwrap();
+        std::assert_matches!(
+            ctx.eval(&env, &expr),
+            Err(Error::Eval {
+                source: EvalError::TooDeep,
+                ..
+            })
+        );
+    }
+
+    #[test]
+    fn stack_overflow_works_with_combination() {
+        let mut ctx = ScriptContext::new();
+        let mut env = ScriptEnv::new();
+        env.add_builtin("scissors", Expr::parse("%rock").unwrap());
+        env.add_definition(
+            "paper",
+            Definition {
+                doc: None,
+                value: Expr::parse("%(_scissors)").unwrap(),
+            },
+        );
+        env.add_action(
+            "rock",
+            Action {
+                doc: None,
+                example: None,
+                dependencies: Vec::new(),
+                value: Expr::parse("%(paper)").unwrap(),
+            },
+        );
+        let expr = Expr::parse("%rock").unwrap();
+        std::assert_matches!(
+            ctx.eval(&env, &expr),
+            Err(Error::Eval {
+                source: EvalError::TooDeep,
+                ..
+            })
+        );
+    }
+
+    #[test]
     fn call_stack_works() {
         let mut ctx = ScriptContext::new();
         let mut env = ScriptEnv::new();
         env.add_action(
             "compile",
-            crate::Action {
+            Action {
                 doc: None,
                 example: None,
                 dependencies: Vec::new(),

@@ -120,9 +120,9 @@ fn resolve_packages(
     collector: &mut Collector,
 ) -> Result<BTreeMap<String, Package>, Error> {
     let mut env = stone_script::ScriptEnv::new();
-    env.add_builtin("name", &recipe.parsed.source.name);
-    env.add_builtin("version", &recipe.parsed.source.version);
-    env.add_builtin("release", recipe.parsed.source.release);
+    env.add_builtin_string("name", &recipe.parsed.source.name);
+    env.add_builtin_string("version", &recipe.parsed.source.version);
+    env.add_builtin_string("release", recipe.parsed.source.release);
     env.add_definition(
         "name",
         stone_script::Definition {

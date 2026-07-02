@@ -18,7 +18,7 @@ mod test {
 
     fn make_env() -> ScriptEnv {
         let mut env = ScriptEnv::new();
-        env.add_builtin("compiler_cc", "gcc");
+        env.add_builtin_string("compiler_cc", "gcc");
         env.add_definition(
             "compiler_cc",
             Definition {

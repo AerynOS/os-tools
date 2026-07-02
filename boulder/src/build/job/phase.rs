@@ -115,20 +115,20 @@ impl Phase {
 
         let mut env = macros.create_script_env(["base", &build_target])?;
 
-        env.add_builtin("name", &recipe.parsed.source.name);
-        env.add_builtin("version", &recipe.parsed.source.version);
-        env.add_builtin("release", recipe.parsed.source.release);
-        env.add_builtin("jobs", num_jobs);
-        env.add_builtin("pkgdir", paths.recipe().guest.join("pkg").display());
-        env.add_builtin("sourcedir", paths.upstreams().guest.display());
-        env.add_builtin("installroot", paths.install().guest.display());
-        env.add_builtin("buildroot", build_dir.display());
-        env.add_builtin("workdir", work_dir.display());
+        env.add_builtin_string("name", &recipe.parsed.source.name);
+        env.add_builtin_string("version", &recipe.parsed.source.version);
+        env.add_builtin_string("release", recipe.parsed.source.release);
+        env.add_builtin_string("jobs", num_jobs);
+        env.add_builtin_string("pkgdir", paths.recipe().guest.join("pkg").display());
+        env.add_builtin_string("sourcedir", paths.upstreams().guest.display());
+        env.add_builtin_string("installroot", paths.install().guest.display());
+        env.add_builtin_string("buildroot", build_dir.display());
+        env.add_builtin_string("workdir", work_dir.display());
 
-        env.add_builtin("compiler_cache", "/mason/ccache");
-        env.add_builtin("scompiler_cache", "/mason/sccache");
+        env.add_builtin_string("compiler_cache", "/mason/ccache");
+        env.add_builtin_string("scompiler_cache", "/mason/sccache");
 
-        env.add_builtin("sourcedateepoch", recipe.build_time.timestamp());
+        env.add_builtin_string("sourcedateepoch", recipe.build_time.timestamp());
 
         let path = if ccache {
             "/usr/lib/ccache/bin:/usr/bin:/bin"
@@ -137,71 +137,71 @@ impl Phase {
         };
 
         if ccache {
-            env.add_builtin("compiler_go_cache", "/mason/gocache");
-            env.add_builtin("compiler_go_mod_cache", "/mason/gomodcache");
-            env.add_builtin("compiler_cargo_cache", "/mason/cargocache");
-            env.add_builtin("compiler_zig_cache", "/mason/zigcache");
-            env.add_builtin("rustc_wrapper", "/usr/bin/sccache");
+            env.add_builtin_string("compiler_go_cache", "/mason/gocache");
+            env.add_builtin_string("compiler_go_mod_cache", "/mason/gomodcache");
+            env.add_builtin_string("compiler_cargo_cache", "/mason/cargocache");
+            env.add_builtin_string("compiler_zig_cache", "/mason/zigcache");
+            env.add_builtin_string("rustc_wrapper", "/usr/bin/sccache");
         } else {
-            env.add_builtin("compiler_go_cache", "");
-            env.add_builtin("compiler_go_mod_cache", "");
-            env.add_builtin("compiler_cargo_cache", "");
-            env.add_builtin("compiler_zig_cache", "");
-            env.add_builtin("rustc_wrapper", "");
+            env.add_builtin_string("compiler_go_cache", "");
+            env.add_builtin_string("compiler_go_mod_cache", "");
+            env.add_builtin_string("compiler_cargo_cache", "");
+            env.add_builtin_string("compiler_zig_cache", "");
+            env.add_builtin_string("rustc_wrapper", "");
         }
 
         /* Set the relevant compilers */
         if matches!(recipe.parsed.options.toolchain, Toolchain::Llvm) {
-            env.add_builtin("compiler_c", "clang");
-            env.add_builtin("compiler_cxx", "clang++");
-            env.add_builtin("compiler_objc", "clang");
-            env.add_builtin("compiler_objcxx", "clang++");
-            env.add_builtin("compiler_cpp", "clang-cpp");
-            env.add_builtin("compiler_objcpp", "clang -E -");
-            env.add_builtin("compiler_objcxxcpp", "clang++ -E");
-            env.add_builtin("compiler_d", "ldc2");
-            env.add_builtin("compiler_ar", "llvm-ar");
-            env.add_builtin("compiler_objcopy", "llvm-objcopy");
-            env.add_builtin("compiler_nm", "llvm-nm");
-            env.add_builtin("compiler_ranlib", "llvm-ranlib");
-            env.add_builtin("compiler_strip", "llvm-strip");
+            env.add_builtin_string("compiler_c", "clang");
+            env.add_builtin_string("compiler_cxx", "clang++");
+            env.add_builtin_string("compiler_objc", "clang");
+            env.add_builtin_string("compiler_objcxx", "clang++");
+            env.add_builtin_string("compiler_cpp", "clang-cpp");
+            env.add_builtin_string("compiler_objcpp", "clang -E -");
+            env.add_builtin_string("compiler_objcxxcpp", "clang++ -E");
+            env.add_builtin_string("compiler_d", "ldc2");
+            env.add_builtin_string("compiler_ar", "llvm-ar");
+            env.add_builtin_string("compiler_objcopy", "llvm-objcopy");
+            env.add_builtin_string("compiler_nm", "llvm-nm");
+            env.add_builtin_string("compiler_ranlib", "llvm-ranlib");
+            env.add_builtin_string("compiler_strip", "llvm-strip");
         } else {
-            env.add_builtin("compiler_c", "gcc");
-            env.add_builtin("compiler_cxx", "g++");
-            env.add_builtin("compiler_objc", "gcc");
-            env.add_builtin("compiler_objcxx", "g++");
-            env.add_builtin("compiler_cpp", "gcc -E");
-            env.add_builtin("compiler_objcpp", "gcc -E");
-            env.add_builtin("compiler_objcxxcpp", "g++ -E");
-            env.add_builtin("compiler_d", "ldc2"); // FIXME: GDC
-            env.add_builtin("compiler_ar", "gcc-ar");
-            env.add_builtin("compiler_objcopy", "objcopy");
-            env.add_builtin("compiler_nm", "gcc-nm");
-            env.add_builtin("compiler_ranlib", "gcc-ranlib");
-            env.add_builtin("compiler_strip", "strip");
+            env.add_builtin_string("compiler_c", "gcc");
+            env.add_builtin_string("compiler_cxx", "g++");
+            env.add_builtin_string("compiler_objc", "gcc");
+            env.add_builtin_string("compiler_objcxx", "g++");
+            env.add_builtin_string("compiler_cpp", "gcc -E");
+            env.add_builtin_string("compiler_objcpp", "gcc -E");
+            env.add_builtin_string("compiler_objcxxcpp", "g++ -E");
+            env.add_builtin_string("compiler_d", "ldc2"); // FIXME: GDC
+            env.add_builtin_string("compiler_ar", "gcc-ar");
+            env.add_builtin_string("compiler_objcopy", "objcopy");
+            env.add_builtin_string("compiler_nm", "gcc-nm");
+            env.add_builtin_string("compiler_ranlib", "gcc-ranlib");
+            env.add_builtin_string("compiler_strip", "strip");
         }
-        env.add_builtin("compiler_path", path);
+        env.add_builtin_string("compiler_path", path);
 
         if recipe.parsed.mold {
-            env.add_builtin("compiler_ld", "ld.mold");
+            env.add_builtin_string("compiler_ld", "ld.mold");
         } else if matches!(recipe.parsed.options.toolchain, Toolchain::Llvm) {
-            env.add_builtin("compiler_ld", "ld.lld");
+            env.add_builtin_string("compiler_ld", "ld.lld");
         } else {
-            env.add_builtin("compiler_ld", "ld.bfd");
+            env.add_builtin_string("compiler_ld", "ld.bfd");
         }
 
         /* Allow packagers to do stage specific actions in a pgo build */
         if matches!(pgo_stage, Some(pgo::Stage::One)) {
-            env.add_builtin("pgo_stage", "ONE");
+            env.add_builtin_string("pgo_stage", "ONE");
         } else if matches!(pgo_stage, Some(pgo::Stage::Two)) {
-            env.add_builtin("pgo_stage", "TWO");
+            env.add_builtin_string("pgo_stage", "TWO");
         } else if matches!(pgo_stage, Some(pgo::Stage::Use)) {
-            env.add_builtin("pgo_stage", "USE");
+            env.add_builtin_string("pgo_stage", "USE");
         } else {
-            env.add_builtin("pgo_stage", "NONE");
+            env.add_builtin_string("pgo_stage", "NONE");
         }
 
-        env.add_builtin("pgo_dir", format!("{}-pgo", build_dir.display()));
+        env.add_builtin_string("pgo_dir", format!("{}-pgo", build_dir.display()));
 
         add_tuning(target, pgo_stage, recipe, macros, &mut env)?;
 
@@ -385,14 +385,14 @@ fn add_tuning(
         rustflags.push_str(" -Clink-arg=-fuse-ld=mold");
     }
 
-    env.add_builtin("cflags", cflags);
-    env.add_builtin("cxxflags", cxxflags);
-    env.add_builtin("fflags", fflags);
-    env.add_builtin("ldflags", ldflags);
-    env.add_builtin("dflags", dflags);
-    env.add_builtin("rustflags", rustflags);
-    env.add_builtin("valaflags", valaflags);
-    env.add_builtin("goflags", goflags);
+    env.add_builtin_string("cflags", cflags);
+    env.add_builtin_string("cxxflags", cxxflags);
+    env.add_builtin_string("fflags", fflags);
+    env.add_builtin_string("ldflags", ldflags);
+    env.add_builtin_string("dflags", dflags);
+    env.add_builtin_string("rustflags", rustflags);
+    env.add_builtin_string("valaflags", valaflags);
+    env.add_builtin_string("goflags", goflags);
 
     Ok(())
 }

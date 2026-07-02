@@ -8,7 +8,7 @@
 //!
 //! let mut env = ScriptEnv::new();
 //!
-//! env.add_builtin("rustc", "rustc");
+//! env.add_builtin_string("rustc", "rustc");
 //!
 //! env.add_definition("rustflags", Definition {
 //!   doc: None,
@@ -25,7 +25,7 @@
 
 use std::collections::BTreeMap;
 
-use crate::Expr;
+use crate::{Expr, Fragment};
 
 /// A script definition
 ///
@@ -57,7 +57,7 @@ pub struct Action {
 #[derive(Debug, Clone, Default)]
 pub struct ScriptEnv {
     /// Map of all currently defined builtins
-    pub builtins: BTreeMap<String, String>,
+    pub builtins: BTreeMap<String, Expr>,
     /// Map of all currently defined definitions
     pub definitions: BTreeMap<String, Definition>,
     /// Map of all currently defined actions
@@ -76,17 +76,33 @@ impl ScriptEnv {
         Self::default()
     }
 
-    /// Add a builtin to this [ScriptEnv]
+    /// Add a plaintext builtin to this [ScriptEnv]
     ///
     /// ```rust
     /// # use stone_script::ScriptEnv;
     ///
     /// let mut env = ScriptEnv::new();
     ///
-    /// env.add_builtin("rustc", "rustc");
+    /// env.add_builtin_string("rustc", "rustc");
     /// ```
-    pub fn add_builtin(&mut self, name: impl ToString, value: impl ToString) {
-        self.builtins.insert(name.to_string(), value.to_string());
+    pub fn add_builtin_string(&mut self, name: impl ToString, value: impl ToString) {
+        self.builtins.insert(
+            name.to_string(),
+            Expr::from_fragments([Fragment::Output(value.to_string())]),
+        );
+    }
+
+    /// Add an [Expr] builtin to this [ScriptEnv]
+    ///
+    /// ```rust
+    /// # use stone_script::{Expr, ScriptEnv};
+    ///
+    /// let mut env = ScriptEnv::new();
+    ///
+    /// env.add_builtin("rustc", Expr::parse("%(gccrs)").unwrap());
+    /// ```
+    pub fn add_builtin(&mut self, name: impl ToString, expr: Expr) {
+        self.builtins.insert(name.to_string(), expr);
     }
 
     /// Add a definition to this [ScriptEnv]
