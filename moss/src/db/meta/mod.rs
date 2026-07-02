@@ -111,6 +111,28 @@ impl Database {
                 .collect()
         })
     }
+    pub fn query_prefix(&self, filter: Option<Filter<'_>>) -> Result<Vec<package::Name>, Error> {
+        self.conn.exec(|conn| {
+            let map_row = |result| {
+                let meta: model::Meta = result?;
+
+                Ok(meta.name)
+            };
+            let entries: BTreeSet<package::Name> = match &filter {
+                Some(Filter::Keyword(keyword)) => {
+                    let pattern = format!("{keyword}%");
+                    model::meta::table
+                        .select(model::Meta::as_select())
+                        .filter(model::meta::name.like(pattern.clone()))
+                        .load_iter::<model::Meta, _>(conn)?
+                }
+                _ => todo!(),
+            }
+            .map(map_row)
+            .collect::<Result<_, Error>>()?;
+            Ok(entries.into_iter().collect())
+        })
+    }
 
     pub fn query(&self, filter: Option<Filter<'_>>) -> Result<Vec<(package::Id, Meta)>, Error> {
         self.conn.exec(|conn| {

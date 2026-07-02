@@ -69,8 +69,13 @@ tempfile.workspace = true
 
 [dev-dependencies]
 moss = { path = ".", features = ["testing"] }
+criterion.workspace = true
 
 tempfile.workspace = true
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "dynamic_completion"
+harness = false
