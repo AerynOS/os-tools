@@ -9,14 +9,14 @@ use std::{
 
 use moss::util;
 use stone_recipe::{
-    Script, script, tuning,
+    tuning,
     upstream::{self, Upstream},
 };
 use thiserror::Error;
 
 pub use self::phase::Phase;
-use crate::build::pgo;
-use crate::{Macros, Paths, Recipe, architecture::BuildTarget};
+use crate::{Macros, Paths, Recipe, architecture::BuildTarget, build::script::ScriptBundle};
+use crate::{build::pgo, macros};
 
 mod phase;
 
@@ -24,7 +24,7 @@ mod phase;
 pub struct Job {
     pub target: BuildTarget,
     pub pgo_stage: Option<pgo::Stage>,
-    pub phases: BTreeMap<Phase, Script>,
+    pub phases: BTreeMap<Phase, ScriptBundle>,
     pub work_dir: PathBuf,
     pub build_dir: PathBuf,
 }
@@ -99,10 +99,14 @@ fn work_dir(build_dir: &Path, upstreams: &[Upstream]) -> PathBuf {
 pub enum Error {
     #[error("missing arch macros: {0}")]
     MissingArchMacros(String),
-    #[error("script")]
-    Script(#[from] script::Error),
     #[error("tuning")]
     Tuning(#[from] tuning::Error),
     #[error("io")]
     Io(#[from] io::Error),
+    #[error("recipe")]
+    Recipe(#[from] stone_recipe::Error),
+    #[error("script")]
+    Script(#[from] stone_script::Error),
+    #[error("macros")]
+    Macros(#[from] macros::Error),
 }

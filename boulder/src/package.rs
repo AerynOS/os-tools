@@ -9,7 +9,7 @@ use stone::StoneDigestWriterHasher;
 use thiserror::Error;
 
 use moss::util;
-use stone_recipe::{Package, script};
+use stone_recipe::Package;
 
 use crate::{Macros, Paths, Recipe, Timing, build, container, timing};
 
@@ -119,10 +119,36 @@ fn resolve_packages(
     recipe: &Recipe,
     collector: &mut Collector,
 ) -> Result<BTreeMap<String, Package>, Error> {
-    let mut parser = script::Parser::new();
-    parser.add_definition("name", &recipe.parsed.source.name);
-    parser.add_definition("version", &recipe.parsed.source.version);
-    parser.add_definition("release", recipe.parsed.source.release);
+    let mut env = stone_script::ScriptEnv::new();
+    env.add_builtin_string("name", &recipe.parsed.source.name);
+    env.add_builtin_string("version", &recipe.parsed.source.version);
+    env.add_builtin_string("release", recipe.parsed.source.release);
+    env.add_definition(
+        "name",
+        stone_script::Definition {
+            doc: None,
+            value: stone_script::Expr::parse("%(_name)")?,
+        },
+    );
+    env.add_definition(
+        "version",
+        stone_script::Definition {
+            doc: None,
+            value: stone_script::Expr::parse("%(_version)")?,
+        },
+    );
+    env.add_definition(
+        "release",
+        stone_script::Definition {
+            doc: None,
+            value: stone_script::Expr::parse("%(_release)")?,
+        },
+    );
+
+    fn parse_content(env: &stone_script::ScriptEnv, source: &str) -> Result<String, Error> {
+        let expr = stone_script::Expr::parse(source)?;
+        Ok(stone_script::eval_to_string(env, &expr)?)
+    }
 
     let mut packages = BTreeMap::new();
 
@@ -131,32 +157,32 @@ fn resolve_packages(
     // If a name collision occurs, merge the incoming and stored
     // packages
     let mut add_package = |mut name: String, mut package: Package| {
-        name = parser.parse_content(&name)?;
+        name = parse_content(&env, &name)?;
 
         package.summary = package
             .summary
             .as_ref()
             .or(recipe.parsed.package.summary.as_ref())
-            .map(|summary| parser.parse_content(summary))
+            .map(|summary| parse_content(&env, summary))
             .transpose()?;
         package.description = package
             .description
             .as_ref()
             .or(recipe.parsed.package.description.as_ref())
-            .map(|description| parser.parse_content(description))
+            .map(|description| parse_content(&env, description))
             .transpose()?;
         package.provides_exclude = package.provides_exclude.into_iter().collect();
         package.run_deps = package
             .run_deps
             .into_iter()
-            .map(|dep| parser.parse_content(&dep))
+            .map(|dep| parse_content(&env, &dep))
             .collect::<Result<_, _>>()?;
         package.run_deps_exclude = package.run_deps_exclude.into_iter().collect();
         package.paths = package
             .paths
             .into_iter()
             .map(|mut path| {
-                path.path = parser.parse_content(&path.path)?;
+                path.path = parse_content(&env, &path.path)?;
                 Ok(path)
             })
             .collect::<Result<_, Error>>()?;
@@ -237,7 +263,7 @@ pub fn sync_artefacts(paths: &Paths) -> io::Result<()> {
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("script")]
-    Script(#[from] script::Error),
+    Script(#[from] stone_script::Error),
     #[error("collect install paths")]
     CollectPaths(#[source] collect::Error),
     #[error("analyzing paths")]

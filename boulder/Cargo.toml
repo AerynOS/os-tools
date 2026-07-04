@@ -17,6 +17,7 @@ moss = { path = "../moss" }
 tools_buildinfo = { path = "../crates/tools_buildinfo" }
 stone = { path = "../crates/stone" }
 stone_recipe = { path = "../crates/stone_recipe" }
+stone_script = { path = "../crates/stone_script" }
 tui = { path = "../crates/tui" }
 version_parse = { path = "../crates/version_parse" }
 yaml = { path = "../crates/yaml" }
