@@ -10,13 +10,17 @@ use thiserror::Error;
 
 use crate::Env;
 
+/// Struct containing all of the loaded macros
 #[derive(Debug)]
 pub struct Macros {
+    /// Architecture-specific macros (+ "base")
     pub arch: BTreeMap<String, stone_recipe::Macros>,
+    /// Non-architecture-specific macros
     pub actions: Vec<stone_recipe::Macros>,
 }
 
 impl Macros {
+    /// Load all of the macros from the paths in an [Env]
     pub fn load(env: &Env) -> Result<Self, Error> {
         let macros_dir = env.data_dir.join("macros");
         let actions_dir = macros_dir.join("actions");
@@ -50,6 +54,61 @@ impl Macros {
 
         Ok(Self { arch, actions })
     }
+
+    /// Create a [stone_script::ScriptEnv] from the macros in this struct
+    ///
+    /// The `targets` argument specifies which architecture-specific macros to
+    /// include.
+    pub fn create_script_env<'a>(
+        &self,
+        targets: impl IntoIterator<Item = &'a str>,
+    ) -> Result<stone_script::ScriptEnv, Error> {
+        let mut env = stone_script::ScriptEnv::new();
+
+        for arch /* btw */ in targets {
+            let Some(macros) = self.arch.get(arch) else {
+                continue;
+            };
+
+            import_from_macros(&mut env, macros)?;
+        }
+
+        for action in &self.actions {
+            import_from_macros(&mut env, action)?;
+        }
+
+        Ok(env)
+    }
+}
+
+fn import_from_macros(
+    env: &mut stone_script::ScriptEnv,
+    macros: &stone_recipe::Macros,
+) -> Result<(), stone_script::Error> {
+    for action in &macros.actions {
+        let v = &action.value;
+        env.add_action(
+            &action.key,
+            stone_script::Action {
+                doc: Some(v.description.clone()),
+                example: v.example.clone(),
+                dependencies: v.dependencies.clone(),
+                value: stone_script::Expr::parse(v.command.trim())?,
+            },
+        );
+    }
+
+    for definition in &macros.definitions {
+        env.add_definition(
+            &definition.key,
+            stone_script::Definition {
+                doc: None,
+                value: stone_script::Expr::parse(definition.value.trim())?,
+            },
+        );
+    }
+
+    Ok(())
 }
 
 #[derive(Debug, Error)]
@@ -62,4 +121,6 @@ pub enum Error {
     Deserialize(#[from] stone_recipe::Error),
     #[error("io")]
     Io(#[from] io::Error),
+    #[error("script error")]
+    Script(#[from] stone_script::Error),
 }

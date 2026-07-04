@@ -504,32 +504,45 @@ async fn fetch_and_cache_upstream(env: &Env, uri: Url, mpb: &MultiProgress) -> R
 fn macros(_macro: Option<String>, env: Env) -> Result<(), Error> {
     let macros = Macros::load(&env)?;
 
-    let mut items = macros
+    let arch = architecture::host().to_string();
+
+    let env = macros.create_script_env(["base", &arch])?;
+
+    let mut items = env
         .actions
         .iter()
-        .flat_map(|m| {
-            m.actions.iter().map(|action| PrintMacro {
-                name: format!("%{}", action.key),
+        .map(|(name, action)| {
+            PrintMacro {
+                name: format!("%{name}"),
                 // Multi-line strings need to be in `example`
-                description: action.value.description.lines().next().unwrap_or_default(),
-                example: action.value.example.as_deref(),
-            })
+                description: action
+                    .doc
+                    .as_deref()
+                    .unwrap_or_default()
+                    .lines()
+                    .next()
+                    .unwrap_or_default()
+                    .to_owned(),
+                example: action.example.as_deref(),
+            }
         })
-        .sorted()
         .collect::<Vec<_>>();
 
     let mut definitions = vec![];
-    for arch in ["base", &architecture::host().to_string()] {
-        if let Some(macros) = macros.arch.get(arch) {
-            definitions.extend(macros.definitions.iter().map(|def| PrintMacro {
-                name: format!("%({})", def.key),
-                description: &def.value,
-                example: None,
-            }));
-        }
+    for (name, definition) in &env.definitions {
+        definitions.push(PrintMacro {
+            name: format!("%({name})"),
+            description: definition
+                .doc
+                .clone()
+                .unwrap_or_else(|| definition.value.dump_to_string())
+                .lines()
+                .next()
+                .unwrap_or_default()
+                .to_owned(),
+            example: None,
+        });
     }
-    definitions.sort();
-    definitions.dedup();
 
     items.extend(definitions);
 
@@ -559,10 +572,10 @@ fn macros(_macro: Option<String>, env: Env) -> Result<(), Error> {
     Ok(())
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
+#[derive(PartialEq, Eq)]
 struct PrintMacro<'a> {
     name: String,
-    description: &'a str,
+    description: String,
     example: Option<&'a str>,
 }
 
