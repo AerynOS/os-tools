@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use std::{
-    io,
+    collections::BTreeSet,
+    io::{self, Write},
     os::unix::process::ExitStatusExt,
     path::{Path, PathBuf},
     process, thread,
@@ -15,10 +16,6 @@ use nix::{
     sys::signal::Signal,
     unistd::{Pid, getpgrp, setpgid},
 };
-use stone_recipe::{
-    Script,
-    script::{self, Breakpoint},
-};
 use thiserror::Error;
 use tui::Styled;
 
@@ -26,6 +23,7 @@ use self::job::Job;
 use crate::{
     Env, Macros, Paths, Recipe, Timing,
     architecture::BuildTarget,
+    build::script::ScriptBundle,
     container, macros, profile, recipe, timing,
     upstream::{self, Upstream},
 };
@@ -33,6 +31,7 @@ use crate::{
 pub mod job;
 pub mod pgo;
 mod root;
+mod script;
 
 pub struct Builder {
     pub targets: Vec<Target>,
@@ -104,14 +103,16 @@ impl Builder {
         })
     }
 
-    pub fn extra_deps(&self) -> impl Iterator<Item = &str> {
-        self.targets.iter().flat_map(|target| {
-            target.jobs.iter().flat_map(|job| {
-                job.phases
-                    .values()
-                    .flat_map(|script| script.dependencies.iter().map(String::as_str))
-            })
-        })
+    pub fn extra_deps(&self) -> Result<Vec<String>, Error> {
+        let mut dependencies = BTreeSet::new();
+        for target in &self.targets {
+            for job in &target.jobs {
+                for script in job.phases.values() {
+                    dependencies.extend(script.dependencies().iter().cloned());
+                }
+            }
+        }
+        Ok(dependencies.into_iter().collect())
     }
 
     pub fn setup(
@@ -126,8 +127,18 @@ impl Builder {
         // Recreate rootfs
         root::recreate(self)?;
 
+        // Get extra deps
+        let extra_deps = self.extra_deps()?;
+
         // Populate rootfs
-        root::populate(self, self.repos.clone(), timing, initialize_timer, update_repos)?;
+        root::populate(
+            self,
+            self.repos.clone(),
+            timing,
+            initialize_timer,
+            update_repos,
+            extra_deps,
+        )?;
 
         let timer = timing.begin(timing::Kind::Fetch);
 
@@ -213,25 +224,22 @@ impl Builder {
                         phase: *phase,
                     }));
 
-                    for command in &script.commands {
+                    for command in script.commands() {
                         match command {
-                            script::Command::Break(breakpoint) => {
-                                let line_num = breakpoint_line(breakpoint, &self.recipe, job.target, *phase)
+                            &stone_script::Command::Breakpoint { line_num, exit } => {
+                                let line_num = breakpoint_line(line_num, &self.recipe, job.target, *phase)
                                     .map(|line_num| format!(" at line {line_num}"))
                                     .unwrap_or_default();
 
                                 println!(
                                     "\n{}{line_num} {}",
                                     "Breakpoint".bold(),
-                                    if breakpoint.exit {
-                                        "(exit)".dim()
-                                    } else {
-                                        "(continue)".dim()
-                                    },
+                                    if exit { "(exit)".dim() } else { "(continue)".dim() },
                                 );
 
                                 // Write env to $HOME/.profile
-                                fs::write(build_dir.join(".profile"), format_profile(script))?;
+                                let profile = format_profile(script)?;
+                                fs::write(build_dir.join(".profile"), profile)?;
 
                                 let mut command = process::Command::new("/usr/bin/bash")
                                     .arg("--login")
@@ -247,14 +255,18 @@ impl Builder {
                                 // Restore ourselves as fg term since bash steals it
                                 ::container::set_term_fg(pgid)?;
 
-                                if breakpoint.exit {
-                                    return Ok(());
+                                if exit {
+                                    return Err(Error::BreakpointExit);
                                 }
                             }
-                            script::Command::Content(content) => {
+                            stone_script::Command::Output { output: content } => {
                                 // TODO: Proper temp file
                                 let script_path = "/tmp/script";
-                                fs::write(script_path, content).unwrap();
+
+                                {
+                                    let mut file = fs::File::create(script_path)?;
+                                    writeln!(file, "{content}\n")?;
+                                }
 
                                 let result = logged(*phase, is_pgo, "/usr/bin/bash", |command| {
                                     command
@@ -370,36 +382,37 @@ where
     })
 }
 
-pub fn format_profile(script: &Script) -> String {
-    let env = script
-        .env
-        .as_deref()
-        .unwrap_or_default()
+pub fn format_profile(script: &ScriptBundle) -> Result<String, Error> {
+    let mut profile = script
+        .prefix()
         .lines()
         .filter(|line| !line.starts_with("#!") && !line.starts_with("set -") && !line.starts_with("TERM="))
         .join("\n");
 
-    let action_functions = script
-        .resolved_actions
-        .iter()
-        .map(|(identifier, command)| format!("a_{identifier}() {{\n{command}\n}}\nexport -f a_{identifier}"))
-        .join("\n");
+    let env = script.env();
 
-    let definition_vars = script
-        .resolved_definitions
-        .iter()
-        .map(|(identifier, var)| format!("d_{identifier}=\"{var}\"; export d_{identifier}"))
-        .join("\n");
+    for (identifier, action) in &env.actions {
+        let mut ctx = stone_script::ScriptContext::new().with_toplevel_builtins();
+        ctx.eval(env, &action.value)?;
+        profile.push_str(&format!(
+            "a_{identifier}() {{\n{}\n}}\nexport -f a_{identifier}\n",
+            ctx.flush_to_string()
+        ));
+    }
 
-    format!("{env}\n{action_functions}\n{definition_vars}")
+    for (identifier, definition) in &env.definitions {
+        let mut ctx = stone_script::ScriptContext::new().with_toplevel_builtins();
+        ctx.eval(env, &definition.value)?;
+        profile.push_str(&format!(
+            "d_{identifier}=\"{}\"; export d_{identifier}\n",
+            ctx.flush_to_string()
+        ));
+    }
+
+    Ok(profile)
 }
 
-fn breakpoint_line(
-    breakpoint: &Breakpoint,
-    recipe: &Recipe,
-    build_target: BuildTarget,
-    phase: job::Phase,
-) -> Option<usize> {
+fn breakpoint_line(line_num: usize, recipe: &Recipe, build_target: BuildTarget, phase: job::Phase) -> Option<usize> {
     let profile = recipe.build_target_profile_key(build_target);
 
     let has_key = |line: &str, key: &str| {
@@ -438,19 +451,19 @@ fn breakpoint_line(
         job::Phase::Workload => "workload",
     };
 
-    lines.find_map(|(mut line_num, line)| {
+    lines.find_map(|(mut line_num_, line)| {
         if has_key(line, phase) {
             // 0 based to 1 based
-            line_num += 1;
+            line_num_ += 1;
 
             let (_, rest) = line.split_once(':').expect("line contains :");
 
             // If block, string starts on next line
             if rest.trim().starts_with('|') || rest.trim().starts_with('>') {
-                line_num += 1;
+                line_num_ += 1;
             }
 
-            Some(line_num + breakpoint.line_num)
+            Some(line_num + line_num_)
         } else {
             None
         }
@@ -491,4 +504,8 @@ pub enum Error {
     MossClient(#[from] moss::client::Error),
     #[error("moss installation")]
     MossInstallation(#[from] moss::installation::Error),
+    #[error("script")]
+    Script(#[from] stone_script::Error),
+    #[error("breakpoint with exit action reached")]
+    BreakpointExit,
 }
