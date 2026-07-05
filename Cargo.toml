@@ -9,7 +9,7 @@ resolver = "3"
 [workspace.package]
 version = "0.26.6"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.91"
 
 [workspace.dependencies]
 astr.path = "crates/astr"
