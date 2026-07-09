@@ -279,11 +279,20 @@ pub fn ignore_notfound(result: io::Result<()>) -> io::Result<()> {
 
 /// Computes the sha256 hash of the provided reader
 pub fn sha256_hash<R: Read>(reader: &mut R) -> io::Result<String> {
-    let mut writer = Sha256Wrapper::new(io::sink());
+    let mut reader = Sha256Wrapper::new(reader);
 
-    io::copy(reader, &mut writer)?;
+    io::copy(&mut reader, &mut io::sink())?;
 
-    Ok(writer.finalize())
+    Ok(reader.finalize())
+}
+
+/// Computes the sha256 hash of the provided reader
+pub async fn sha256_hash_async<R: AsyncRead + Unpin>(reader: &mut R) -> io::Result<String> {
+    let mut reader = Sha256Wrapper::new(reader);
+
+    tokio::io::copy(&mut reader, &mut tokio::io::sink()).await?;
+
+    Ok(reader.finalize())
 }
 
 /// Wraps an inner reader or writer and provides
