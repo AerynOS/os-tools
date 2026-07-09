@@ -103,7 +103,7 @@ pub async fn fetch(
         });
     }
 
-    request::download_with_progress(url, &destination_path, |progress| {
+    let actual_hash = request::download_with_progress_and_sha256(url, &destination_path, |progress| {
         (on_progress)(Progress {
             delta: progress.delta,
             completed: progress.completed,
@@ -111,6 +111,15 @@ pub async fn fetch(
         });
     })
     .await?;
+
+    ensure!(
+        *hash == actual_hash,
+        BinaryStoneHashMismatchSnafu {
+            package: meta.name.to_string(),
+            expected: hash.clone(),
+            actual: actual_hash
+        }
+    );
 
     Ok(Download {
         id: meta.id().into(),
@@ -327,4 +336,10 @@ pub enum FetchError {
     Request { source: request::Error },
     #[snafu(context(false), display("io"))]
     Io { source: io::Error },
+    #[snafu(display("Binary stone hash mismatch for {package}: expected {expected}, got {actual}"))]
+    BinaryStoneHashMismatch {
+        package: String,
+        expected: String,
+        actual: String,
+    },
 }
