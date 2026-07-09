@@ -3,7 +3,7 @@
 
 use std::{
     io::{self},
-    path::{Path, PathBuf},
+    path::Path,
     pin::Pin,
     sync::OnceLock,
     task,
@@ -81,7 +81,7 @@ pub async fn download_with_progress_and_sha256(
 }
 
 async fn write_to_file<T: AsyncRead + Unpin>(reader: &mut T, to: &Path) -> Result<(), Error> {
-    let partial_path = PathBuf::from(format!("{}.part", to.display()));
+    let partial_path = to.with_added_extension("part");
 
     let mut out = File::create(&partial_path).await?;
 

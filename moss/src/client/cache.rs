@@ -228,6 +228,7 @@ impl Download {
             .into_iter()
             .map(|idx| {
                 let path = asset_path(&self.installation, &format!("{:02x}", idx.digest));
+                let partial_path = path.with_added_extension("part");
 
                 // Acquire in-progress guard.
                 let _guard = match unpacking_in_progress.acquire(path.clone()) {
@@ -250,9 +251,11 @@ impl Download {
                 file.seek(SeekFrom::Start(idx.start))?;
                 let mut split_file = (&mut file).take(idx.end - idx.start);
 
-                let mut output = File::create(&path)?;
+                let mut output = File::create(&partial_path)?;
 
                 io::copy(&mut split_file, &mut output)?;
+
+                fs::rename(&partial_path, &path)?;
 
                 Ok(())
             })
