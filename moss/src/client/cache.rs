@@ -12,7 +12,7 @@ use std::{
 };
 
 use snafu::{OptionExt, ResultExt as _, Snafu, ensure};
-use stone::{StoneDecodedPayload, StonePayloadIndexRecord, StoneReadError};
+use stone::{StoneDecodedPayload, StoneDigestWriter, StoneDigestWriterHasher, StonePayloadIndexRecord, StoneReadError};
 use tracing::warn;
 use url::Url;
 
@@ -284,9 +284,21 @@ impl Download {
                 file.seek(SeekFrom::Start(idx.start))?;
                 let mut split_file = (&mut file).take(idx.end - idx.start);
 
+                let mut hasher = StoneDigestWriterHasher::new();
                 let mut output = File::create(&partial_path)?;
 
-                io::copy(&mut split_file, &mut output)?;
+                io::copy(&mut split_file, &mut StoneDigestWriter::new(&mut output, &mut hasher))?;
+
+                let digest = hasher.digest128();
+
+                ensure!(
+                    digest == idx.digest,
+                    FileUnpackHashMismatchSnafu {
+                        path: path.clone(),
+                        expected: idx.digest,
+                        actual: digest
+                    }
+                );
 
                 fs::rename(&partial_path, &path)?;
 
@@ -344,6 +356,12 @@ pub enum UnpackError {
     ReadStone { source: StoneReadError },
     #[snafu(context(false), display("io"))]
     Io { source: io::Error },
+    #[snafu(display("File unpack hash mismatch for {path:?}: expected {expected:02x}, got {actual:02x}"))]
+    FileUnpackHashMismatch {
+        path: PathBuf,
+        expected: u128,
+        actual: u128,
+    },
 }
 
 #[derive(Debug, Snafu)]
