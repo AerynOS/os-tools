@@ -13,9 +13,10 @@ use std::{
 
 use snafu::{OptionExt, ResultExt as _, Snafu, ensure};
 use stone::{StoneDecodedPayload, StonePayloadIndexRecord, StoneReadError};
+use tracing::warn;
 use url::Url;
 
-use crate::{Installation, package, request};
+use crate::{Installation, package, request, util};
 
 /// Synchronized set of assets that are currently being
 /// unpacked. Used to prevent unpacking the same asset
@@ -94,13 +95,36 @@ pub async fn fetch(
         fs::create_dir_all(parent).await?;
     }
 
-    if fs::try_exists(&destination_path).await? {
-        return Ok(Download {
-            id: meta.id().into(),
-            path: destination_path,
-            installation: installation.clone(),
-            was_cached: true,
-        });
+    let is_cached = async || -> Result<bool, FetchError> {
+        if fs::try_exists(&destination_path).await? {
+            // Ensure content is valid before trusting it
+            let mut file = fs::File::open(&destination_path).await?;
+            let actual_hash = util::sha256_hash_async(&mut file).await?;
+
+            return Ok(*hash == actual_hash);
+        }
+
+        Ok(false)
+    };
+
+    match is_cached().await {
+        Ok(true) => {
+            return Ok(Download {
+                id: meta.id().into(),
+                path: destination_path,
+                installation: installation.clone(),
+                was_cached: true,
+            });
+        }
+        Ok(false) => {}
+        // Always force re-download on any error checking
+        // cache validity
+        Err(err) => {
+            warn!(
+                error = format!("{err:#}"),
+                "Failed to verify cached download, will re-download"
+            );
+        }
     }
 
     let actual_hash = request::download_with_progress_and_sha256(url, &destination_path, |progress| {
