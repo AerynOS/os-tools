@@ -12,7 +12,7 @@ use std::{
 };
 
 use snafu::{OptionExt, ResultExt as _, Snafu, ensure};
-use stone::{StoneDecodedPayload, StoneDigestWriter, StoneDigestWriterHasher, StonePayloadIndexRecord, StoneReadError};
+use stone::{StoneDecodedPayload, StoneDigestWriter, StoneDigestWriterHasher, StoneReadError};
 use tracing::warn;
 use url::Url;
 
@@ -234,9 +234,7 @@ impl Download {
             .flat_map(|p| &p.body)
             .collect::<Vec<_>>();
 
-        // If we don't have any files to unpack OR download was cached
-        // & all assets exist, we can skip unpacking
-        if indices.is_empty() || (self.was_cached && check_assets_exist(&indices, &self.installation)) {
+        if indices.is_empty() {
             return Ok(UnpackedAsset { payloads });
         }
 
@@ -334,14 +332,6 @@ impl Download {
 
         Ok(UnpackedAsset { payloads })
     }
-}
-
-/// Returns true if all assets already exist in the installation
-fn check_assets_exist(indices: &[&StonePayloadIndexRecord], installation: &Installation) -> bool {
-    indices.iter().all(|index| {
-        let path = asset_path(installation, &format!("{:02x}", index.digest));
-        path.exists()
-    })
 }
 
 /// Returns a fully qualified filesystem path to download the given hash ID into
