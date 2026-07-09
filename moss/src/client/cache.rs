@@ -269,9 +269,33 @@ impl Download {
                     None => return Ok(()),
                 };
 
-                // This asset already exists
-                if path.exists() {
-                    return Ok(());
+                let is_unpacked_already = || -> Result<bool, UnpackError> {
+                    if fs::exists(&path)? {
+                        let mut hasher = StoneDigestWriterHasher::new();
+                        let mut file = File::open(&path)?;
+
+                        io::copy(&mut file, &mut StoneDigestWriter::new(io::sink(), &mut hasher))?;
+
+                        let actual_digest = hasher.digest128();
+
+                        return Ok(idx.digest == actual_digest);
+                    }
+
+                    Ok(false)
+                };
+
+                match is_unpacked_already() {
+                    Ok(true) => {
+                        return Ok(());
+                    }
+                    Ok(false) => {}
+                    // Always force unpack on any error checking cache validity
+                    Err(err) => {
+                        warn!(
+                            error = format!("{err:#}"),
+                            "Failed to verify if file is already unpacked, will re-unpack"
+                        );
+                    }
                 }
 
                 // Create parent dir
