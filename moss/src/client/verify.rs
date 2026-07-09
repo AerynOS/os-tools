@@ -54,6 +54,7 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
     let mut issues = unique_assets
         .into_par_iter()
         .try_fold(Vec::new, |mut acc, (hash, meta)| -> io::Result<_> {
+            // Padded so output is consistent
             let display_hash = format!("{hash:0>32}");
 
             let path = cache::asset_path(&client.installation, &hash);
@@ -68,7 +69,7 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
                     pb.suspend(|| println!(" {} {display_hash} - {files:?}", "×".yellow()));
                 }
                 acc.push(Issue::MissingAsset {
-                    hash: display_hash,
+                    hash,
                     files,
                     packages: meta.into_iter().map(|(package, _)| package).collect(),
                 });
@@ -91,7 +92,7 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
                     pb.suspend(|| println!(" {} {display_hash} - {files:?}", "×".yellow()));
                 }
                 acc.push(Issue::CorruptAsset {
-                    hash: display_hash,
+                    hash,
                     files,
                     packages: meta.into_iter().map(|(package, _)| package).collect(),
                 });
