@@ -356,7 +356,7 @@ fn remove_orphaned_files(
         let Some(file) = compute_path(hash.clone()) else {
             return Ok(acc);
         };
-        let partial = file.with_extension("part");
+        let partial = file.with_added_extension("part");
 
         // Remove if it exists
         if file.exists() {
