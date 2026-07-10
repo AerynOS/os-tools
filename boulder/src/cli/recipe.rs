@@ -173,6 +173,10 @@ fn detect_update(recipe_path: &Path, parsed_recipe: &recipe::Parsed, verbose: bo
         .cloned()
         .unwrap_or_else(|| response.latest_version.unwrap_or_default());
 
+    if newest.is_empty() {
+        return Err(Error::AutoupdateNoVersionFound);
+    }
+
     println!("Newest version found: {newest}, current version: {current_version}");
 
     if newest == *current_version {
@@ -209,6 +213,10 @@ enum DetectedUpdate {
 }
 
 fn guess_new_url(new_version: &str, current_url: &str, verbose: bool) -> Result<String, Error> {
+    if new_version.is_empty() {
+        return Err(Error::AutoupdateNoVersionFound);
+    }
+
     let upstreams_parser = VersionExtractor::new();
     let parsed_upstream = upstreams_parser.extract(current_url)?;
 
@@ -604,6 +612,10 @@ pub enum Error {
         "Missing monitoring file, cannot autoupdate. Either add a monitoring file or supply an explicit --ver or --upstream."
     )]
     AutoupdateMissingMonitoringFile,
+    #[error(
+        "Release monitoring returned no version for the configured project id, cannot autoupdate. Check monitoring.yaml or supply an explicit --ver or --upstream."
+    )]
+    AutoupdateNoVersionFound,
     #[error("Mismatch for upstream[{0}], expected {1} got {2}")]
     UpstreamMismatch(usize, &'static str, &'static str),
     #[error("load macros")]
@@ -693,5 +705,17 @@ mod tests {
             new_url,
             "https://github.com/systemd/systemd/archive/refs/tags/v260.1.tar.gz"
         );
+    }
+
+    #[test]
+    fn test_guess_new_url_rejects_empty_version() {
+        let err = guess_new_url(
+            "",
+            "https://github.com/numpy/numpy/releases/download/v2.4.6/numpy-2.4.6.tar.gz",
+            false,
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, Error::AutoupdateNoVersionFound));
     }
 }
