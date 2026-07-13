@@ -475,7 +475,6 @@ flags               :
     - control-flow:
         c         : "-fcf-protection"
         cxx       : "-fcf-protection"
-        f         : "-fcf-protection"
 
     # Enable libstdc++ assertions (ON)
     - libstdc-assertions:
@@ -487,7 +486,6 @@ flags               :
     - thread-exceptions:
         c         : "-fexceptions"
         cxx       : "-fexceptions"
-        f         : "-fexceptions"
 
     # Use section splitting, improves GC without lto only (OFF)
     - sections:
@@ -760,7 +758,6 @@ flags               :
     - tls-gnu:
         c         : "-mtls-dialect=gnu2"
         cxx       : "-mtls-dialect=gnu2"
-        f         : "-mtls-dialect=gnu2"
 
     # Allow undefined symbols in version scripts (ON)
     - version-allow-undefined:
