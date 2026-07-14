@@ -95,8 +95,8 @@ impl Database {
     }
 
     pub fn batch_remove<'a>(&self, ids: impl IntoIterator<Item = &'a Id>) -> Result<(), Error> {
-        self.conn.exec_mut(|conn| {
             let ids: Rc<Vec<Value>> = Rc::new(ids.into_iter().map(|id| Value::from(id.to_string())).collect());
+        self.conn.exec(|conn| {
             Ok(conn.execute("DELETE FROM state WHERE id IN rarray(?)", [ids])?).map(|_| ())
         })
     }
