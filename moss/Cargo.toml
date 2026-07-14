@@ -62,7 +62,7 @@ tracing-subscriber.workspace = true
 url.workspace = true
 xxhash-rust.workspace = true
 zbus.workspace = true
-indoc = "2.0.7"
+indoc.workspace = true
 arc-swap.workspace = true
 tempfile.workspace = true
 

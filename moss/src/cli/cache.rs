@@ -24,7 +24,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
 }
 
 fn handle_prune(_args: &ArgMatches, installation: Installation) -> Result<(), Error> {
-    let mut client = Client::new(environment::NAME, installation).map_err(Error::SetupClient)?;
+    let client = Client::new(environment::NAME, installation).map_err(Error::SetupClient)?;
 
     let num_removed_files = client.prune_cache().map_err(Error::PruneCache)?;
 

@@ -42,11 +42,11 @@ pub enum Strategy<'a> {
 
 /// Prune old states using [`Strategy`] and garbage collect
 /// all cached data related to those states being removed
-pub(super) fn prune_states(client: &mut Client, strategy: Strategy<'_>, yes: bool) -> Result<(), Error> {
+pub(super) fn prune_states(client: &Client, strategy: Strategy<'_>, yes: bool) -> Result<(), Error> {
     let installation = &client.installation;
-    let layout_db = &mut client.layout_db;
-    let state_db = &mut client.state_db;
-    let install_db = &mut client.install_db;
+    let layout_db = &client.layout_db;
+    let state_db = &client.state_db;
+    let install_db = &client.install_db;
 
     let mut timing = Timing::default();
     let mut instant = Instant::now();
@@ -240,9 +240,9 @@ pub(super) fn prune_states(client: &mut Client, strategy: Strategy<'_>, yes: boo
 /// * - `installation` - Client specific target filesystem encapsulation
 /// * - `repositories` - All configured repositories
 pub(super) fn prune_cache(
-    state_db: &mut db::state::Database,
-    install_db: &mut db::meta::Database,
-    layout_db: &mut db::layout::Database,
+    state_db: &db::state::Database,
+    install_db: &db::meta::Database,
+    layout_db: &db::layout::Database,
     installation: &Installation,
     repositories: &repository::Manager,
 ) -> Result<usize, Error> {
@@ -326,9 +326,9 @@ pub(super) fn prune_cache(
 fn prune_databases(
     states: &[State],
     packages: &[package::Id],
-    state_db: &mut db::state::Database,
-    install_db: &mut db::meta::Database,
-    layout_db: &mut db::layout::Database,
+    state_db: &db::state::Database,
+    install_db: &db::meta::Database,
+    layout_db: &db::layout::Database,
 ) -> Result<(), Error> {
     // Remove db states
     state_db.batch_remove(states.iter().map(|s| &s.id))?;
