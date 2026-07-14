@@ -236,28 +236,28 @@ impl Database {
             }
             for chunk in licenses.chunks(num_placeholders / 2) {
                 let mut stmt = tx.prepare_cached(&format!(
-                    "INSERT INTO meta_licenses (package, license) VALUES {}",
+                    "INSERT OR IGNORE INTO meta_licenses (package, license) VALUES {}",
                     iter::repeat_n("(?,?)", chunk.len()).join(",")
                 ))?;
                 stmt.execute(rusqlite::params_from_iter(chunk.iter().flatten()))?;
             }
             for chunk in dependencies.chunks(num_placeholders / 2) {
                 let mut stmt = tx.prepare_cached(&format!(
-                    "INSERT INTO meta_dependencies (package, dependency) VALUES {}",
+                    "INSERT OR IGNORE INTO meta_dependencies (package, dependency) VALUES {}",
                     iter::repeat_n("(?,?)", chunk.len()).join(",")
                 ))?;
                 stmt.execute(rusqlite::params_from_iter(chunk.iter().flatten()))?;
             }
             for chunk in providers.chunks(num_placeholders / 2) {
                 let mut stmt = tx.prepare_cached(&format!(
-                    "INSERT INTO meta_providers (package, provider) VALUES {}",
+                    "INSERT OR IGNORE INTO meta_providers (package, provider) VALUES {}",
                     iter::repeat_n("(?,?)", chunk.len()).join(",")
                 ))?;
                 stmt.execute(rusqlite::params_from_iter(chunk.iter().flatten()))?;
             }
             for chunk in conflicts.chunks(num_placeholders / 2) {
                 let mut stmt = tx.prepare_cached(&format!(
-                    "INSERT INTO meta_conflicts (package, conflict) VALUES {}",
+                    "INSERT OR IGNORE INTO meta_conflicts (package, conflict) VALUES {}",
                     iter::repeat_n("(?,?)", chunk.len()).join(",")
                 ))?;
                 stmt.execute(rusqlite::params_from_iter(chunk.iter().flatten()))?;
