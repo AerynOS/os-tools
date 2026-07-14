@@ -73,7 +73,7 @@ impl Database {
 
     pub fn package_ids(&self) -> Result<BTreeSet<package::Id>, Error> {
         self.conn.exec(|conn| {
-            let mut stmt = conn.prepare("SELECT package_id FROM layout")?;
+            let mut stmt = conn.prepare("SELECT DISTINCT package_id FROM layout")?;
             Ok(stmt
                 .query_map([], |row| {
                     let id = row.get::<_, String>(0)?.into();
@@ -85,7 +85,7 @@ impl Database {
 
     pub fn file_hashes(&self) -> Result<BTreeSet<String>, Error> {
         self.conn.exec(|conn| {
-            let mut stmt = conn.prepare("SELECT entry_value1 FROM layout WHERE entry_type = 'regular'")?;
+            let mut stmt = conn.prepare("SELECT DISTINCT entry_value1 FROM layout WHERE entry_type = 'regular'")?;
             Ok(stmt
                 .query_map([], |row| {
                     let hash_str = row.get::<_, String>(0)?;
