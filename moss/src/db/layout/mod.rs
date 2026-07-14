@@ -99,12 +99,12 @@ impl Database {
         })
     }
 
-    pub fn add(&mut self, package: &package::Id, layout: &StonePayloadLayoutRecord) -> Result<(), Error> {
+    pub fn add(&self, package: &package::Id, layout: &StonePayloadLayoutRecord) -> Result<(), Error> {
         self.batch_add(iter::once((package, layout)))
     }
 
     pub fn batch_add<'a>(
-        &mut self,
+        &self,
         layouts: impl IntoIterator<Item = (&'a package::Id, &'a StonePayloadLayoutRecord)>,
     ) -> Result<(), Error> {
         let layouts_iter = layouts.into_iter();
@@ -152,11 +152,11 @@ impl Database {
         })
     }
 
-    pub fn remove(&mut self, package: &package::Id) -> Result<(), Error> {
+    pub fn remove(&self, package: &package::Id) -> Result<(), Error> {
         self.batch_remove(iter::once(package))
     }
 
-    pub fn batch_remove<'a>(&mut self, packages: impl IntoIterator<Item = &'a package::Id>) -> Result<(), Error> {
+    pub fn batch_remove<'a>(&self, packages: impl IntoIterator<Item = &'a package::Id>) -> Result<(), Error> {
         self.conn.exec_mut(|conn| Self::batch_remove_(conn, packages))
     }
 
@@ -190,14 +190,14 @@ mod test {
         let non_unique_id = package::Id::from(NUM_ENTRIES.to_string());
         let entries = create_db()?.query(iter::once(&non_unique_id))?;
         let expected_entries = all_entries().filter(|(id, _)| id == &non_unique_id);
-        itertools::assert_equal(entries.into_iter(), expected_entries);
+        itertools::assert_equal(entries, expected_entries);
         Ok(())
     }
 
     #[test]
     fn db_returns_all_entries() -> Result<(), Error> {
         let entries = create_db()?.all()?;
-        itertools::assert_equal(entries.into_iter(), all_entries());
+        itertools::assert_equal(entries, all_entries());
         Ok(())
     }
 
@@ -208,7 +208,7 @@ mod test {
         // FIXME? BTreeSet sorts its elements according to the Ord trait
         // of the elements. But maybe the intention was to return package IDs
         // in order they are inside the database?
-        itertools::assert_equal(ids.into_iter(), expected_ids.sorted());
+        itertools::assert_equal(ids, expected_ids.sorted());
         Ok(())
     }
 
@@ -223,14 +223,14 @@ mod test {
             }
         });
         // FIXME? Same as the test above.
-        itertools::assert_equal(hashes.into_iter(), expected_hashes.sorted());
+        itertools::assert_equal(hashes, expected_hashes.sorted());
         Ok(())
     }
 
     #[test]
     fn db_adds_one_entry() -> Result<(), Error> {
         let (expected_id, expected_record) = all_entries().next().unwrap();
-        let mut db = Database::new(":memory:")?;
+        let db = Database::new(":memory:")?;
         db.add(&expected_id, &expected_record)?;
         assert_eq!(db.all()?, vec![(expected_id, expected_record)]);
         Ok(())
@@ -240,7 +240,7 @@ mod test {
     fn db_adds_multiple_entries() -> Result<(), Error> {
         let expected_entries = all_entries().take(10).collect::<Vec<_>>();
         let expected_entries_ref = expected_entries.iter().map(|(id, rec)| (id, rec)).collect::<Vec<_>>();
-        let mut db = Database::new(":memory:")?;
+        let db = Database::new(":memory:")?;
         db.batch_add(expected_entries_ref)?;
         assert_eq!(db.all()?, expected_entries);
         Ok(())
@@ -250,7 +250,7 @@ mod test {
     fn db_removes_one_entry() -> Result<(), Error> {
         let entries = all_entries().take(10).collect::<Vec<_>>();
         let entries_ref = entries.iter().map(|(id, rec)| (id, rec)).collect::<Vec<_>>();
-        let mut db = Database::new(":memory:")?;
+        let db = Database::new(":memory:")?;
         db.batch_add(entries_ref)?;
 
         db.remove(&entries.last().unwrap().0)?;
@@ -262,7 +262,7 @@ mod test {
     fn db_removes_multiple_entries() -> Result<(), Error> {
         let entries = all_entries().take(10).collect::<Vec<_>>();
         let entries_ref = entries.iter().map(|(id, rec)| (id, rec)).collect::<Vec<_>>();
-        let mut db = Database::new(":memory:")?;
+        let db = Database::new(":memory:")?;
         db.batch_add(entries_ref)?;
 
         db.batch_remove(entries.iter().take(5).map(|(id, _)| id))?;
@@ -274,7 +274,7 @@ mod test {
         let entries = all_entries().collect::<Vec<_>>();
         let entries_ref = entries.iter().map(|(id, rec)| (id, rec)).collect::<Vec<_>>();
 
-        let mut db = Database::new(":memory:").unwrap();
+        let db = Database::new(":memory:").unwrap();
         db.batch_add(entries_ref).unwrap();
         Ok(db)
     }

@@ -180,13 +180,13 @@ impl Manager {
 
     /// Refresh a [`Repository`] by Id
     pub async fn refresh(&self, id: &repository::Id) -> Result<(), Error> {
-        let Some(mut repo) = self.repositories.get(id).cloned() else {
+        let Some(repo) = self.repositories.get(id).cloned() else {
             return Err(Error::UnknownRepo(id.clone()));
         };
 
         if repo.repository.active {
             let file = fetch_index(&self.source, &repo, &self.installation).await?;
-            runtime::unblock(move || update_meta_db(&mut repo, &file)).await?;
+            runtime::unblock(move || update_meta_db(&repo, &file)).await?;
         }
 
         Ok(())
@@ -473,7 +473,7 @@ async fn fetch_index(
 }
 
 /// Updates a stones metadata into the meta db
-fn update_meta_db(state: &mut repository::Cached, index_path: &Path) -> Result<(), Error> {
+fn update_meta_db(state: &repository::Cached, index_path: &Path) -> Result<(), Error> {
     // Wipe db since we're refreshing from a new index file
     state.db.wipe()?;
 

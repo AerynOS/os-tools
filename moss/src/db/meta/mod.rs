@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::convert::Infallible;
 use std::iter;
 use std::rc::Rc;
 
@@ -61,7 +62,7 @@ impl Database {
         if let Some((_, meta)) = entries.into_iter().next() {
             Ok(meta)
         } else {
-            return Err(Error::Dbms(rusqlite::Error::QueryReturnedNoRows));
+            Err(Error::Dbms(rusqlite::Error::QueryReturnedNoRows))
         }
     }
 
@@ -107,7 +108,7 @@ impl Database {
                     stmt = conn.prepare(
                         "SELECT * FROM meta WHERE name LIKE concat('%', ?1, '%') OR summary LIKE concat('%', ?1, '%')",
                     )?;
-                    stmt.query([kw.to_string()])
+                    stmt.query([kw.to_owned()])
                 }
                 Filter::All => {
                     stmt = conn.prepare("SELECT * FROM meta")?;
@@ -167,11 +168,11 @@ impl Database {
         })
     }
 
-    pub fn add(&mut self, id: package::Id, meta: Meta) -> Result<(), Error> {
+    pub fn add(&self, id: package::Id, meta: Meta) -> Result<(), Error> {
         self.batch_add(vec![(id, meta)])
     }
 
-    pub fn batch_add(&mut self, packages: Vec<(package::Id, Meta)>) -> Result<(), Error> {
+    pub fn batch_add(&self, packages: Vec<(package::Id, Meta)>) -> Result<(), Error> {
         let mut ids = Vec::with_capacity(packages.len());
         let mut metas = Vec::with_capacity(packages.len());
         let mut licenses = Vec::with_capacity(packages.len());
@@ -266,11 +267,11 @@ impl Database {
         })
     }
 
-    pub fn remove(&mut self, package: &package::Id) -> Result<(), Error> {
+    pub fn remove(&self, package: &package::Id) -> Result<(), Error> {
         self.batch_remove(iter::once(package))
     }
 
-    pub fn batch_remove<'a>(&mut self, packages: impl IntoIterator<Item = &'a package::Id>) -> Result<(), Error> {
+    pub fn batch_remove<'a>(&self, packages: impl IntoIterator<Item = &'a package::Id>) -> Result<(), Error> {
         self.conn.exec_mut(|conn| Self::batch_remove_(conn, packages))
     }
 
@@ -284,60 +285,51 @@ impl Database {
 }
 
 fn append_licenses(metas: &mut BTreeMap<package::Id, Meta>, rows: Rows<'_>) -> Result<(), Error> {
-    let rows = rows.mapped(|row| {
-        Ok((
-            package::Id::from(row.get::<_, String>("package")?),
-            row.get::<_, String>("license")?,
-        ))
-    });
-    for row in rows {
-        let (id, license) = row?;
-        metas.entry(id).or_default().licenses.push(license);
-    }
-    Ok(())
+    append_field(metas, rows, "license", Result::<_, Infallible>::Ok, |meta, license| {
+        meta.licenses.push(license);
+    })
 }
 
 fn append_dependencies(metas: &mut BTreeMap<package::Id, Meta>, rows: Rows<'_>) -> Result<(), Error> {
-    let rows = rows.mapped(|row| {
-        Ok((
-            package::Id::from(row.get::<_, String>("package")?),
-            Dependency::try_from(row.get::<_, String>("dependency")?)
-                .map_err(|e| rusqlite::Error::FromSqlConversionFailure(0, Type::Text, Box::new(e)))?,
-        ))
-    });
-    for row in rows {
-        let (id, dep) = row?;
-        metas.entry(id).or_default().dependencies.insert(dep);
-    }
-    Ok(())
+    append_field(metas, rows, "dependency", Dependency::try_from, |meta, dependency| {
+        meta.dependencies.insert(dependency);
+    })
 }
 
 fn append_providers(metas: &mut BTreeMap<package::Id, Meta>, rows: Rows<'_>) -> Result<(), Error> {
-    let rows = rows.mapped(|row| {
-        Ok((
-            package::Id::from(row.get::<_, String>("package")?),
-            Provider::try_from(row.get::<_, String>("provider")?)
-                .map_err(|e| rusqlite::Error::FromSqlConversionFailure(0, Type::Text, Box::new(e)))?,
-        ))
-    });
-    for row in rows {
-        let (id, prov) = row?;
-        metas.entry(id).or_default().providers.insert(prov);
-    }
-    Ok(())
+    append_field(metas, rows, "provider", Provider::try_from, |meta, provider| {
+        meta.providers.insert(provider);
+    })
 }
 
 fn append_conflicts(metas: &mut BTreeMap<package::Id, Meta>, rows: Rows<'_>) -> Result<(), Error> {
+    append_field(metas, rows, "conflict", Provider::try_from, |meta, conflict| {
+        meta.conflicts.insert(conflict);
+    })
+}
+
+fn append_field<T, E>(
+    metas: &mut BTreeMap<package::Id, Meta>,
+    rows: Rows<'_>,
+    field_name: &str,
+    try_map: impl Fn(String) -> Result<T, E>,
+    push: impl Fn(&mut Meta, T),
+) -> Result<(), Error>
+where
+    E: std::error::Error + Send + Sync + 'static,
+{
     let rows = rows.mapped(|row| {
         Ok((
             package::Id::from(row.get::<_, String>("package")?),
-            Provider::try_from(row.get::<_, String>("conflict")?)
+            try_map(row.get::<_, String>(field_name)?)
                 .map_err(|e| rusqlite::Error::FromSqlConversionFailure(0, Type::Text, Box::new(e)))?,
         ))
     });
     for row in rows {
-        let (id, conflict) = row?;
-        metas.entry(id).or_default().conflicts.insert(conflict);
+        let (id, item) = row?;
+        if let Some(meta) = metas.get_mut(&id) {
+            push(meta, item);
+        }
     }
     Ok(())
 }
@@ -359,7 +351,7 @@ mod test {
     #[test]
     fn db_wipes_all_entries() -> Result<(), Error> {
         let entries = all_entries().take(10).collect::<Vec<_>>();
-        let mut db = Database::new(":memory:")?;
+        let db = Database::new(":memory:")?;
         db.batch_add(entries.clone())?;
 
         assert!(!db.query(Filter::All)?.is_empty());
@@ -402,12 +394,12 @@ mod test {
                     None
                 }
             })
-            .sorted_by(|(id1, _), (id2, _)| id1.cmp(&id2));
+            .sorted_by(|(id1, _), (id2, _)| id1.cmp(id2));
 
         let mut entries = create_db()?.query(Filter::Provider(common_provider()))?;
-        entries.sort_by(|(id1, _), (id2, _)| id1.cmp(&id2));
+        entries.sort_by(|(id1, _), (id2, _)| id1.cmp(id2));
 
-        itertools::assert_equal(entries.into_iter(), expected_entries);
+        itertools::assert_equal(entries, expected_entries);
         Ok(())
     }
 
@@ -426,12 +418,12 @@ mod test {
                     None
                 }
             })
-            .sorted_by(|(id1, _), (id2, _)| id1.cmp(&id2));
+            .sorted_by(|(id1, _), (id2, _)| id1.cmp(id2));
 
         let mut entries = create_db()?.query(Filter::Dependency(dependency))?;
-        entries.sort_by(|(id1, _), (id2, _)| id1.cmp(&id2));
+        entries.sort_by(|(id1, _), (id2, _)| id1.cmp(id2));
 
-        itertools::assert_equal(entries.into_iter(), expected_entries);
+        itertools::assert_equal(entries, expected_entries);
         Ok(())
     }
 
@@ -440,7 +432,7 @@ mod test {
         let mut expected_entries = all_entries().nth((NUM_ENTRIES / 2) as usize).unwrap();
         expected_entries.1.licenses.sort(); // FIXME: See db_gets_meta_of_package_id().
         let meta = create_db()?.query(Filter::Name(package::Name::from(format!("Name {}", NUM_ENTRIES / 2))))?;
-        itertools::assert_equal(meta.into_iter(), iter::once(expected_entries));
+        itertools::assert_equal(meta, iter::once(expected_entries));
         Ok(())
     }
 
@@ -454,10 +446,10 @@ mod test {
                     meta.licenses.sort(); // FIXME: See db_gets_meta_of_package_id().
                     (id, meta)
                 })
-                .sorted_by(|(id1, _), (id2, _)| id1.cmp(&id2));
+                .sorted_by(|(id1, _), (id2, _)| id1.cmp(id2));
             let mut entries = create_db()?.query(Filter::Keyword("Summary"))?;
-            entries.sort_by(|(id1, _), (id2, _)| id1.cmp(&id2));
-            itertools::assert_equal(entries.into_iter(), expected_entries);
+            entries.sort_by(|(id1, _), (id2, _)| id1.cmp(id2));
+            itertools::assert_equal(entries, expected_entries);
         }
         {
             // Filter by name this time.
@@ -470,10 +462,10 @@ mod test {
                         None
                     }
                 })
-                .sorted_by(|(id1, _), (id2, _)| id1.cmp(&id2));
+                .sorted_by(|(id1, _), (id2, _)| id1.cmp(id2));
             let mut entries = create_db()?.query(Filter::Keyword("Name 10"))?;
-            entries.sort_by(|(id1, _), (id2, _)| id1.cmp(&id2));
-            itertools::assert_equal(entries.into_iter(), expected_entries);
+            entries.sort_by(|(id1, _), (id2, _)| id1.cmp(id2));
+            itertools::assert_equal(entries, expected_entries);
         }
 
         Ok(())
@@ -489,7 +481,7 @@ mod test {
             .sorted_by(|(id1, _), (id2, _)| id1.cmp(id2));
         let mut entries = create_db()?.query(Filter::All)?;
         entries.sort_by(|(id1, _), (id2, _)| id1.cmp(id2));
-        itertools::assert_equal(entries.into_iter(), expected_entries);
+        itertools::assert_equal(entries, expected_entries);
         Ok(())
     }
 
@@ -515,17 +507,17 @@ mod test {
     fn db_adds_one_entry() -> Result<(), Error> {
         let (expected_id, mut expected_meta) = all_entries().next().unwrap();
         expected_meta.licenses.sort(); // FIXME: See db_gets_meta_of_package_id().
-        let mut db = Database::new(":memory:")?;
+        let db = Database::new(":memory:")?;
         db.add(expected_id.clone(), expected_meta.clone())?;
 
         let entries = db.query(Filter::All)?;
-        itertools::assert_equal(entries.into_iter(), iter::once((expected_id, expected_meta)));
+        itertools::assert_equal(entries, iter::once((expected_id, expected_meta)));
         Ok(())
     }
 
     #[test]
     fn db_adds_multiple_entries() -> Result<(), Error> {
-        let mut db = Database::new(":memory:")?;
+        let db = Database::new(":memory:")?;
         db.batch_add(all_entries().take((NUM_ENTRIES / 2) as usize).collect())?;
 
         let mut entries = db.query(Filter::All)?;
@@ -538,7 +530,7 @@ mod test {
                 (id, meta)
             })
             .sorted_by(|(id1, _), (id2, _)| id1.cmp(id2));
-        itertools::assert_equal(entries.into_iter(), expected_entries);
+        itertools::assert_equal(entries, expected_entries);
         Ok(())
     }
 
@@ -552,14 +544,14 @@ mod test {
             })
             .sorted_by(|(id1, _), (id2, _)| id1.cmp(id2))
             .collect::<Vec<_>>();
-        let mut db = Database::new(":memory:")?;
+        let db = Database::new(":memory:")?;
         db.batch_add(all_entries.clone())?;
 
         db.remove(&all_entries.last().unwrap().0)?;
 
         let mut entries = db.query(Filter::All)?;
         entries.sort_by(|(id1, _), (id2, _)| id1.cmp(id2));
-        itertools::assert_equal(entries.into_iter(), all_entries.into_iter().take(9));
+        itertools::assert_equal(entries, all_entries.into_iter().take(9));
         Ok(())
     }
 
@@ -573,20 +565,20 @@ mod test {
             })
             .sorted_by(|(id1, _), (id2, _)| id1.cmp(id2))
             .collect::<Vec<_>>();
-        let mut db = Database::new(":memory:")?;
+        let db = Database::new(":memory:")?;
         db.batch_add(all_entries.clone())?;
 
         db.batch_remove(&all_entries.iter().take(5).map(|(id, _)| id.clone()).collect::<Vec<_>>())?;
 
         let mut entries = db.query(Filter::All)?;
         entries.sort_by(|(id1, _), (id2, _)| id1.cmp(id2));
-        itertools::assert_equal(entries.into_iter(), all_entries.into_iter().skip(5));
+        itertools::assert_equal(entries, all_entries.into_iter().skip(5));
         Ok(())
     }
 
     fn create_db() -> Result<Database, Error> {
         let entries = all_entries().collect::<Vec<_>>();
-        let mut db = Database::new(":memory:").unwrap();
+        let db = Database::new(":memory:").unwrap();
         db.batch_add(entries).unwrap();
         Ok(db)
     }
@@ -632,19 +624,19 @@ mod test {
                 });
             }
 
-            let mut licenses = vec!["MPL-2.0".to_string()];
+            let mut licenses = vec!["MPL-2.0".to_owned()];
             if i % 2 == 0 {
-                licenses.push("MIT".to_string());
+                licenses.push("MIT".to_owned());
             }
 
             (
                 package::Id::from(i.to_string()),
                 Meta {
-                    name: package::Name::from(format!("Name {}", i)),
+                    name: package::Name::from(format!("Name {i}")),
                     version_identifier: format!("{i}.0.0"),
                     source_release: i as u64,
                     build_release: i as u64,
-                    architecture: "x86_64".to_string(),
+                    architecture: "x86_64".to_owned(),
                     summary: format!("Summary {i}"),
                     description: format!("Description {i}"),
                     source_id: i.to_string(),
