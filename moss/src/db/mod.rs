@@ -40,10 +40,14 @@ impl fmt::Debug for Connection {
 
 #[derive(Debug, Error)]
 pub enum Error {
-    #[error("Row not found")]
-    RowNotFound,
     #[error("invalid {0}: {1}")]
     Decode(&'static str, String),
     #[error(transparent)]
     Dbms(#[from] rusqlite::Error),
+}
+
+impl Error {
+    pub fn row_not_found(&self) -> bool {
+        matches!(self, Self::Dbms(rusqlite::Error::QueryReturnedNoRows))
+    }
 }
