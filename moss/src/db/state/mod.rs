@@ -95,8 +95,8 @@ impl Database {
     }
 
     pub fn batch_remove<'a>(&self, ids: impl IntoIterator<Item = &'a Id>) -> Result<(), Error> {
-            let ids: Rc<Vec<Value>> = Rc::new(ids.into_iter().map(|id| Value::from(id.to_string())).collect());
         self.conn.exec(|conn| {
+            let ids: Rc<Vec<Value>> = Rc::new(ids.into_iter().map(|id| Value::from(i32::from(*id))).collect());
             Ok(conn.execute("DELETE FROM state WHERE id IN rarray(?)", [ids])?).map(|_| ())
         })
     }
@@ -119,7 +119,7 @@ impl Database {
                 GROUP BY s.id
             "})?;
             let rows = stmt
-                .query_and_then([id.map(|i| i.to_string())], |row: &Row<'_>| -> Result<State, Error> {
+                .query_and_then([id.map(i32::from)], |row: &Row<'_>| -> Result<State, Error> {
                     row.try_into()
                 })?
                 .collect::<Result<Vec<_>, _>>()?;
