@@ -77,7 +77,7 @@ impl Database {
     }
 
     pub fn query(&self, filter: Filter<'_>) -> Result<Vec<(package::Id, Meta)>, Error> {
-        self.conn.exec_mut(|conn| {
+        self.conn.exec(|conn| {
             let mut stmt;
             let meta_base_query = match filter {
                 Filter::Id(id) => {
@@ -272,7 +272,7 @@ impl Database {
     }
 
     pub fn batch_remove<'a>(&self, packages: impl IntoIterator<Item = &'a package::Id>) -> Result<(), Error> {
-        self.conn.exec_mut(|conn| Self::batch_remove_(conn, packages))
+        self.conn.exec(|conn| Self::batch_remove_(conn, packages))
     }
 
     fn batch_remove_<'a>(
