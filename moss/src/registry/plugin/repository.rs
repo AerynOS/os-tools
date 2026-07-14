@@ -42,7 +42,7 @@ impl Repository {
                 },
                 flags: package::Flags::new().with_available(),
             }),
-            Err(db::meta::Error::RowNotFound) => None,
+            Err(error) if error.row_not_found() => None,
             Err(error) => {
                 warn!("failed to query repository package: {error}");
                 None
