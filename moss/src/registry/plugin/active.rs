@@ -32,7 +32,7 @@ impl Active {
             Ok(meta) => self
                 .installed_package(id.clone())
                 .map(|(id, flags)| Package { id, meta, flags }),
-            Err(db::meta::Error::RowNotFound) => None,
+            Err(error) if error.row_not_found() => None,
             Err(error) => {
                 warn!("failed to query installed package: {error}");
                 None
