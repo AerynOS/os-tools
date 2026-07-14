@@ -53,7 +53,7 @@ impl Database {
     }
 
     pub fn add(
-        &mut self,
+        &self,
         selections: &[Selection],
         summary: Option<&str>,
         description: Option<&str>,
@@ -90,11 +90,11 @@ impl Database {
         self.get(Id::from(id as i32))
     }
 
-    pub fn remove(&mut self, state: &Id) -> Result<(), Error> {
+    pub fn remove(&self, state: &Id) -> Result<(), Error> {
         self.batch_remove(iter::once(state))
     }
 
-    pub fn batch_remove<'a>(&mut self, ids: impl IntoIterator<Item = &'a Id>) -> Result<(), Error> {
+    pub fn batch_remove<'a>(&self, ids: impl IntoIterator<Item = &'a Id>) -> Result<(), Error> {
         self.conn.exec_mut(|conn| {
             let ids: Rc<Vec<Value>> = Rc::new(ids.into_iter().map(|id| Value::from(id.to_string())).collect());
             Ok(conn.execute("DELETE FROM state WHERE id IN rarray(?)", [ids])?).map(|_| ())
@@ -157,7 +157,7 @@ mod test {
     #[test]
     fn db_returns_all_states() -> Result<(), Error> {
         let states = create_db()?.all()?;
-        itertools::assert_equal(states.into_iter().map(|s| Into::<TestState>::into(s)), all_entries());
+        itertools::assert_equal(states.into_iter().map(Into::<TestState>::into), all_entries());
         Ok(())
     }
 
@@ -180,7 +180,7 @@ mod test {
     fn db_adds_one_state() -> Result<(), Error> {
         let expected_state = all_entries().nth(NUM_STATES as usize / 3).unwrap();
 
-        let mut db = Database::new(":memory:")?;
+        let db = Database::new(":memory:")?;
         db.add(
             &expected_state.selections,
             expected_state.summary.as_deref(),
@@ -189,7 +189,7 @@ mod test {
         let all_entries = db.all()?;
 
         itertools::assert_equal(
-            all_entries.into_iter().map(|s| Into::<TestState>::into(s)),
+            all_entries.into_iter().map(Into::<TestState>::into),
             iter::once(expected_state),
         );
         Ok(())
@@ -199,7 +199,7 @@ mod test {
     fn db_adds_multiple_states() -> Result<(), Error> {
         let expected_states = || all_entries().take(10);
 
-        let mut db = Database::new(":memory:")?;
+        let db = Database::new(":memory:")?;
         for entry in expected_states() {
             db.add(
                 &entry.selections,
@@ -210,10 +210,7 @@ mod test {
         let mut all_entries = db.all()?;
         all_entries.sort_by_key(|s| s.id);
 
-        itertools::assert_equal(
-            all_entries.into_iter().map(|s| Into::<TestState>::into(s)),
-            expected_states(),
-        );
+        itertools::assert_equal(all_entries.into_iter().map(Into::<TestState>::into), expected_states());
         Ok(())
     }
 
@@ -222,7 +219,7 @@ mod test {
         const SAMPLE_SIZE: usize = 10;
         let expected_states = || all_entries().take(SAMPLE_SIZE);
 
-        let mut db = Database::new(":memory:")?;
+        let db = Database::new(":memory:")?;
         for entry in expected_states() {
             db.add(
                 &entry.selections,
@@ -235,7 +232,7 @@ mod test {
         db.remove(&ids[0].0)?;
 
         itertools::assert_equal(
-            db.all()?.into_iter().map(|s| Into::<TestState>::into(s)),
+            db.all()?.into_iter().map(Into::<TestState>::into),
             expected_states().skip(1),
         );
         Ok(())
@@ -247,7 +244,7 @@ mod test {
         const DELETE_COUNT: usize = SAMPLE_SIZE / 2;
         let expected_states = || all_entries().take(SAMPLE_SIZE);
 
-        let mut db = Database::new(":memory:")?;
+        let db = Database::new(":memory:")?;
         for entry in expected_states() {
             db.add(
                 &entry.selections,
@@ -260,7 +257,7 @@ mod test {
         db.batch_remove(ids.iter().take(DELETE_COUNT).map(|(id, _)| id))?;
 
         itertools::assert_equal(
-            db.all()?.into_iter().map(|s| Into::<TestState>::into(s)),
+            db.all()?.into_iter().map(Into::<TestState>::into),
             expected_states().skip(DELETE_COUNT),
         );
         Ok(())
@@ -277,13 +274,13 @@ mod test {
         let grace_time = chrono::Duration::hours(1);
         for created in created_times {
             assert!(created <= now_, "Created time {created} is in the future");
-            assert!(created >= now_ - grace_time, "Created time {created} is too old")
+            assert!(created >= now_ - grace_time, "Created time {created} is too old");
         }
         Ok(())
     }
 
     fn create_db() -> Result<Database, Error> {
-        let mut db = Database::new(":memory:").unwrap();
+        let db = Database::new(":memory:").unwrap();
         for state in all_entries() {
             db.add(
                 &state.selections,
@@ -302,7 +299,7 @@ mod test {
             let count = (index % 4) as usize;
             (0..count)
                 .map(|j| {
-                    let pkg_id = format!("pkg_{}_{}", index, j);
+                    let pkg_id = format!("pkg_{index}_{j}");
                     Selection {
                         package: package::Id::from(pkg_id),
                         explicit: j % 2 == 0,
@@ -313,8 +310,8 @@ mod test {
         };
 
         (0..NUM_STATES).map(move |i| TestState {
-            summary: (i % 2 == 0).then_some(format!("Summary {}", i)),
-            description: (i % 3 == 0).then_some(format!("Description {}", i)),
+            summary: (i % 2 == 0).then_some(format!("Summary {i}")),
+            description: (i % 3 == 0).then_some(format!("Description {i}")),
             selections: selections_from_index(i),
             kind: Kind::Transaction,
         })
