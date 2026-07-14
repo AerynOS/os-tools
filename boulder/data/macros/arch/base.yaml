@@ -480,7 +480,6 @@ flags               :
     - libstdc-assertions:
         c         : "-Wp,-D_GLIBCXX_ASSERTIONS"
         cxx       : "-Wp,-D_GLIBCXX_ASSERTIONS"
-        f         : "-Wp,-D_GLIBCXX_ASSERTIONS"
 
     # Enable protected thread cancellation handlers (ON)
     - thread-exceptions:
