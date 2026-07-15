@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 
 definitions:
-    - pgo_stage : "%(pgo_stage)"
+    - pgo_stage : "%(_pgo_stage)"
 
 actions:
     # Actions required for PGO builds
