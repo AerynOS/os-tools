@@ -5,6 +5,12 @@
 
 # 🛠️ OS Tools - Modern System State Management
 
+## We do not accept contributions authored using genAI/LLM chatbots/agents
+
+Our stance is that we are here to help train people's minds and skills. As an analogy, it would defeat the purpose if you brought an industrial robot with you to the gym so it could lift weights for you.
+
+For more details, consult our [Contribution guidelines](https://github.com/AerynOS/os-tools?tab=contributing-ov-file#llm-contributions).
+
 ## 📦 Core Tools
 
 This repository provides two powerful Rust-based tools for managing `.stone` packages, the native package format for AerynOS:
@@ -57,7 +63,7 @@ The `.stone` format is a structured binary package format designed for modern, r
  - [x] `sync` support
  - [x] Triggers
  - [x] GC / cleanups of latent states
- - [ ] System model
+ - [x] System model
  - [ ] Subscriptions (named dependency paths and providers to augment the model)
 
 
