@@ -169,7 +169,7 @@ fn resolve_packages(
             .description
             .as_ref()
             .or(recipe.parsed.package.description.as_ref())
-            .map(|description| parse_content(&env, description))
+            .map(|description| parse_content(&env, description.trim()))
             .transpose()?;
         package.provides_exclude = package.provides_exclude.into_iter().collect();
         package.run_deps = package
