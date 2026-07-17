@@ -438,17 +438,14 @@ flags               :
     - fortify-lvl1:
         c         : "-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=1"
         cxx       : "-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=1"
-        f         : "-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=1"
 
     - fortify-lvl2:
         c         : "-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=2"
         cxx       : "-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=2"
-        f         : "-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=2"
 
     - fortify-lvl3:
         c         : "-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=3"
         cxx       : "-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=3"
-        f         : "-Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=3"
 
     # No hardening!
     - harden-none:
