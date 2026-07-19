@@ -22,6 +22,6 @@ flags:
         llvm:
             c         : "-march=rv64gc -mtune=generic-ooo"
             cxx       : "-march=rv64gc -mtune=generic-ooo"
-        gcc:
+        gnu:
             c         : "-march=rv64gc -mtune=generic-ooo"
             cxx       : "-march=rv64gc -mtune=generic-ooo"
