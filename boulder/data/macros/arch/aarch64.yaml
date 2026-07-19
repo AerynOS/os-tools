@@ -22,6 +22,6 @@ flags:
         llvm:
             c         : "-march=armv8-a+simd+fp+crypto -mtune=cortex-a72"
             cxx       : "-march=armv8-a+simd+fp+crypto -mtune=cortex-a72"
-        gcc:
+        gnu:
             c         : "-march=armv8-a+simd+fp+crypto -mtune=cortex-a72.cortex-a53"
             cxx       : "-march=armv8-a+simd+fp+crypto -mtune=cortex-a72.cortex-a53"
