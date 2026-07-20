@@ -25,6 +25,7 @@ triggers = { path = "../crates/triggers" }
 tui = { path = "../crates/tui" }
 vfs = { path = "../crates/vfs" }
 
+astr.workspace = true
 blsforme.workspace = true
 bytes.workspace = true
 camino.workspace = true
@@ -33,8 +34,6 @@ clap_mangen.workspace = true
 clap_complete.workspace = true
 clap.workspace = true
 derive_more.workspace = true
-diesel.workspace = true
-diesel_migrations.workspace = true
 itertools.workspace = true
 fnmatch = { path = "../crates/fnmatch" }
 fs-err.workspace = true
@@ -42,12 +41,12 @@ futures-util.workspace = true
 hex.workspace = true
 indexmap.workspace = true
 kdl.workspace = true
-libsqlite3-sys.workspace = true
 log.workspace = true
 nix.workspace = true
 os-info.workspace = true
 rayon.workspace = true
 reqwest.workspace = true
+rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true
@@ -63,7 +62,7 @@ tracing-subscriber.workspace = true
 url.workspace = true
 xxhash-rust.workspace = true
 zbus.workspace = true
-astr = { workspace = true, features = ["diesel"] }
+indoc.workspace = true
 arc-swap.workspace = true
 tempfile.workspace = true
 

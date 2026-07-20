@@ -32,7 +32,7 @@ impl Active {
             Ok(meta) => self
                 .installed_package(id.clone())
                 .map(|(id, flags)| Package { id, meta, flags }),
-            Err(db::meta::Error::RowNotFound) => None,
+            Err(error) if error.row_not_found() => None,
             Err(error) => {
                 warn!("failed to query installed package: {error}");
                 None
@@ -41,7 +41,7 @@ impl Active {
     }
 
     /// Query, restricted to state
-    fn query(&self, flags: package::Flags, filter: Option<db::meta::Filter<'_>>) -> Vec<Package> {
+    fn query(&self, flags: package::Flags, filter: db::meta::Filter<'_>) -> Vec<Package> {
         if flags.installed || flags == package::Flags::default() {
             // TODO: Error handling
             let packages = match self.db.query(filter) {
@@ -68,21 +68,21 @@ impl Active {
 
     /// List, restricted to state
     pub fn list(&self, flags: package::Flags) -> Vec<Package> {
-        self.query(flags, None)
+        self.query(flags, db::meta::Filter::All)
     }
 
     pub fn query_keyword(&self, keyword: &str, flags: package::Flags) -> Vec<Package> {
-        self.query(flags, Some(db::meta::Filter::Keyword(keyword)))
+        self.query(flags, db::meta::Filter::Keyword(keyword))
     }
 
     /// Query all packages that match the given provider identity
     pub fn query_provider(&self, provider: &Provider, flags: package::Flags) -> Vec<Package> {
-        self.query(flags, Some(db::meta::Filter::Provider(provider.clone())))
+        self.query(flags, db::meta::Filter::Provider(provider.clone()))
     }
 
     /// Query matching by name
     pub fn query_name(&self, package_name: &package::Name, flags: package::Flags) -> Vec<Package> {
-        self.query(flags, Some(db::meta::Filter::Name(package_name.clone())))
+        self.query(flags, db::meta::Filter::Name(package_name.clone()))
     }
 
     pub fn query_provider_id_only(&self, provider: &Provider, flags: package::Flags) -> Vec<package::Id> {
