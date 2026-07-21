@@ -1,7 +1,9 @@
 // SPDX-FileCopyrightText: 2024 AerynOS Developers
 // SPDX-License-Identifier: MPL-2.0
 
-use std::collections::BTreeMap;
+use serde::Serialize;
+use serde::ser::SerializeStruct;
+use std::collections::{BTreeMap, BTreeSet};
 
 use clap::builder::NonEmptyStringValueParser;
 use clap::{Arg, ArgMatches, Command};
@@ -10,7 +12,8 @@ use moss::client;
 use moss::dependency;
 use moss::package::{self, Name};
 use moss::{Client, Installation, Provider, environment};
-use strum::Display;
+use stone::StonePayloadLayoutFile;
+use strum::{Display, EnumIter, IntoEnumIterator};
 use tui::Styled;
 use tui::pretty::{ColumnDisplay, print_columns};
 
@@ -58,13 +61,61 @@ pub fn command() -> Command {
                 ])
                 .help("Search for packages by provider"),
         )
+        .arg(Arg::new("json").long("json").num_args(0))
+        .arg(Arg::new("file").short('f').long("file").num_args(0))
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Display)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Display, Serialize, EnumIter)]
 #[strum(serialize_all = "lowercase")]
 enum MatchKind {
     Name,
     Summary,
+    File,
+}
+
+impl MatchKind {
+    fn description(self) -> String {
+        String::from(match self {
+            MatchKind::Name => "package name contains search string",
+            MatchKind::Summary => "package summary contains search string",
+            MatchKind::File => "at least one package file path contains search string",
+        })
+    }
+}
+
+struct MatchKindOutput {
+    search_field: String,
+    description: String,
+    packages: Vec<Output>,
+}
+
+impl MatchKindOutput {
+    fn from_hashmap(items: BTreeMap<MatchKind, Vec<Output>>) -> Vec<MatchKindOutput> {
+        let mut result: Vec<MatchKindOutput> = Vec::with_capacity(items.len());
+        for kind in MatchKind::iter() {
+            if let Some(outputs) = items.get(&kind) {
+                result.push(MatchKindOutput {
+                    search_field: kind.to_string(),
+                    description: kind.description(),
+                    packages: outputs.clone(),
+                });
+            }
+        }
+        result
+    }
+}
+
+impl Serialize for MatchKindOutput {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("MatchKindOutput", 3)?;
+        state.serialize_field("search_field", &self.search_field)?;
+        state.serialize_field("description", &self.description)?;
+        state.serialize_field("packages", &self.packages)?;
+        state.end()
+    }
 }
 
 fn map_aliases(value: &str) -> &str {
@@ -74,20 +125,12 @@ fn map_aliases(value: &str) -> &str {
     }
 }
 
-fn determine_provider(args: &ArgMatches) -> Result<Provider, Error> {
-    let keyword = args.get_one::<String>(ARG_KEYWORD).unwrap();
-    let provides_flag = args
-        .get_one::<String>(FLAG_PROVIDES)
-        .map(|s| map_aliases(s))
-        .map(|s| s.parse::<dependency::Kind>().expect("clap should restrict input"));
+fn determine_provider(keyword: &str, provides_flag: Option<dependency::Kind>) -> Result<Provider, Error> {
+    let mut provider = Provider::from_name(keyword).map_err(|_| Error::Parse(keyword.to_owned()))?;
     if let Some(kind) = provides_flag {
-        Ok(Provider {
-            kind,
-            name: keyword.to_owned(),
-        })
-    } else {
-        Provider::from_name(keyword).map_err(|_| Error::ParseError(keyword.to_owned()))
+        provider.kind = kind;
     }
+    Ok(provider)
 }
 
 fn query_packages(client: &Client, flags: package::Flags, provider: Provider) -> BTreeMap<MatchKind, Vec<Output>> {
@@ -100,27 +143,132 @@ fn query_packages(client: &Client, flags: package::Flags, provider: Provider) ->
     }
 }
 
-pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
-    let only_installed = args.get_flag(FLAG_INSTALLED);
-    let provider = determine_provider(args)?;
+fn search_file(mut keyword: String, client: &Client) -> Result<Vec<(String, Name)>, Error> {
+    // moss db doesn't record the /usr/ prefix so strip any combination of it
+    // so queries like r/bin/nano, /bin/nano and /usr/bin/nano still succeed.
+    let prefix = "/usr/";
+    for i in 0..=prefix.len() {
+        let suffix = &prefix[i..];
+        if keyword.starts_with(suffix) {
+            keyword.drain(..suffix.len());
+            break;
+        }
+    }
 
+    let layouts = client.list_layouts()?;
+
+    let result = layouts
+        .into_iter()
+        .filter_map(|(id, layout)| match layout.file {
+            StonePayloadLayoutFile::Regular(_, file)
+            | StonePayloadLayoutFile::Symlink(_, file)
+            | StonePayloadLayoutFile::Directory(file) => {
+                if file.contains(&keyword)
+                    && let Ok(pkg) = client.resolve_package(&id)
+                {
+                    Some((format!("{prefix}{file}"), pkg.meta.name))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        })
+        .collect();
+
+    Ok(result)
+}
+
+fn search_packages_with_file(mut keyword: String, client: &Client) -> Result<Vec<Output>, Error> {
+    // moss db doesn't record the /usr/ prefix so strip any combination of it
+    // so queries like r/bin/nano, /bin/nano and /usr/bin/nano still succeed.
+    let prefix = "/usr/";
+    for i in 0..=prefix.len() {
+        let suffix = &prefix[i..];
+        if keyword.starts_with(suffix) {
+            keyword.drain(..suffix.len());
+            break;
+        }
+    }
+
+    let layouts = client.list_layouts()?;
+
+    let mut seen = BTreeSet::new();
+    let result: Vec<Output> = layouts
+        .into_iter()
+        .filter_map(|(id, layout)| match layout.file {
+            StonePayloadLayoutFile::Regular(_, file)
+            | StonePayloadLayoutFile::Symlink(_, file)
+            | StonePayloadLayoutFile::Directory(file) => {
+                if !seen.contains(&id)
+                    && file.contains(&keyword)
+                    && let Ok(pkg) = client.resolve_package(&id)
+                {
+                    seen.insert(id.clone());
+                    Some(Output::from(pkg).with_keyword(keyword.clone()))
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        })
+        .collect();
+
+    Ok(result)
+}
+
+pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
+    let keyword = args.get_one::<String>(ARG_KEYWORD).unwrap();
+    let provides_flag = args
+        .get_one::<String>(FLAG_PROVIDES)
+        .map(|s| map_aliases(s))
+        .map(|s| s.parse::<dependency::Kind>().expect("clap should restrict input"));
+    let only_installed = args.get_flag(FLAG_INSTALLED);
+    let to_json = args.get_flag("json");
+    let file_flag = args.get_flag("file");
     let client = Client::new(environment::NAME, installation)?;
+
+    if file_flag {
+        for (filepath, name) in search_file(keyword.to_owned(), &client).unwrap() {
+            println!("{filepath} from {}", name.as_str().bold());
+        }
+        return Ok(());
+    }
+
+    let provider = determine_provider(keyword, provides_flag)?;
+
     let flags = if only_installed {
         package::Flags::new().with_installed()
     } else {
         package::Flags::new().with_available()
     };
 
-    let output = query_packages(&client, flags, provider);
+    let mut output = query_packages(&client, flags, provider);
+    if let Ok(packages_with_files) = search_packages_with_file(keyword.clone(), &client) {
+        output.insert(MatchKind::File, packages_with_files);
+    }
 
     if output.values().all(Vec::is_empty) {
         return Ok(());
     }
 
-    for mut value in output.into_values() {
-        value.sort();
-        print_columns(&value, 1);
+    if to_json {
+        let formatted_output = MatchKindOutput::from_hashmap(output);
+        let json_output =
+            serde_json::to_string_pretty(&formatted_output).map_err(|err| Error::Parse(err.to_string()))?;
+        println!("{json_output}");
+    } else {
+        for kind in MatchKind::iter() {
+            if let Some(mut value) = output.remove(&kind) {
+                let header = format!("{kind} Search:").to_ascii_uppercase();
+                println!("{header}");
+                value.sort();
+                print_columns(&value, 1);
+            }
+        }
     }
+    // for mut value in output.into_values() {
+    //     print_columns(&value, 1);
+    // }
 
     Ok(())
 }
@@ -156,14 +304,29 @@ pub enum Error {
     Client(#[from] client::Error),
 
     #[error("Invalid dependency type: {0}")]
-    ParseError(String),
+    Parse(String),
+
+    #[error("db")]
+    DB(#[from] moss::db::Error),
 }
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 struct Output {
     name: Name,
     summary: String,
     search_match: Option<String>,
+}
+
+impl Serialize for Output {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let mut state = serializer.serialize_struct("Output", 2)?;
+        state.serialize_field("name", &self.name.to_string())?;
+        state.serialize_field("summary", &self.summary)?;
+        state.end()
+    }
 }
 
 fn highlight_string(content: &str, expression: &str) -> (String, String, String) {
@@ -187,7 +350,7 @@ impl ColumnDisplay for Output {
             let (summary_prefix, summary_matched, summary_suffix) = highlight_string(&self.summary, expression);
             let _ = write!(
                 writer,
-                "{}{}{}{:width$}  {}{}{}",
+                "  {}{}{}{:width$}  {}{}{}",
                 name_prefix.bold(),
                 name_matched.bold().green(),
                 name_suffix.bold(),
@@ -199,12 +362,19 @@ impl ColumnDisplay for Output {
         } else {
             let _ = write!(
                 writer,
-                "{}{:width$}  {}",
+                "  {}{:width$}  {}",
                 self.name.as_str().bold(),
                 " ".repeat(width),
                 self.summary
             );
         }
+    }
+}
+
+impl Output {
+    fn with_keyword(mut self, keyword: String) -> Self {
+        self.search_match = Some(keyword);
+        self
     }
 }
 
@@ -226,6 +396,7 @@ mod tests {
     use moss::registry::plugin;
     use std::collections::BTreeSet;
     use std::sync::LazyLock;
+    use stone::{StonePayloadLayoutFile, StonePayloadLayoutRecord};
 
     use super::*;
 
@@ -308,12 +479,33 @@ mod tests {
         _root: tempfile::TempDir,
         client: Client,
     }
+    fn test_layouts() -> Vec<(package::Id, StonePayloadLayoutRecord)> {
+        fn regular(file: &str) -> StonePayloadLayoutRecord {
+            StonePayloadLayoutRecord {
+                uid: 0,
+                gid: 0,
+                mode: 0o755,
+                tag: 0,
+                file: StonePayloadLayoutFile::Regular(0, file.into()),
+            }
+        }
+        [
+            ("helix", "bin/hx"),
+            ("nano", "bin/nano"),
+            ("nano", "bin/rnano"),
+            ("libyaml", "lib/libyaml-0.so.2"),
+            ("libyaml", "lib/libyaml-0.so.2.0.9"),
+        ]
+        .into_iter()
+        .map(|(pkg, file)| (package::Id::from(pkg.to_owned()), regular(file)))
+        .collect()
+    }
 
     static TEST_FIXTURE: LazyLock<TestFixture> = LazyLock::new(|| {
         let root = tempfile::tempdir().unwrap();
         let installation = Installation::open(root.path(), None).unwrap();
         let registry = test_registry();
-        let client = Client::mocked(installation, registry).unwrap();
+        let client = Client::mocked(installation, registry, test_layouts()).unwrap();
         TestFixture { _root: root, client }
     });
 
@@ -341,8 +533,17 @@ mod tests {
     /// Test helper function that approximates the behavior of `handle()`
     fn test_handle(query: &str) -> BTreeMap<MatchKind, Vec<Output>> {
         let args = moss(query);
-        let provider = determine_provider(&args).unwrap();
+        let keyword = args.get_one::<String>(ARG_KEYWORD).unwrap();
+        let provides_flag = args
+            .get_one::<String>(FLAG_PROVIDES)
+            .map(|s| map_aliases(s))
+            .map(|s| s.parse::<dependency::Kind>().expect("clap should restrict input"));
+        let provider = determine_provider(keyword, provides_flag).unwrap();
         query_packages(client(), flags_available(), provider)
+    }
+
+    fn search_file_results(keyword: &str) -> Vec<(String, Name)> {
+        search_file(keyword.to_owned(), client()).unwrap()
     }
 
     #[test]
@@ -461,5 +662,32 @@ mod tests {
 
         assert_eq!(names_provides_flag, names_dependency_syntax);
         assert_eq!(names_provides_flag, vec!["libyaml-devel"]);
+    }
+
+    #[test]
+    fn test_search_file_strips_usr_prefix() {
+        for query in ["/usr/bin/hx", "usr/bin/hx", "/bin/hx", "bin/hx"] {
+            let results = search_file_results(query);
+            assert_eq!(results.len(), 1, "expected one result for {query:?}");
+            assert_eq!(results[0].0, "/usr/bin/hx");
+        }
+    }
+
+    #[test]
+    fn test_search_file_libyaml() {
+        let results = search_file_results("libyaml");
+        assert_eq!(results.len(), 2);
+        for (filepath, _) in results {
+            assert!(
+                filepath.starts_with("/usr/lib/libyaml-0.so.2"),
+                "File path {filepath} does not contain expected prefix /usr/lib/libyaml-0.so.2"
+            );
+        }
+    }
+
+    #[test]
+    fn test_search_file_nonexistent_returns_empty() {
+        let results = search_file_results("/bin/nonexistent");
+        assert!(results.is_empty());
     }
 }
