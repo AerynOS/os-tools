@@ -58,6 +58,9 @@ pub enum Kind {
 
     /// Exported 32-bit pkgconfig provider
     PkgConfig32,
+
+    /// Perl module
+    Perl,
 }
 
 impl Kind {
@@ -72,6 +75,7 @@ impl Kind {
             StonePayloadMetaDependency::Binary => Kind::Binary,
             StonePayloadMetaDependency::SystemBinary => Kind::SystemBinary,
             StonePayloadMetaDependency::PkgConfig32 => Kind::PkgConfig32,
+            StonePayloadMetaDependency::Perl => Kind::Perl,
             StonePayloadMetaDependency::Unknown => return None,
         })
     }
@@ -90,6 +94,7 @@ impl From<Kind> for StonePayloadMetaDependency {
             Kind::Binary => Self::Binary,
             Kind::SystemBinary => Self::SystemBinary,
             Kind::PkgConfig32 => Self::PkgConfig32,
+            Kind::Perl => Self::Perl,
         }
     }
 }
