@@ -82,6 +82,24 @@ impl Repository {
         self.query(flags, Some(db::meta::Filter::Keyword(keyword)))
     }
 
+    pub fn query_prefix(&self, prefix: &str, flags: package::Flags) -> Vec<package::Name> {
+        self.query_by_name_only(flags, Some(db::meta::Filter::Keyword(prefix)))
+    }
+    fn query_by_name_only(&self, flags: package::Flags, filter: Option<db::meta::Filter<'_>>) -> Vec<package::Name> {
+        if flags.available || flags == package::Flags::default() {
+            // TODO: Error handling
+            match self.active.db.query_prefix(filter) {
+                Ok(names) => names,
+                Err(error) => {
+                    warn!("failed to query repository packages: {error}");
+                    vec![]
+                }
+            }
+        } else {
+            vec![]
+        }
+    }
+
     /// Query all packages that match the given provider identity
     pub fn query_provider(&self, provider: &Provider, flags: package::Flags) -> Vec<Package> {
         self.query(flags, Some(db::meta::Filter::Provider(provider.clone())))
