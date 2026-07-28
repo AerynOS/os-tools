@@ -1982,6 +1982,7 @@ dependencies = [
  "container",
  "dag",
  "derive_more",
+ "erofs",
  "fnmatch",
  "fs-err",
  "futures-util",

@@ -8,7 +8,7 @@ use std::{
 
 use chrono::Local;
 use clap::{ArgAction, ArgMatches, Command, CommandFactory, FromArgMatches, Parser, arg};
-use fs_err as fs;
+use fs_err::{self as fs, File};
 use moss::{
     Installation, State,
     client::{self, Client, prune},
@@ -67,6 +67,18 @@ pub fn command() -> Command {
                 .about("Verify and fix system states and assets")
                 .arg(arg!(--verbose "Vebose output").action(ArgAction::SetTrue)),
         )
+        .subcommand(
+            Command::new("format-erofs")
+                .about("Format state as an erofs meta-only image")
+                .arg(arg!(<ID> "State id to be formatted").value_parser(clap::value_parser!(u64)))
+                .arg(arg!(<IMAGE> "Path to write the image to").value_parser(clap::value_parser!(PathBuf)))
+                .arg(
+                    arg!(--namespace "Namespace to write xattrs under")
+                        .default_value("trusted")
+                        .value_parser(clap::value_parser!(XattrNamespace))
+                        .action(ArgAction::Set),
+                ),
+        )
         .subcommand(Export::command())
         // For profiling only, hence hidden.
         //
@@ -99,6 +111,7 @@ pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error
         Some(("remove", args)) => remove(args, installation),
         Some(("verify", args)) => verify(args, installation),
         Some(("export", args)) => export(args, installation),
+        Some(("format-erofs", args)) => format_erofs(args, installation),
         _ => unreachable!(),
     }
 }
@@ -321,6 +334,53 @@ fn print_state_selections(state: State, client: &Client) -> Result<(), Error> {
         );
     }
     println!();
+
+    Ok(())
+}
+
+#[derive(Debug, Clone, Copy, clap::ValueEnum)]
+enum XattrNamespace {
+    Trusted,
+    User,
+}
+
+impl From<XattrNamespace> for erofs::XattrNamespace {
+    fn from(value: XattrNamespace) -> Self {
+        match value {
+            XattrNamespace::Trusted => Self::Trusted,
+            XattrNamespace::User => Self::User,
+        }
+    }
+}
+
+fn format_erofs(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
+    let id = *args.get_one::<u64>("ID").unwrap() as i32;
+    let image_path = args.get_one::<PathBuf>("IMAGE").unwrap();
+    let xattr_namespace = args.get_one::<XattrNamespace>("namespace").copied().unwrap().into();
+
+    let assets_path = installation.assets_path("v2");
+    let client = Client::new(environment::NAME, installation)?;
+
+    let state = client.get_state(id.into())?;
+    let vfs = client.vfs(state.selections.iter().map(|s| &s.package))?;
+
+    let image_writer = erofs::MetaImageWriter::new().with_xattr_namespace(xattr_namespace);
+
+    let mut out = File::create(image_path)?;
+
+    image_writer.write(&vfs, &mut out)?;
+
+    println!("State {id} EROFS meta-only imaged saved to {image_path:?}");
+    println!();
+    println!("Usage example:");
+    println!();
+    println!("````");
+    println!("sudo mount -t erofs {} ./erofs", image_path.display());
+    println!(
+        "sudo mount -t overlay overlay -o lowerdir=./erofs::{} ./overlay",
+        assets_path.display()
+    );
+    println!("````");
 
     Ok(())
 }

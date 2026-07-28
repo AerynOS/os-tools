@@ -18,6 +18,7 @@ testing = []
 config = { path = "../crates/config" }
 container = { path = "../crates/container" }
 dag = { path = "../crates/dag" }
+erofs = { path = "../crates/erofs" }
 tools_buildinfo = { path = "../crates/tools_buildinfo" }
 stone = { path = "../crates/stone" }
 tracing_common = { path = "../crates/tracing_common" }

@@ -92,6 +92,12 @@ impl fmt::Display for PendingFile {
     }
 }
 
+impl AsRef<StonePayloadLayoutRecord> for PendingFile {
+    fn as_ref(&self) -> &StonePayloadLayoutRecord {
+        &self.layout
+    }
+}
+
 /// Build a [`vfs::Tree`] for the specified layouts.
 ///
 /// Returns a newly built [`vfs::Tree`] that can be used in
