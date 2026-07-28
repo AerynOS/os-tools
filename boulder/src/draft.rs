@@ -8,9 +8,9 @@ use chrono::{Datelike, Utc};
 use itertools::Itertools;
 use licenses::match_licences;
 use moss::{Dependency, util};
+use stone_recipe::upstream::SourceUri;
 use thiserror::Error;
 use tui::Styled;
-use url::Url;
 
 use crate::Env;
 
@@ -26,7 +26,7 @@ pub mod upstream;
 
 pub struct Drafter {
     env: Env,
-    upstreams: Vec<Url>,
+    upstreams: Vec<SourceUri>,
 }
 
 pub struct Draft {
@@ -35,7 +35,7 @@ pub struct Draft {
 }
 
 impl Drafter {
-    pub fn new(env: Env, upstreams: Vec<Url>) -> Self {
+    pub fn new(env: Env, upstreams: Vec<SourceUri>) -> Self {
         Self { env, upstreams }
     }
 

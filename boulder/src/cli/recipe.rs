@@ -17,7 +17,7 @@ use fs_err::{self as fs};
 use itertools::Itertools;
 use moss::{request, runtime, util};
 use similar::TextDiff;
-use stone_recipe::upstream;
+use stone_recipe::upstream::{self, SourceUri};
 use tempfile::NamedTempFile;
 use thiserror::Error;
 use tui::{
@@ -64,7 +64,7 @@ pub enum Subcommand {
         #[arg(short, long, default_value = ".", help = "Location to output generated files")]
         output: PathBuf,
         #[arg(required = true, value_name = "URI", help = "Source archive URIs")]
-        upstreams: Vec<Url>,
+        upstreams: Vec<SourceUri>,
     },
     #[command(about = LONG_UPDATE_ABOUT)]
     Update {
@@ -281,7 +281,7 @@ fn bump(recipe: PathBuf, release: Option<u64>) -> Result<(), Error> {
     Ok(())
 }
 
-fn new(env: Env, output: PathBuf, upstreams: Vec<Url>) -> Result<(), Error> {
+fn new(env: Env, output: PathBuf, upstreams: Vec<SourceUri>) -> Result<(), Error> {
     const RECIPE_FILE: &str = "stone.yaml";
     const MONITORING_FILE: &str = "monitoring.yaml";
 
