@@ -12,6 +12,16 @@ use thiserror::Error;
 use tui::{ProgressBar, ProgressStyle};
 use url::Url;
 
+/// Downloads the Git repository inside the container directory.
+pub async fn clone(url: &Url, path: &Path, pb: &ProgressBar) -> Result<gitwrap::Repository, gitwrap::Error> {
+    let cb = set_progress_bar_style(pb);
+
+    let result = gitwrap::Repository::clone_mirror_progress(path, url, cb).await;
+    pb.finish_and_clear();
+
+    result
+}
+
 /// Upstream based on a Git repository.
 #[derive(Clone, Debug)]
 pub struct Git {
@@ -169,15 +179,6 @@ pub enum Error {
     /// A generic I/O error occurred.
     #[error("{0}")]
     Io(#[from] io::Error),
-}
-
-async fn clone(url: &Url, path: &Path, pb: &ProgressBar) -> Result<gitwrap::Repository, gitwrap::Error> {
-    let cb = set_progress_bar_style(pb);
-
-    let result = gitwrap::Repository::clone_mirror_progress(path, url, cb).await;
-    pb.finish_and_clear();
-
-    result
 }
 
 async fn fetch(repo: &gitwrap::Repository, pb: &ProgressBar) -> Result<(), gitwrap::Error> {
