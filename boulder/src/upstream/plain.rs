@@ -15,6 +15,27 @@ use thiserror::Error;
 use tui::{ProgressBar, ProgressStyle};
 use url::Url;
 
+/// Downloads the source archive into the desired file path and returns
+/// its hash.
+///
+/// Do note that the hash may be incorrect, e.g. because of network issues.
+/// It is advised to check the hash against a known value afterwards.
+pub async fn fetch(url: Url, file_path: &Path, pb: &ProgressBar) -> Result<Hash, Error> {
+    pb.set_style(
+        ProgressStyle::with_template(" {spinner} {wide_msg} {binary_bytes_per_sec:>.dim} ")
+            .unwrap()
+            .tick_chars("--=≡■≡=--"),
+    );
+
+    let hash = request::download_with_progress_and_sha256(url.clone(), file_path, |progress| pb.inc(progress.delta))
+        .await
+        .map_err(Error::from)?
+        .try_into()
+        .map_err(Error::from)?;
+
+    Ok(hash)
+}
+
 /// Upstream based on an archive (typically a tarball).
 #[derive(Debug, Clone)]
 pub struct Plain {
@@ -147,7 +168,7 @@ pub struct StoredPlain {
     pub name: String,
     /// Path of the source archive after it was stored.
     pub path: PathBuf,
-    /// Whether the source archived was already stored with valid hash.
+    /// Whether the source archive was already stored with valid hash.
     pub was_cached: bool,
 }
 
@@ -226,18 +247,4 @@ pub enum Error {
     #[error("io")]
     /// A generic I/O error occurred.
     Io(#[from] io::Error),
-}
-
-async fn fetch(url: Url, dest: &Path, pb: &ProgressBar) -> Result<Hash, Error> {
-    pb.set_style(
-        ProgressStyle::with_template(" {spinner} {wide_msg} {binary_bytes_per_sec:>.dim} ")
-            .unwrap()
-            .tick_chars("--=≡■≡=--"),
-    );
-
-    request::download_with_progress_and_sha256(url, dest, |progress| pb.inc(progress.delta))
-        .await
-        .map_err(Error::from)?
-        .try_into()
-        .map_err(Error::from)
 }
