@@ -55,42 +55,40 @@ pub fn self_upgrade(client: &mut Client, simulate: bool) -> Result<(), Error> {
     let mut missing_moss = vec![];
 
     for unsupported_repo in unsupported_repos {
-        match &unsupported_repo.upgrade_via_index_uri {
-            Some(uri) => {
-                let mut temp_client = Client::builder(
-                    "temp-self-upgrade",
-                    Installation::open(temp_dir.path(), None).expect("TODO"),
-                )
-                .repositories(repository::Map::from_iter([(
-                    unsupported_repo.repository.id.clone(),
-                    Repository {
-                        description: "...".to_owned(),
-                        source: repository::Source::DirectIndex(uri.clone()),
-                        priority: 0.into(),
-                        active: true,
-                    },
-                )]))
-                .build()?;
+        let Some(uri) = &unsupported_repo.upgrade_via_index_uri else {
+            missing_upgrade_via.push(unsupported_repo.repository.id.clone());
+            continue;
+        };
 
-                runtime::block_on(temp_client.ensure_repos_initialized().in_current_span())?;
+        let mut temp_client = Client::builder(
+            "temp-self-upgrade",
+            Installation::open(temp_dir.path(), None).expect("TODO"),
+        )
+        .repositories(repository::Map::from_iter([(
+            unsupported_repo.repository.id.clone(),
+            Repository {
+                description: "...".to_owned(),
+                source: repository::Source::DirectIndex(uri.clone()),
+                priority: 0.into(),
+                active: true,
+            },
+        )]))
+        .build()?;
 
-                let packages = temp_client.lookup_packages_by_provider(
-                    &Provider {
-                        kind: dependency::Kind::PackageName,
-                        name: "moss".to_owned(),
-                    },
-                    package::Flags::new().with_available(),
-                );
+        runtime::block_on(temp_client.ensure_repos_initialized().in_current_span())?;
 
-                if let Some(package) = packages.first() {
-                    moss_priority_map.insert(unsupported_repo.repository.repository.priority, package.clone());
-                } else {
-                    missing_moss.push(unsupported_repo.repository.id.clone());
-                }
-            }
-            None => {
-                missing_upgrade_via.push(unsupported_repo.repository.id.clone());
-            }
+        let packages = temp_client.lookup_packages_by_provider(
+            &Provider {
+                kind: dependency::Kind::PackageName,
+                name: "moss".to_owned(),
+            },
+            package::Flags::new().with_available(),
+        );
+
+        if let Some(package) = packages.first() {
+            moss_priority_map.insert(unsupported_repo.repository.repository.priority, package.clone());
+        } else {
+            missing_moss.push(unsupported_repo.repository.id.clone());
         }
     }
 
