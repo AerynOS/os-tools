@@ -16,8 +16,8 @@ use crate::upstream::{
     plain::{Plain, StoredPlain},
 };
 
-mod git;
-mod plain;
+pub(crate) mod git;
+pub(crate) mod plain;
 
 /// An upstream is a backend where
 /// to get source code from.
