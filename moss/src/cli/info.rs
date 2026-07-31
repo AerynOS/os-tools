@@ -6,7 +6,9 @@ use itertools::Itertools;
 use moss::{
     Installation, Package, Provider,
     client::{self, Client},
-    environment, package,
+    environment,
+    fstree::PendingFile,
+    package,
 };
 use stone::StonePayloadLayoutFile;
 use thiserror::Error;
@@ -165,7 +167,7 @@ fn print_package(pkg: &Package) {
     }
 }
 
-fn print_files(vfs: vfs::Tree<client::PendingFile>) {
+fn print_files(vfs: vfs::Tree<PendingFile>) {
     let files = vfs
         .iter()
         .filter_map(|file| {

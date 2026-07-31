@@ -14,7 +14,7 @@ use tui::{ProgressBar, ProgressStyle};
 use crate::{
     Installation,
     client::{self, cache::asset_path},
-    installation,
+    fstree, installation,
     package::{self, MissingMetaFieldError},
     util,
 };
@@ -113,9 +113,9 @@ pub fn extract(stones: Vec<&PathBuf>, output_dir: &Path) -> Result<(), Error> {
             .into_iter()
             .map(|layout| (pkg_id.clone(), layout))
             .collect::<Vec<_>>();
-        let vfs = client::vfs(records)?;
+        let vfs = fstree::vfs(records).map_err(Error::BuildVfsTree)?;
 
-        client::blit_root(&installation, &vfs, &extraction_root.canonicalize()?)?;
+        fstree::native::blit_root(&installation, &vfs, &extraction_root.canonicalize()?).map_err(Error::BlitFstree)?;
     }
 
     // Clean up transient .moss install
@@ -143,4 +143,10 @@ pub enum Error {
 
     #[error("installation")]
     Installation(#[from] installation::Error),
+
+    #[error("build vfs tree")]
+    BuildVfsTree(#[source] vfs::tree::Error),
+
+    #[error("blit fstree")]
+    BlitFstree(#[source] fstree::native::Error),
 }

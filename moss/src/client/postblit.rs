@@ -12,7 +12,6 @@ use std::{
     process,
 };
 
-use crate::Installation;
 use container::Container;
 use itertools::Itertools;
 use serde::Deserialize;
@@ -20,7 +19,7 @@ use thiserror::Error;
 use tracing::{error, warn};
 use triggers::format::{CompiledHandler, Handler, Trigger};
 
-use super::PendingFile;
+use crate::{Installation, fstree::PendingFile};
 
 /// Transaction trigger wrapper
 /// These are loaded from `/usr/share/moss/triggers/tx.d/*.yaml`
