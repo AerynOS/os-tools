@@ -12,8 +12,10 @@ use stone::{StonePayloadLayoutFile, StonePayloadLayoutRecord};
 use crate::{Installation, package};
 
 pub use self::native::NativeDriver;
+pub use self::overlayimg::OverlayimgDriver;
 
 pub mod native;
+pub mod overlayimg;
 
 /// A specific `fstree` format supported by `moss`
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::Display)]
@@ -23,6 +25,10 @@ pub enum Format {
     /// reflinks, hardlinks or normal copy operations to
     /// populate based on the best strategy.
     Native,
+    /// An `fstree` backed by an EROFS meta-only image and
+    /// overlay mount to provide deduplicated content and
+    /// per file metadata.
+    Overlayimg,
 }
 
 /// A driver capable of managing the lifecycle of an `fstree` for a specific [`Format`].
@@ -43,7 +49,12 @@ pub trait Driver {
     ///
     /// Some types of fstrees require mounting to be active & usable. That happens
     /// at this layer, if needed.
-    fn bring_up(&self, _target: &Path, _mutability: Mutability) -> Result<(), Self::Error> {
+    fn bring_up(
+        &self,
+        _installation: &Installation,
+        _target: &Path,
+        _mutability: Mutability,
+    ) -> Result<(), Self::Error> {
         Ok(())
     }
 
@@ -57,6 +68,8 @@ pub trait Driver {
 }
 
 /// The requested mutability of an `fstree`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::Display)]
+#[strum(serialize_all = "kebab-case")]
 pub enum Mutability {
     /// Read only
     ReadOnly,

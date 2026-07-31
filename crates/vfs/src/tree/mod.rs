@@ -170,9 +170,14 @@ impl<T> Tree<T> {
         }
     }
 
+    /// Return structured view beginning at the provided `path`
+    pub fn structured_from(&self, path: &str) -> Option<Element<'_, T>> {
+        self.resolve_node(path).map(|root| self.structured_children(root))
+    }
+
     /// Return structured view beginning at `/`
     pub fn structured(&self) -> Option<Element<'_, T>> {
-        self.resolve_node("/").map(|root| self.structured_children(root))
+        self.structured_from("/")
     }
 
     /// For the given node, recursively convert to Element::Directory of Child
