@@ -13,7 +13,11 @@ use tui::{ProgressBar, ProgressStyle};
 use url::Url;
 
 /// Downloads the Git repository inside the container directory.
-pub async fn clone(url: &Url, container_dir: &Path, pb: &ProgressBar) -> Result<gitwrap::Repository, gitwrap::Error> {
+pub async fn clone_mirror(
+    url: &Url,
+    container_dir: &Path,
+    pb: &ProgressBar,
+) -> Result<gitwrap::Repository, gitwrap::Error> {
     let cb = set_progress_bar_style(pb);
 
     let result = gitwrap::Repository::clone_mirror_progress(container_dir, url, cb).await;
@@ -55,7 +59,7 @@ impl Git {
             Err(Error::Git(_)) => {
                 cached = false;
                 self.remove(storage_dir)?;
-                repo = clone(&self.url, &self.stored_path(storage_dir), pb).await?;
+                repo = clone_mirror(&self.url, &self.stored_path(storage_dir), pb).await?;
             }
             Err(Error::Io(e)) => return Err(Error::from(e)),
         }
