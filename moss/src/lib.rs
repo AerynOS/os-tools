@@ -15,6 +15,7 @@ pub mod client;
 pub mod db;
 pub mod dependency;
 pub mod environment;
+pub mod fstree;
 pub mod installation;
 pub mod package;
 pub mod registry;
