@@ -56,7 +56,7 @@ impl Metadata {
                 let uri_to_use = if i == 0 && !self.source.uri.is_empty() {
                     &self.source.uri
                 } else {
-                    uri.as_str()
+                    &uri.to_string()
                 };
                 format!("    - {uri_to_use} : {hash}")
             })

@@ -19,7 +19,7 @@ use crate::Env;
 use crate::upstream::{self, git, plain};
 
 pub struct Upstream {
-    pub uri: Url,
+    pub uri: SourceUri,
     pub hash: String,
 }
 
@@ -34,16 +34,16 @@ pub fn fetch_and_extract(env: &Env, upstreams: &[SourceUri], extract_root: &Path
                 pb.enable_steady_tick(Duration::from_millis(150));
                 let upstream_dir = env.cache_dir.join("upstreams");
 
-                let upstream = match uri.kind {
+                let upstream = match &uri.kind {
                     stone_recipe::upstream::Kind::Archive => {
-                        fetch_and_extract_archive(&uri.url, &upstream_dir, extract_root, &pb).await?
+                        fetch_and_extract_archive(&uri.clone(), &upstream_dir, extract_root, &pb).await?
                     }
                     stone_recipe::upstream::Kind::Git => {
-                        fetch_git_repo(&uri.url, &upstream_dir, extract_root, &pb).await?
+                        fetch_git_repo(&uri.clone(), &upstream_dir, extract_root, &pb).await?
                     }
                 };
 
-                pb.suspend(|| println!("{} {}", "Fetched".green(), *uri));
+                pb.suspend(|| println!("{} {}", "Fetched".green(), uri.url));
 
                 Ok(upstream)
             })
@@ -73,18 +73,18 @@ pub fn fetched_upstream_cache_path(env: &Env, uri: &Url, hash: &str) -> PathBuf 
 }
 
 async fn fetch_and_extract_archive(
-    url: &Url,
+    uri: &SourceUri,
     upstreams_dir: &Path,
     extract_root: &Path,
     pb: &ProgressBar,
 ) -> Result<Upstream, Error> {
     let temp_path = NamedTempFile::with_prefix("boulder-")?.into_temp_path();
 
-    let hash = plain::fetch(url.clone(), &temp_path, pb)
+    let hash = plain::fetch(uri.url.clone(), &temp_path, pb)
         .await
         .map_err(upstream::Error::from)?;
     let archive = plain::Plain {
-        url: url.clone(),
+        url: uri.url.clone(),
         hash,
         rename: None,
     };
@@ -99,27 +99,27 @@ async fn fetch_and_extract_archive(
         util::async_hardlink_or_copy(&temp_path, &final_path).await?;
     }
 
-    pb.set_message(format!("{} {}", "Extracting".yellow(), *url));
+    pb.set_message(format!("{} {}", "Extracting".yellow(), *uri));
     extract_archive(&temp_path, extract_root).await?;
 
     Ok(Upstream {
-        uri: archive.url,
+        uri: uri.clone(),
         hash: archive.hash.to_string(),
     })
 }
 
 async fn fetch_git_repo(
-    url: &Url,
+    uri: &SourceUri,
     upstreams_dir: &Path,
     extract_root: &Path,
     pb: &ProgressBar,
 ) -> Result<Upstream, Error> {
     let git_upstream = git::Git {
-        url: url.clone(),
+        url: uri.url.clone(),
         commit: "HEAD".to_owned(),
         original_index: 0,
     };
-    let repo = git::clone_mirror(url, &git_upstream.stored_path(upstreams_dir), pb)
+    let repo = git::clone_mirror(&uri.url, &git_upstream.stored_path(upstreams_dir), pb)
         .await
         .map_err(|e| upstream::Error::from(git::Error::Git(e)))?;
 
@@ -131,7 +131,7 @@ async fn fetch_git_repo(
         .map_err(|e| upstream::Error::from(git::Error::Git(e)))?;
 
     Ok(Upstream {
-        uri: git_upstream.url,
+        uri: uri.clone(),
         hash: repo
             .peel_commit(&git_upstream.commit)
             .await
