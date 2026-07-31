@@ -13,10 +13,10 @@ use tui::{ProgressBar, ProgressStyle};
 use url::Url;
 
 /// Downloads the Git repository inside the container directory.
-pub async fn clone(url: &Url, path: &Path, pb: &ProgressBar) -> Result<gitwrap::Repository, gitwrap::Error> {
+pub async fn clone(url: &Url, container_dir: &Path, pb: &ProgressBar) -> Result<gitwrap::Repository, gitwrap::Error> {
     let cb = set_progress_bar_style(pb);
 
-    let result = gitwrap::Repository::clone_mirror_progress(path, url, cb).await;
+    let result = gitwrap::Repository::clone_mirror_progress(container_dir, url, cb).await;
     pb.finish_and_clear();
 
     result
@@ -111,7 +111,7 @@ impl Git {
 
     /// Returns a relative PathBuf where this Git repository
     /// should be stored within the storage directory.
-    fn stored_path(&self, storage_dir: &Path) -> PathBuf {
+    pub fn stored_path(&self, storage_dir: &Path) -> PathBuf {
         storage_dir.join("git").join(self.directory_name())
     }
 
