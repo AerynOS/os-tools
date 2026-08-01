@@ -2,16 +2,20 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use regex::Regex;
-use url::Url;
+use stone_recipe::upstream::SourceUri;
 
 use super::Source;
 
-pub fn source(upstream: &Url) -> Option<Source> {
+pub fn source(upstream: &SourceUri) -> Option<Source> {
+    if !matches!(upstream.kind, stone_recipe::upstream::Kind::Archive) {
+        return None;
+    }
+
     let re = Regex::new(
         r#"^https://cpan\.metacpan\.org/authors/id/[A-Z]/[A-Z]{2}/[A-Z0-9]+/([A-Za-z0-9._+-]+-\d+(?:\.\d+)*)(?:\.tar\.(?:gz|bz2|xz)|\.zip)$"#
     ).unwrap();
 
-    let captures = re.captures(upstream.as_str())?;
+    let captures = re.captures(upstream.url.as_str())?;
 
     let module = captures.get(1)?.as_str().to_owned();
     let parts: Vec<&str> = module.split('-').collect();
@@ -52,9 +56,12 @@ mod tests {
     #[test]
     fn test_regex_typical_metacpan_url() {
         let url_str = "https://cpan.metacpan.org/authors/id/T/TO/TODDR/XML-Parser-2.47.tar.gz";
-        let url = Url::parse(url_str).unwrap();
+        let uri = SourceUri {
+            kind: stone_recipe::upstream::Kind::Archive,
+            url: Url::parse(url_str).unwrap(),
+        };
 
-        let source = source(&url);
+        let source = source(&uri);
         assert!(source.is_some());
 
         let source = source.unwrap();
@@ -62,5 +69,17 @@ mod tests {
         assert_eq!(source.version, "2.47");
         assert_eq!(source.homepage, "https://metacpan.org/pod/XML::Parser");
         assert_eq!(source.uri, url_str);
+    }
+
+    #[test]
+    fn test_git_repo_not_supported() {
+        let url_str = "https://cpan.metacpan.org/authors/id/T/TO/TODDR/XML-Parser-2.47.tar.gz";
+        let uri = SourceUri {
+            kind: stone_recipe::upstream::Kind::Git,
+            url: Url::parse(url_str).unwrap(),
+        };
+
+        let source = source(&uri);
+        assert!(source.is_none());
     }
 }
