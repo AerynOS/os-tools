@@ -38,7 +38,9 @@ use self::verify::verify;
 use crate::{
     Installation, Package, Provider, Registry, Signal, State, SystemModel,
     client::fetch::fetch,
-    db, environment, fstree, installation, package,
+    db, environment,
+    fstree::{self, Driver as _, Fstree},
+    installation, package,
     registry::plugin::{self, Plugin},
     repository, runtime, signal,
     state::{self, Selection},
@@ -128,7 +130,10 @@ impl ClientBuilder {
             install_db,
             state_db,
             layout_db,
-            scope: Scope::Stateful,
+            scope: Scope::Stateful {
+                // TODO: Configurable
+                fstree_driver: fstree::AnyDriver::native(),
+            },
         };
 
         if let Some(blit_root) = self.blit_root {
@@ -216,7 +221,13 @@ impl Client {
         }
 
         Ok(Self {
-            scope: Scope::Ephemeral { blit_root },
+            scope: Scope::Ephemeral {
+                blit_root,
+                // TODO: Figure out if overlayimg makes sense for detached use, especially
+                // in unpriviledged contexts where mounting is restricted. Until then,
+                // force native driver for all detached blits.
+                fstree_driver: fstree::AnyDriver::native(),
+            },
             ..self
         })
     }
@@ -422,19 +433,19 @@ impl Client {
 
         let old_state = self.installation.active_state;
 
-        let fstree = self.blit_root(selections.iter().map(|s| &s.package))?;
+        let mut fstree = self.blit_root(selections.iter().map(|s| &s.package))?;
 
         let result = match &self.scope {
-            Scope::Stateful => {
+            Scope::Stateful { .. } => {
                 // Add to db
                 let state = self.state_db.add(selections, Some(&summary.to_string()), None)?;
 
-                self.apply_stateful_blit(fstree, &state, old_state, system_model)?;
+                self.apply_stateful_blit(&mut fstree, &state, old_state, system_model)?;
 
                 Ok(Some(state))
             }
-            Scope::Ephemeral { blit_root } => {
-                self.apply_ephemeral_blit(fstree, blit_root, system_model)?;
+            Scope::Ephemeral { .. } => {
+                self.apply_ephemeral_blit(&mut fstree, system_model)?;
 
                 Ok(None)
             }
@@ -508,14 +519,18 @@ impl Client {
 
     pub fn apply_stateful_blit(
         &self,
-        fstree: vfs::Tree<fstree::PendingFile>,
+        fstree: &mut Fstree<'_>,
         state: &State,
         old_state: Option<state::Id>,
         system_model: SystemModel,
     ) -> Result<(), Error> {
-        record_state_id(&self.installation.staging_dir(), state.id)?;
-        record_os_release(&self.installation.staging_dir())?;
-        record_system_model(&self.installation.staging_dir(), system_model)?;
+        // Ensure fstree is brought up w/ mutability since we will be
+        // recording supplemental data to it.
+        fstree.bring_up(fstree::Mutability::ReadWrite)?;
+
+        record_state_id(&fstree.path, state.id)?;
+        record_os_release(&fstree.path)?;
+        record_system_model(&fstree.path, system_model)?;
 
         create_root_links(&self.installation.isolation_dir())?;
 
@@ -527,7 +542,11 @@ impl Client {
         fs::create_dir_all(isolation_etc)?;
 
         // Apply transaction triggers
-        Self::apply_triggers(TriggerScope::Transaction(&self.installation, &self.scope), &fstree)?;
+        Self::apply_triggers(TriggerScope::Transaction(&self.installation, &self.scope), &fstree.vfs)?;
+
+        // Transition `fstree` to readonly for promotion
+        let applied = fstree.change_mutability(fstree::Mutability::ReadOnly)?;
+        debug_assert!(applied);
 
         // Staging is only used with [`Scope::Stateful`]
         self.promote_staging()?;
@@ -540,33 +559,37 @@ impl Client {
         }
 
         // At this point we're allowed to run system triggers
-        Self::apply_triggers(TriggerScope::System(&self.installation, &self.scope), &fstree)?;
+        Self::apply_triggers(TriggerScope::System(&self.installation, &self.scope), &fstree.vfs)?;
 
         boot::synchronize(self, state)?;
 
         Ok(())
     }
 
-    pub fn apply_ephemeral_blit(
-        &self,
-        fstree: vfs::Tree<fstree::PendingFile>,
-        blit_root: &Path,
-        system_model: SystemModel,
-    ) -> Result<(), Error> {
-        record_os_release(blit_root)?;
-        record_system_model(blit_root, system_model)?;
+    pub fn apply_ephemeral_blit(&self, fstree: &mut Fstree<'_>, system_model: SystemModel) -> Result<(), Error> {
+        // Ensure fstree is brought up w/ mutability since we will be
+        // recording supplemental data to it.
+        fstree.bring_up(fstree::Mutability::ReadWrite)?;
 
-        create_root_links(blit_root)?;
+        record_os_release(&fstree.path)?;
+        record_system_model(&fstree.path, system_model)?;
+
+        create_root_links(&fstree.path)?;
         create_root_links(&self.installation.isolation_dir())?;
 
         // The container running triggers expects /etc to exist
-        let etc = blit_root.join("etc");
+        let etc = fstree.path.join("etc");
         fs::create_dir_all(etc)?;
 
         // ephemeral tx triggers
-        Self::apply_triggers(TriggerScope::Transaction(&self.installation, &self.scope), &fstree)?;
+        Self::apply_triggers(TriggerScope::Transaction(&self.installation, &self.scope), &fstree.vfs)?;
+
+        // Transition `fstree` to readonly
+        let applied = fstree.change_mutability(fstree::Mutability::ReadOnly)?;
+        debug_assert!(applied);
+
         // ephemeral system triggers
-        Self::apply_triggers(TriggerScope::System(&self.installation, &self.scope), &fstree)?;
+        Self::apply_triggers(TriggerScope::System(&self.installation, &self.scope), &fstree.vfs)?;
 
         Ok(())
     }
@@ -599,9 +622,15 @@ impl Client {
 
     /// Archive old states (currently not "activated") into their respective tree
     fn archive_state(&self, id: state::Id) -> Result<(), Error> {
-        if self.scope.is_ephemeral() {
-            return Err(Error::EphemeralProhibitedOperation);
-        }
+        let fstree_driver = match &self.scope {
+            Scope::Stateful { fstree_driver } => fstree_driver,
+            Scope::Ephemeral { .. } => {
+                return Err(Error::EphemeralProhibitedOperation);
+            }
+        };
+
+        // Bring down the fstree prior to archiving (no active mounts)
+        fstree_driver.bring_down(&self.installation.staging_dir())?;
 
         // After promotion, the old active /usr is now in staging/usr
         let usr_target = self.installation.root_path(id.to_string()).join("usr");
@@ -813,20 +842,18 @@ impl Client {
     ///
     /// This provides a very quick means to generate a hardlinked "snapshot" on-demand,
     /// which can then be activated via [`Self::promote_staging`]
-    pub fn blit_root<'a>(
-        &self,
-        packages: impl IntoIterator<Item = &'a package::Id>,
-    ) -> Result<vfs::Tree<fstree::PendingFile>, Error> {
+    pub fn blit_root<'a, 'b>(
+        &'a self,
+        packages: impl IntoIterator<Item = &'b package::Id>,
+    ) -> Result<Fstree<'a>, Error> {
         let blit_target = match &self.scope {
-            Scope::Stateful => self.installation.staging_dir(),
-            Scope::Ephemeral { blit_root } => blit_root.to_owned(),
+            Scope::Stateful { .. } => self.installation.staging_dir(),
+            Scope::Ephemeral { blit_root, .. } => blit_root.to_owned(),
         };
 
-        let fstree = self.vfs(packages)?;
+        let vfs = self.vfs(packages)?;
 
-        fstree::native::blit_root(&self.installation, &fstree, &blit_target).map_err(Error::Blit)?;
-
-        Ok(fstree)
+        Ok(self.scope.fstree_driver().blit(&self.installation, vfs, blit_target)?)
     }
 
     fn load_or_create_system_model(&self, path: PathBuf, state: &State) -> Result<SystemModel, Error> {
@@ -927,7 +954,9 @@ impl Client {
             install_db,
             state_db,
             layout_db,
-            scope: Scope::Stateful,
+            scope: Scope::Stateful {
+                fstree_driver: fstree::AnyDriver::native(),
+            },
         })
     }
 }
@@ -1066,15 +1095,28 @@ fn record_system_model(root: &Path, system_model: SystemModel) -> Result<(), Err
     Ok(())
 }
 
-#[derive(Clone, Debug)]
 enum Scope {
-    Stateful,
-    Ephemeral { blit_root: PathBuf },
+    Stateful {
+        /// Underlying driver used to create & work with fstrees
+        fstree_driver: fstree::AnyDriver,
+    },
+    Ephemeral {
+        blit_root: PathBuf,
+        /// Underlying driver used to create & work with fstrees
+        fstree_driver: fstree::AnyDriver,
+    },
 }
 
 impl Scope {
     fn is_ephemeral(&self) -> bool {
         matches!(self, Self::Ephemeral { .. })
+    }
+
+    fn fstree_driver(&self) -> &fstree::AnyDriver {
+        match self {
+            Scope::Stateful { fstree_driver } => fstree_driver,
+            Scope::Ephemeral { fstree_driver, .. } => fstree_driver,
+        }
     }
 }
 
@@ -1140,8 +1182,8 @@ pub enum Error {
     Io(#[from] io::Error),
     #[error("filesystem")]
     Filesystem(#[from] vfs::tree::Error),
-    #[error("blit")]
-    Blit(#[source] fstree::native::Error),
+    #[error("fstree")]
+    Fstree(#[from] fstree::DriverError),
     #[error("postblit")]
     PostBlit(#[from] postblit::Error),
     #[error("boot")]

@@ -44,7 +44,7 @@ impl config::Config for SystemTrigger {
 }
 
 /// The trigger scope determines the environment that the trigger runs in
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub(super) enum TriggerScope<'a> {
     /// A transaction trigger, isolated to `/usr`
     Transaction(&'a Installation, &'a super::Scope),
@@ -58,12 +58,12 @@ impl TriggerScope<'_> {
     fn root_dir(&self) -> PathBuf {
         match self {
             TriggerScope::Transaction(install, scope) => match scope {
-                super::Scope::Stateful => install.staging_dir().clone(),
-                super::Scope::Ephemeral { blit_root } => blit_root.clone(),
+                super::Scope::Stateful { .. } => install.staging_dir().clone(),
+                super::Scope::Ephemeral { blit_root, .. } => blit_root.clone(),
             },
             TriggerScope::System(install, scope) => match scope {
-                super::Scope::Stateful => install.root.clone(),
-                super::Scope::Ephemeral { blit_root } => blit_root.clone(),
+                super::Scope::Stateful { .. } => install.root.clone(),
+                super::Scope::Ephemeral { blit_root, .. } => blit_root.clone(),
             },
         }
     }
@@ -72,12 +72,12 @@ impl TriggerScope<'_> {
     fn host_path(&self, path: impl AsRef<Path>) -> PathBuf {
         match self {
             TriggerScope::Transaction(install, scope) => match scope {
-                super::Scope::Stateful => install.root.join(path),
-                super::Scope::Ephemeral { blit_root } => blit_root.join(path),
+                super::Scope::Stateful { .. } => install.root.join(path),
+                super::Scope::Ephemeral { blit_root, .. } => blit_root.join(path),
             },
             TriggerScope::System(install, scope) => match scope {
-                super::Scope::Stateful => install.root.join(path),
-                super::Scope::Ephemeral { blit_root } => blit_root.join(path),
+                super::Scope::Stateful { .. } => install.root.join(path),
+                super::Scope::Ephemeral { blit_root, .. } => blit_root.join(path),
             },
         }
     }
@@ -86,19 +86,18 @@ impl TriggerScope<'_> {
     fn guest_path(&self, path: impl AsRef<Path>) -> PathBuf {
         match self {
             TriggerScope::Transaction(install, scope) => match scope {
-                super::Scope::Stateful => install.staging_path(path),
-                super::Scope::Ephemeral { blit_root } => blit_root.join(path),
+                super::Scope::Stateful { .. } => install.staging_path(path),
+                super::Scope::Ephemeral { blit_root, .. } => blit_root.join(path),
             },
             TriggerScope::System(install, scope) => match scope {
-                super::Scope::Stateful => install.root.join(path),
-                super::Scope::Ephemeral { blit_root } => blit_root.join(path),
+                super::Scope::Stateful { .. } => install.root.join(path),
+                super::Scope::Ephemeral { blit_root, .. } => blit_root.join(path),
             },
         }
     }
 }
 
 /// Condensed type for loaded triggers with scope and executor
-#[derive(Debug)]
 pub(super) struct TriggerRunner<'a> {
     scope: TriggerScope<'a>,
     trigger: CompiledHandler,
