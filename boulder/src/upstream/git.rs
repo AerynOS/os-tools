@@ -27,6 +27,16 @@ pub async fn clone_mirror(
     result
 }
 
+/// Clones a mirrored Git repository into a destination directory.
+/// The destination directory must be empty.
+/// Contrary to the original mirror, the cloned repository will
+/// contain actual source files in the filesystem.
+pub async fn clone_to(repo_dir: &Path, dest_dir: &Path) -> Result<(), gitwrap::Error> {
+    let repo = gitwrap::Repository::open_bare(repo_dir).await?;
+    repo.clone_to(dest_dir).await?;
+    Ok(())
+}
+
 /// Upstream based on a Git repository.
 #[derive(Clone, Debug)]
 pub struct Git {

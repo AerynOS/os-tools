@@ -1,13 +1,32 @@
 // SPDX-FileCopyrightText: 2026 AerynOS Developers
 // SPDX-License-Identifier: MPL-2.0
 
-use std::{io, path::Path, time::Duration};
+//! This module contains the logic to fetch upstreams from the network
+//! and store them in the storage directory, as well as to share them
+//! with the build containers.
+//!
+//! This module abstracts over different types of upstreams
+//! and provides a unified interface to fetch, store, and share them.
+//! Child modules implement the logic for each type of supported
+//! upstream, so please consult them should you need specific logic
+//! for a given upstream type.
+//! Each child module is organized with structs/enums that provide
+//! a high-level and opinionated interface to fetch, store and share
+//! the upstreams it targets.
+//! It also provides free-standing functions that implement the low-level
+//! and unopinionated logic.
+
+use std::{
+    io,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 use crate::recipe::Recipe;
 use fs_err as fs;
 use futures_util::{StreamExt, TryStreamExt, stream};
 use moss::runtime;
-use stone_recipe::upstream;
+use stone_recipe::upstream::{self, SourceUri};
 use thiserror::Error;
 use tui::{MultiProgress, ProgressBar, ProgressStyle, Styled};
 
@@ -46,6 +65,43 @@ impl Upstream {
                 commit: git_ref,
                 original_index,
             })),
+        }
+    }
+
+    /// Constructs a new [stone_recipe::upstream::SourceUri]
+    /// where this upstream can be fetched from.
+    pub fn uri(&self) -> SourceUri {
+        match self {
+            Upstream::Plain(plain) => SourceUri {
+                url: plain.url.clone(),
+                kind: upstream::Kind::Archive,
+            },
+            Upstream::Git(git) => SourceUri {
+                url: git.url.clone(),
+                kind: upstream::Kind::Git,
+            },
+        }
+    }
+
+    /// Returns the hash of this upstream, as a generic string.
+    /// The meaning of the hash depends on the upstream variant.
+    pub fn hash(&self) -> &str {
+        match self {
+            Upstream::Plain(plain) => &plain.hash,
+            Upstream::Git(git) => &git.commit,
+        }
+    }
+
+    /// Returns the path where this upstream would be stored
+    /// in the storage directory.
+    /// The path may be a file or a directory, depending on
+    /// the upstream variant.
+    /// The path may not exist yet, but it is guaranteed to
+    /// be unique inside the storage directory.
+    pub fn stored_path(&self, storage_dir: &Path) -> PathBuf {
+        match self {
+            Upstream::Plain(plain) => plain.stored_path(storage_dir),
+            Upstream::Git(git) => git.stored_path(storage_dir),
         }
     }
 
