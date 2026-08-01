@@ -16,7 +16,6 @@ use crate::Env;
 
 use self::metadata::Metadata;
 use self::monitoring::Monitoring;
-use self::upstream::Upstream;
 
 mod build;
 mod licenses;
@@ -26,7 +25,7 @@ pub mod upstream;
 
 pub struct Drafter {
     env: Env,
-    upstreams: Vec<SourceUri>,
+    source_uris: Vec<SourceUri>,
 }
 
 pub struct Draft {
@@ -35,19 +34,20 @@ pub struct Draft {
 }
 
 impl Drafter {
-    pub fn new(env: Env, upstreams: Vec<SourceUri>) -> Self {
-        Self { env, upstreams }
+    pub fn new(env: Env, source_uris: Vec<SourceUri>) -> Self {
+        Self { env, source_uris }
     }
 
     pub fn run(&self) -> Result<Draft, Error> {
         let temp_dir = tempfile::tempdir()?;
         let extract_root = temp_dir.as_ref();
 
-        // Fetch and extract all upstreams
-        let extracted = upstream::fetch_and_extract(&self.env, &self.upstreams, extract_root)?;
+        // Fetch upstreams and extract the first one.
+        let upstreams = upstream::fetch(&self.env, &self.source_uris)?;
+        runtime::block_on(upstream::extract(&self.env, &upstreams.first().unwrap(), extract_root))?;
 
         // Build metadata from extracted upstreams
-        let metadata = Metadata::new(extracted);
+        let metadata = Metadata::new(upstreams);
 
         let monitoring = Monitoring::new(&metadata.source.name, &metadata.source.homepage);
         let monitoring_result = monitoring.run()?;
@@ -173,7 +173,7 @@ pub enum Error {
     #[error("analyzing build system")]
     AnalyzeBuildSystem(#[source] build::Error),
     #[error("upstream")]
-    Upstream(#[from] upstream::Error),
+    Upstream(#[from] crate::upstream::Error),
     #[error("monitoring")]
     Monitoring(#[from] monitoring::Error),
     #[error("licensing")]

@@ -3,7 +3,7 @@
 
 use itertools::Itertools;
 
-use super::Upstream;
+use crate::upstream::Upstream;
 
 mod basic;
 mod github;
@@ -31,13 +31,14 @@ impl Metadata {
 
         // Try to identify source metadata from the first upstream
         if let Some(upstream) = upstreams.first() {
+            let uri = upstream.uri();
             for matcher in Matcher::ALL {
                 if let Some(matched) = match matcher {
-                    Matcher::Basic => basic::source(&upstream.uri),
-                    Matcher::Github => github::source(&upstream.uri),
-                    Matcher::Gitlab => gitlab::source(&upstream.uri),
-                    Matcher::Pypi => pypi::source(&upstream.uri),
-                    Matcher::Metacpan => metacpan::source(&upstream.uri),
+                    Matcher::Basic => basic::source(&uri),
+                    Matcher::Github => github::source(&uri),
+                    Matcher::Gitlab => gitlab::source(&uri),
+                    Matcher::Pypi => pypi::source(&uri),
+                    Matcher::Metacpan => metacpan::source(&uri),
                 } {
                     source = matched;
                     break;
@@ -52,12 +53,13 @@ impl Metadata {
         self.upstreams
             .iter()
             .enumerate()
-            .map(|(i, Upstream { uri, hash })| {
+            .map(|(i, upstream)| {
                 let uri_to_use = if i == 0 && !self.source.uri.is_empty() {
                     &self.source.uri
                 } else {
-                    &uri.to_string()
+                    &upstream.uri().to_string()
                 };
+                let hash = upstream.hash();
                 format!("    - {uri_to_use} : {hash}")
             })
             .join("\n")
