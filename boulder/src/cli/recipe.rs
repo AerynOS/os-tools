@@ -8,7 +8,7 @@ use std::{
 
 use crate::{
     Env, Macros, architecture,
-    draft::{self, Drafter, upstream::fetched_upstream_cache_path},
+    draft::{self, Confirmation, Drafter, upstream::fetched_upstream_cache_path},
     macros, recipe,
 };
 use clap::Parser;
@@ -119,7 +119,12 @@ fn parse_updated_source(s: &str) -> Result<UpdatedSource, String> {
 pub fn handle(command: Command, env: Env, yes: bool, verbose: bool) -> Result<(), Error> {
     match command.subcommand {
         Subcommand::Bump { recipe, release } => bump(recipe, release),
-        Subcommand::New { output, upstreams } => new(env, output, upstreams),
+        Subcommand::New { output, upstreams } => new(
+            env,
+            output,
+            upstreams,
+            if yes { Confirmation::DoNotAsk } else { Confirmation::Ask },
+        ),
         Subcommand::Update {
             recipe,
             output,
@@ -281,12 +286,12 @@ fn bump(recipe: PathBuf, release: Option<u64>) -> Result<(), Error> {
     Ok(())
 }
 
-fn new(env: Env, output: PathBuf, upstreams: Vec<SourceUri>) -> Result<(), Error> {
+fn new(env: Env, output: PathBuf, upstreams: Vec<SourceUri>, confirm: Confirmation) -> Result<(), Error> {
     const RECIPE_FILE: &str = "stone.yaml";
     const MONITORING_FILE: &str = "monitoring.yaml";
 
     let drafter = Drafter::new(env, upstreams);
-    let draft = drafter.run()?;
+    let draft = drafter.run(confirm)?;
 
     if !output.is_dir() {
         fs::create_dir_all(&output).map_err(Error::CreateDir)?;

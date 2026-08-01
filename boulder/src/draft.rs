@@ -10,7 +10,10 @@ use licenses::match_licences;
 use moss::{Dependency, util};
 use stone_recipe::upstream::SourceUri;
 use thiserror::Error;
-use tui::Styled;
+use tui::{
+    Styled,
+    dialoguer::{Confirm, theme::ColorfulTheme},
+};
 
 use crate::Env;
 
@@ -28,6 +31,11 @@ pub struct Drafter {
     source_uris: Vec<SourceUri>,
 }
 
+pub enum Confirmation {
+    Ask,
+    DoNotAsk,
+}
+
 pub struct Draft {
     pub stone: String,
     pub monitoring: String,
@@ -38,12 +46,28 @@ impl Drafter {
         Self { env, source_uris }
     }
 
-    pub fn run(&self) -> Result<Draft, Error> {
+    pub fn run(&self, confirm: Confirmation) -> Result<Draft, Error> {
         let temp_dir = tempfile::tempdir()?;
         let extract_root = temp_dir.as_ref();
 
         // Fetch upstreams and extract the first one.
         let upstreams = upstream::fetch(&self.env, &self.source_uris)?;
+
+        if upstreams.len() > 1 {
+            let proceed = matches!(confirm, Confirmation::DoNotAsk)
+                || Confirm::with_theme(&ColorfulTheme::default())
+                    .with_prompt(
+                        "Multiple upstreams passed, only the first one will be extracted and analyzed. Continue?",
+                    )
+                    .default(false)
+                    .wait_for_newline(true)
+                    .interact()
+                    .map_err(|e| Error::Io(e.into()))?;
+            if !proceed {
+                return Err(Error::Aborted);
+            }
+        }
+
         runtime::block_on(upstream::extract(&self.env, &upstreams.first().unwrap(), extract_root))?;
 
         // Build metadata from extracted upstreams
@@ -182,6 +206,8 @@ pub enum Error {
     Io(#[from] io::Error),
     #[error("walkdir")]
     WalkDir(#[from] walkdir::Error),
+    #[error("operation aborted by user")]
+    Aborted,
 }
 
 #[cfg(test)]
