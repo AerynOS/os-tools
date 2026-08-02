@@ -582,7 +582,7 @@ impl Client {
     ///
     /// This is performed using `renameat2` and results in instantly available, atomically updated
     /// `/usr`. In combination with the mandated "`/usr`` merge" and statelessness approach of
-    /// Serpent OS, provides a unique atomic upgrade strategy.
+    /// our project, it provides a unique atomic upgrade strategy.
     fn promote_staging(&self) -> Result<(), Error> {
         if self.scope.is_ephemeral() {
             return Err(Error::EphemeralProhibitedOperation);
@@ -1165,7 +1165,7 @@ fn blit_element_item(
 
             match *id {
                 // Mystery empty-file hash. Do not allow dupes!
-                // https://github.com/serpent-os/tools/issues/372
+                // https://github.com/AerynOS/os-tools/issues/372
                 0x99aa_06d3_0147_98d8_6001_c324_468d_497f => {
                     let fd = fcntl::openat(
                         parent,
