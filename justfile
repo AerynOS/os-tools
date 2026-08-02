@@ -83,18 +83,6 @@ test: lint
   @echo "Running tests in all packages…"
   cargo test --all
 
-# Run all DB migrations
-migrate: (diesel "meta" "migration run") (diesel "layout" "migration run") (diesel "state" "migration run")
-# Rerun all DB migrations
-migrate-redo: (diesel "meta" "migration redo") (diesel "layout" "migration redo") (diesel "state" "migration redo")
-
-[private]
-diesel db +ARGS:
-  diesel \
-    --config-file {{ root-dir }}/moss/src/db/{{ db }}/diesel.toml \
-    --database-url sqlite://{{ root-dir }}/moss/src/db/{{ db }}/test.db \
-    {{ ARGS }}
-
 # Run libstone example
 libstone example="read" *ARGS="./test/bash-completion-2.11-1-1-x86_64.stone":
   #!/bin/bash
