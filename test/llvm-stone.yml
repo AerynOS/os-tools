@@ -65,12 +65,12 @@ environment : |
     export LD_LIBRARY_PATH="%(workdir)/%(builddir)/lib"
 setup       : |
     unset LD_PRELOAD
-    %patch %(pkgdir)/serpent/0001-Support-serpent-as-a-distro.patch
+    %patch %(pkgdir)/aerynos/0001-Support-aerynos-as-a-distro.patch
     %patch %(pkgdir)/perf/0001-Reduce-GCC-startup-searches.patch
-    %patch %(pkgdir)/serpent/0001-Use-correct-Serpent-OS-multilib-paths-for-ld.patch
-    %patch %(pkgdir)/serpent/0001-Make-gnu-hash-the-default-for-lld-and-clang.patch
-    %patch %(pkgdir)/serpent/0001-Update-binutils-version-to-match-Serpent-OS.patch
-    %patch %(pkgdir)/serpent/0001-Make-external-visibility-default.patch
+    %patch %(pkgdir)/aerynos/0001-Use-correct-AerynOS-multilib-paths-for-ld.patch
+    %patch %(pkgdir)/aerynos/0001-Make-gnu-hash-the-default-for-lld-and-clang.patch
+    %patch %(pkgdir)/aerynos/0001-Update-binutils-version-to-match-AerynOS.patch
+    %patch %(pkgdir)/aerynos/0001-Make-external-visibility-default.patch
 
     %cmake ${llvmopts} -S llvm \
         -DLLVM_BUILD_LLVM_DYLIB=ON \

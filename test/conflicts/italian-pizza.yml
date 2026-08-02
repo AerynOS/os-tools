@@ -8,7 +8,7 @@ release     : 1
 summary     : A certain Italian pizza that hates pineapples
 description : Me no like pineapples.
 license     : Zlib
-homepage    : https://github.com/serpent-os
+homepage    : https://github.com/AerynOS
 conflicts   :
     - pineapple
 install     : |

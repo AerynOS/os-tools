@@ -8,7 +8,7 @@ release     : 1
 summary     : Delicious slices of pineapples
 description : Can I be on your pizza?
 license     : Zlib
-homepage    : https://github.com/serpent-os
+homepage    : https://github.com/AerynOS
 install     : |
     mkdir -p %(installroot)/%(vendordir)
     touch %(installroot)/%(vendordir)/pienapple
