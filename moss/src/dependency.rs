@@ -17,7 +17,7 @@
 //!
 //! We acknowledge the current dependency format, while powerful, does not allow expressing
 //! relationship constraints. This was a deliberate decision due to the rolling nature of
-//! Serpent OS, however more expressive dependency types will be introduced in the next major
+//! AerynOS, however more expressive dependency types will be introduced in the next major
 //! stone format.
 use std::str::FromStr;
 
