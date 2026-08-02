@@ -3,24 +3,24 @@
   "entity": {
     "type": "organisation",
     "role": "owner",
-    "name": "Serpent OS",
-    "email": "ikey@serpentos.com",
+    "name": "AerynOS",
+    "email": "ikey@aerynos.com",
     "phone": "",
-    "description": "The Serpent OS Linux distribution - a bold, independent project creating a new set of tooling to solve the problem of creating and managing distributions, effectively.",
+    "description": "The AerynOS Linux distribution - a bold, independent project creating a new set of tooling to solve the problem of creating and managing distributions, effectively.",
     "webpageUrl": {
-      "url": "https://github.com/serpent-os"
+      "url": "https://github.com/aerynos"
     }
   },
   "projects": [
     {
       "guid": "moss-and-boulder",
       "name": "tools",
-      "description": "Serpent OS package management tooling: moss and boulder",
+      "description": "AerynOS package management tooling: moss and boulder",
       "webpageUrl": {
-        "url": "https://github.com/serpent-os/tools"
+        "url": "https://github.com/aerynos/os-tools"
       },
       "repositoryUrl": {
-        "url": "https://github.com/serpent-os/tools"
+        "url": "https://github.com/aerynos/os-tools"
       },
       "licenses": [
         "spdx:MPL-2.0"
