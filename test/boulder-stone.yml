@@ -2,46 +2,53 @@
 # SPDX-License-Identifier: MPL-2.0
 
 name        : boulder
-version     : 1.0.1
-release     : 35
-summary     : Package creation tool for Serpent OS
-license     : Zlib
-homepage    : https://github.com/serpent-os/boulder
+version     : "0.26.6+git.dae3182"
+release     : 161
+summary     : Modern package building tool
+license     : MPL-2.0
+homepage    : https://github.com/AerynOS/os-tools
 description : |
-    Extremely flexible and powerful, yet simple to use, package build
-    tool for the Serpent OS project.
+    Modern package building tool with containerized builds and intelligent package splitting
 upstreams   :
-    - git|https://github.com/serpent-os/boulder : v1.0.1
-    - https://github.com/serpent-os/libmoss/releases/download/v1.2.0/libmoss-1.2.0.tar.xz:
-        hash: cbf684b5a37a3a433e0526beb04a7b3419b71e81b3709c3b0d7ed6a1987d3dcb
-        unpackdir: libmoss
-        stripdirs: 1
+    - git|https://github.com/AerynOS/os-tools.git :
+        ref : dae3182fbb8f98206511da8fda8ab20efe86a874
+    - git|https://github.com/spdx/license-list-data.git :
+        ref : d46e94e2c78ceede1cfc63cfa0396472d2798d4c # v3.27.0
 builddeps   :
-    - binary(cmake)
-    - ldc
-    - ldc-devel
-    - lmdb-devel
-    - pkgconfig(libcurl)
-    - pkgconfig(libxxhash)
-    - pkgconfig(libzstd)
+    - binary(cargo)
 rundeps     :
-    - binary(moss-container)
+    # needed for `boulder recipe (...)` actions
+    - binary(bsdtar)
+networking  : true
+tuning      :
+    - optimize: size
+    - lto: full
 environment : |
-    cd %(buildroot)/boulder
+    export RUSTFLAGS="$RUSTFLAGS -C codegen-units=1"
+check       : |
+    %cargo_test --features moss/testing
 setup       : |
-    # Fix libmoss
-    cd ../libmoss
-    %patch %(pkgdir)/0001-deps-analysis-elves-In-absence-of-soname.-make-one-u.patch
-    cd ../boulder
-
-    # TODO: Unset buildtype here when moss-format supports DFLAGS
-    export DFLAGS="$DFLAGS -flto=thin -O3 -g"
-    %meson --buildtype debugoptimized
+    %cargo_fetch
 build       : |
-    %meson_build
+    %cargo_build -p boulder
 install     : |
-    %meson_install
-    ln -sf boulder %(installroot)/usr/bin/mason
+    %cargo_install
+    %install_dir %(installroot)%(datadir)/boulder
+    cp -R boulder/data/* %(installroot)%(datadir)/boulder/.
 
-    %install_dir %(installroot)/usr/share/moss
-    mv data/macros %(installroot)/usr/share/moss/
+    # Completions
+    mkdir compl/
+    ./%(cargo_target_dir)/boulder --generate-completions compl/.
+    %install_file compl/_boulder %(installroot)%(datadir)/zsh/site-functions/_boulder
+    %install_file compl/boulder.bash %(installroot)%(datadir)/bash-completion/completions/boulder
+    %install_file compl/boulder.fish %(installroot)%(datadir)/fish/completions/boulder.fish
+
+    # Generate manpages
+    mkdir man/
+    ./%(cargo_target_dir)/boulder --generate-manpages man/.
+    %install_dir %(installroot)%(mandir)/man1
+    cp man/*.1 %(installroot)%(mandir)/man1/.
+
+    # SPDX licenses
+    %install_dir %(installroot)%(datadir)/boulder/licenses/
+    cp %(sourcedir)/license-list-data.git/text/* %(installroot)%(datadir)/boulder/licenses/
