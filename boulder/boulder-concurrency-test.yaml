@@ -4,7 +4,7 @@
 name       : boulder-concurrency-test
 version    : 1
 release    : 1
-homepage   : https://github.com/serpent-os/moss
+homepage   : https://github.com/AerynOS/os-tools
 summary    : Concurrency test for boulder
 description: Concurrency test for boulder
 license    :
