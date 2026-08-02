@@ -5,15 +5,17 @@
 
 # Boulder
 
-This directory contains the Serpent OS package building tool `boulder`.
+This directory contains the package building tool, and recipe manager, `boulder`.
 
 ## Building boulder
 
-To build boulder, use the `boulder` target:
+To build `boulder` with Cargo, pass the unsurprising `boulder` package:
 
-    cargo build -p boulder
+```shell
+cargo build -p boulder
+```
 
-This will produce a debug build by default, which is available as  `./target/debug/boulder`
+This will produce a debug build by default, which is available as  `./target/debug/boulder`.
 
 ## Onboarding
 
