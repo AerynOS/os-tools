@@ -1,187 +1,130 @@
 // SPDX-FileCopyrightText: 2023 AerynOS Developers
 // SPDX-License-Identifier: MPL-2.0
 
-use std::{collections::BTreeMap, path::PathBuf, process};
+use std::{collections::BTreeMap, process};
 
-use clap::{Arg, ArgAction, ArgMatches, Command, arg, builder::ValueParser};
+use clap::Parser;
 use itertools::Itertools;
-use moss::{
-    Installation, Repository, environment,
-    repository::{self, Priority},
-    runtime, system_model,
-};
+use moss::{Installation, Repository, environment, repository, runtime, system_model};
 use thiserror::Error;
 use tui::Styled;
 use url::Url;
 
-/// Control flow for the subcommands
-enum Action {
-    // Root
-    List,
-    // Root, Id, Url, Comment, Root index enabled options
-    Add(String, Url, String, Priority, Option<RootIndexOptions>),
-    // Root, Id
-    Remove(String),
-    // Root, Id
-    Update(Option<String>),
-    Enable(String),
-    Disable(String),
+#[derive(Debug, Parser)]
+#[command(
+    name = "repo",
+    about = "Manage the available software repositories visible to the installed system"
+)]
+pub struct Command {
+    #[command(subcommand)]
+    subcommand: Subcommand,
 }
 
-/// Return a command for handling `repo` subcommands
-pub fn command() -> Command {
-    Command::new("repo")
-        .about("Manage software repositories")
-        .long_about("Manage the available software repositories visible to the installed system")
-        .subcommand_required(true)
-        .subcommand(
-            Command::new("add")
-                .visible_alias("ar")
-                .arg(arg!(<NAME> "repo name").value_parser(clap::value_parser!(String)))
-                .arg(arg!(<URI> "repo uri").value_parser(clap::value_parser!(Url)))
-                .arg(
-                    Arg::new("comment")
-                        .short('c')
-                        .default_value("...")
-                        .action(ArgAction::Set)
-                        .help("Set the comment for the repository")
-                        .value_parser(clap::value_parser!(String)),
-                )
-                .arg(
-                    Arg::new("priority")
-                        .short('p')
-                        .help("Repository priority")
-                        .action(ArgAction::Set)
-                        .default_value("0")
-                        .value_parser(clap::value_parser!(u64)),
-                )
-                .next_help_heading("Root index")
-                // TODO: Completely overhaul this CLI API, this is temporary to add support
-                // initially for adding the new root index repo source without breaking
-                // the current API
-                .arg(
-                    Arg::new("root-index")
-                        .long("root-index")
-                        .value_name("root-index-options")
-                        .help(concat!(
-                            "Defines the repo via root index options where <URI> is the base-uri ",
-                            "and all other options are passed to this flag\n\n",
-                            "Example: --root-index version=stream/unstable\n",
-                            "Example: --root-index channel=testing,version=tag/some-bug",
-                        ))
-                        .action(ArgAction::Set)
-                        .num_args(1)
-                        .value_parser(ValueParser::new(parse_root_index_options)),
-                ),
-        )
-        .subcommand(
-            Command::new("list")
-                .visible_alias("lr")
-                .about("List system software repositories")
-                .long_about("List all of the system repositories and their status"),
-        )
-        .subcommand(
-            Command::new("remove")
-                .visible_alias("rr")
-                .about("Remove a repository for the system")
-                .arg(arg!(<NAME> "repo name").value_parser(clap::value_parser!(String))),
-        )
-        .subcommand(
-            Command::new("update")
-                .visible_alias("ur")
-                .about("Update the system repositories")
-                .long_about("If no repository is named, update them all")
-                .arg(arg!([NAME] "repo name").value_parser(clap::value_parser!(String))),
-        )
-        .subcommand(
-            Command::new("enable")
-                .visible_alias("er")
-                .about("Enable the system repositories")
-                .arg(arg!([NAME] "repo name").value_parser(clap::value_parser!(String))),
-        )
-        .subcommand(
-            Command::new("disable")
-                .visible_alias("dr")
-                .about("Disable the system repositories")
-                .arg(arg!([NAME] "repo name").value_parser(clap::value_parser!(String))),
-        )
-}
+impl Command {
+    /// Handles the "repo" subcommand.
+    pub fn handle(self, installation: Installation) -> Result<(), Error> {
+        let config = config::Manager::system(&installation.root, "moss");
+        let system_model = system_model::load(&installation.system_model_path())?;
+        let manager = if let Some(system_model) = &system_model {
+            repository::Manager::with_system_model(environment::NAME, system_model.clone(), installation.clone())?
+        } else {
+            repository::Manager::with_config_manager(config, installation.clone())?
+        };
 
-/// Handle subcommands to `repo`
-pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
-    let config = config::Manager::system(&installation.root, "moss");
-
-    let system_model = system_model::load(&installation.system_model_path())?;
-
-    let manager = if let Some(system_model) = &system_model {
-        repository::Manager::with_system_model(environment::NAME, system_model.clone(), installation.clone())?
-    } else {
-        repository::Manager::with_config_manager(config, installation.clone())?
-    };
-
-    let handler = match args.subcommand() {
-        Some(("list", _)) => Action::List,
-        Some(("update", cmd_args)) => Action::Update(cmd_args.get_one::<String>("NAME").cloned()),
-        Some((command, _)) if system_model.is_some() => {
-            return Err(Error::SystemModelDisallowed {
-                command: command.to_owned(),
-                path: installation.system_model_path(),
-            });
+        match self.subcommand {
+            Subcommand::List => list(manager),
+            Subcommand::Add(args) => add(manager, args),
+            Subcommand::Remove { name } => remove(manager, name),
+            Subcommand::Update { name } => update(manager, name),
+            Subcommand::Enable { name } => enable(manager, name),
+            Subcommand::Disable { name } => disable(manager, name),
         }
-        Some(("add", cmd_args)) => Action::Add(
-            cmd_args.get_one::<String>("NAME").cloned().unwrap(),
-            cmd_args.get_one::<Url>("URI").cloned().unwrap(),
-            cmd_args.get_one::<String>("comment").cloned().unwrap(),
-            Priority::new(*cmd_args.get_one::<u64>("priority").unwrap()),
-            cmd_args.get_one::<RootIndexOptions>("root-index").cloned(),
-        ),
-        Some(("remove", cmd_args)) => Action::Remove(cmd_args.get_one::<String>("NAME").cloned().unwrap()),
-        Some(("enable", cmd_args)) => Action::Enable(cmd_args.get_one::<String>("NAME").cloned().unwrap()),
-        Some(("disable", cmd_args)) => Action::Disable(cmd_args.get_one::<String>("NAME").cloned().unwrap()),
-        _ => unreachable!(),
-    };
-
-    // dispatch to runtime handler function
-    match handler {
-        Action::List => list(manager),
-        Action::Add(name, uri, comment, priority, root_index_options) => {
-            add(manager, name, uri, comment, priority, root_index_options)
-        }
-        Action::Remove(name) => remove(manager, name),
-        Action::Update(name) => update(manager, name),
-        Action::Enable(name) => enable(manager, name),
-        Action::Disable(name) => disable(manager, name),
     }
 }
 
-// Actual implementation of moss repo add
-fn add(
-    mut manager: repository::Manager,
-    name: String,
-    uri: Url,
-    comment: String,
-    priority: Priority,
-    root_index_options: Option<RootIndexOptions>,
-) -> Result<(), Error> {
-    let id = repository::Id::new(&name);
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error("repo manager")]
+    RepositoryManager(#[from] repository::manager::Error),
+    #[error("load system model")]
+    LoadSystemModel(#[from] system_model::LoadError),
+}
 
-    let source = if let Some(RootIndexOptions { channel, version, arch }) = root_index_options {
+#[derive(Debug, clap::Subcommand)]
+enum Subcommand {
+    #[command(visible_alias("rad"))]
+    Add(AddArgs),
+
+    #[command(visible_alias("rls"), about = "List system software repositories")]
+    List,
+
+    #[command(visible_alias("rrm"), about = "Remove a repository for the system")]
+    Remove { name: String },
+
+    #[command(visible_alias("rup"), about = "Update the system repositories")]
+    Update {
+        #[arg(help = "Repository to update. If not provided, all will be updated")]
+        name: Option<String>,
+    },
+
+    #[command(visible_alias("ren"), about = "Enable a system repository")]
+    Enable { name: String },
+
+    #[command(visible_alias("rdi"), about = "Disable a system repository")]
+    Disable { name: String },
+}
+
+#[derive(Debug, clap::Args)]
+struct AddArgs {
+    name: String,
+
+    url: Url,
+
+    #[arg(short, long)]
+    comment: String,
+
+    #[arg(short, long, help = "Repository priority", default_value_t = 0)]
+    priority: u64,
+
+    // TODO: Completely overhaul this CLI API, this is temporary to add support
+    // initially for adding the new root index repo source without breaking
+    // the current API.
+    #[arg(
+        long,
+        num_args = 1,
+        value_name = "root-index-options",
+        value_parser = parse_root_index_options,
+        help_heading = "Root index",
+        help = concat!(
+            "Defines the repo via root index options where <URI> is the base-uri ",
+            "and all other options are passed to this flag\n\n",
+            "Example: --root-index version=stream/unstable\n",
+            "Example: --root-index channel=testing,version=tag/some-bug"
+    ))]
+    root_index: Option<RootIndexOptions>,
+}
+
+// Actual implementation of moss repo add
+fn add(mut manager: repository::Manager, args: AddArgs) -> Result<(), Error> {
+    let id = repository::Id::new(&args.name);
+
+    let source = if let Some(RootIndexOptions { channel, version, arch }) = args.root_index {
         repository::Source::RootIndex(repository::RootIndexSource {
-            base_uri: uri,
+            base_uri: args.url,
             channel,
             version,
             arch,
         })
     } else {
-        repository::Source::DirectIndex(uri)
+        repository::Source::DirectIndex(args.url)
     };
 
     manager.add_repository(
         id.clone(),
         Repository {
-            description: comment,
+            description: args.comment,
             source,
-            priority,
+            priority: args.priority.into(),
             active: true,
         },
     )?;
@@ -315,16 +258,4 @@ fn parse_root_index_options(s: &str) -> Result<RootIndexOptions, String> {
     }
 
     Ok(RootIndexOptions { channel, version, arch })
-}
-
-#[derive(Debug, Error)]
-pub enum Error {
-    #[error("repo manager")]
-    RepositoryManager(#[from] repository::manager::Error),
-    #[error("load system model")]
-    LoadSystemModel(#[from] system_model::LoadError),
-    #[error(
-        "`moss repo {command}` is not allowed with system-model enabled. Repos must be manually edited from {path:?}"
-    )]
-    SystemModelDisallowed { command: String, path: PathBuf },
 }
