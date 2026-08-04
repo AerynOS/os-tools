@@ -392,6 +392,9 @@ fn blit_element_item(
 
                             // Create link to blit target
                             linkat(Some(src), "", Some(parent), subpath)?;
+
+                            // Cleanup FD
+                            close(src)?;
                         }
                         #[allow(clippy::disallowed_types)]
                         BlitStrategy::Copy => {
