@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use std::{
-    io,
+    env, io,
     os::fd::{AsRawFd, FromRawFd, RawFd},
     path::{Path, PathBuf},
     time::{Duration, Instant},
@@ -56,7 +56,7 @@ impl BlitStats {
     }
 }
 
-#[derive(Debug, Clone, Copy, strum::Display)]
+#[derive(Debug, Clone, Copy, strum::Display, strum::EnumString)]
 #[strum(serialize_all = "lowercase")]
 enum BlitStrategy {
     Reflink,
@@ -70,7 +70,18 @@ enum BlitStrategy {
 /// any other error during this test falls back to `hardlink` to ensure we don't
 /// accidentally `copy` on unexpected errors, and to introduce regression against
 /// the previous `hardlink` only behavior
+///
+/// If `MOSS_FSTREE_NATIVE_STRATEGY` env var is set, that is used instead of the
+/// above identification logic.
 fn identify_blit_strategy(installation: &Installation, blit_target: &Path) -> BlitStrategy {
+    // Allow overriding via env var
+    if let Some(strategy) = env::var("MOSS_FSTREE_NATIVE_STRATEGY")
+        .ok()
+        .and_then(|s| s.parse::<BlitStrategy>().ok())
+    {
+        return strategy;
+    }
+
     let from = installation.cache_path(".link-test");
     let to = blit_target.join(".link-test");
 
