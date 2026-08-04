@@ -4,14 +4,65 @@
 //! Drivers for creating portable filesystem trees (`fstree`) from _virtual_
 //! fstrees ([`vfs::Tree`]) and their backing content (`CAS` / content address store).
 
-use std::fmt;
+use std::{fmt, path::Path};
 
 use astr::AStr;
 use stone::{StonePayloadLayoutFile, StonePayloadLayoutRecord};
 
-use crate::package;
+use crate::{Installation, package};
+
+pub use self::native::NativeDriver;
 
 pub mod native;
+
+/// A specific `fstree` format supported by `moss`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::Display)]
+#[strum(serialize_all = "lowercase")]
+pub enum Format {
+    /// An `fstree` backed by the native filesystem, using
+    /// reflinks, hardlinks or normal copy operations to
+    /// populate based on the best strategy.
+    Native,
+}
+
+/// A driver capable of managing the lifecycle of an `fstree` for a specific [`Format`].
+pub trait Driver {
+    /// Driver specific error
+    type Error;
+
+    /// Blit a new `fstree` to `target` from the supplied virtual fstree
+    /// and asset backing from [`Installation`].
+    fn blit(
+        &self,
+        installation: &Installation,
+        tree: &vfs::Tree<PendingFile>,
+        target: &Path,
+    ) -> Result<(), Self::Error>;
+
+    /// Bring up an `fstree` at the `target` path with the requsted `Mutability`.
+    ///
+    /// Some types of fstrees require mounting to be active & usable. That happens
+    /// at this layer, if needed.
+    fn bring_up(&self, _target: &Path, _mutability: Mutability) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    /// Bring down an `fstree` at the `target` path.
+    ///
+    /// Some types of fstrees require unmounting to be disabled. That happens
+    /// at this layer, if needed.
+    fn bring_down(&self, _target: &Path) -> Result<(), Self::Error> {
+        Ok(())
+    }
+}
+
+/// The requested mutability of an `fstree`
+pub enum Mutability {
+    /// Read only
+    ReadOnly,
+    /// Read write
+    ReadWrite,
+}
 
 /// A file pending creation to an `fstree`
 #[derive(Debug, Clone)]

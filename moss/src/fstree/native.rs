@@ -26,7 +26,18 @@ use vfs::tree::{BlitFile, Element};
 
 use crate::Installation;
 
-use super::PendingFile;
+use super::{Driver, PendingFile};
+
+#[derive(Debug, Clone, Copy)]
+pub struct NativeDriver;
+
+impl Driver for NativeDriver {
+    type Error = Error;
+
+    fn blit(&self, installation: &Installation, tree: &vfs::Tree<PendingFile>, target: &Path) -> Result<(), Error> {
+        blit_root(installation, tree, target)
+    }
+}
 
 struct BlitContext<'a> {
     is_user_root: bool,
