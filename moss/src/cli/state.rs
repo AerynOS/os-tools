@@ -2,12 +2,14 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use std::{
+    collections::HashSet,
     io,
+    ops::RangeInclusive,
     path::{Path, PathBuf},
 };
 
 use chrono::Local;
-use clap::{ArgAction, ArgMatches, Command, CommandFactory, FromArgMatches, Parser, arg};
+use clap::Parser;
 use fs_err as fs;
 use moss::{
     Installation, State,
@@ -18,135 +20,185 @@ use nix::unistd::gethostname;
 use thiserror::Error;
 use tui::Styled;
 
-pub fn command() -> Command {
-    Command::new("state")
-        .about("Manage state")
-        .long_about("Manage state ...")
-        .subcommand_required(true)
-        .subcommand(Command::new("active").about("List the active state"))
-        .subcommand(Command::new("list").about("List all states"))
-        .subcommand(
-            Command::new("activate")
-                .about("Activate a state")
-                .arg(
-                    arg!(<ID> "State id to be activated")
-                        .action(ArgAction::Set)
-                        .value_parser(clap::value_parser!(u64)),
-                )
-                .arg(arg!(--"skip-triggers" "Do not run triggers on activation").action(ArgAction::SetTrue))
-                .arg(arg!(--"skip-boot" "Do not sync boot on activation").action(ArgAction::SetTrue)),
-        )
-        .subcommand(
-            Command::new("query").about("Query information for a state").arg(
-                arg!(<ID> "State id to query")
-                    .action(ArgAction::Set)
-                    .value_parser(clap::value_parser!(u64)),
-            ),
-        )
-        .subcommand(
-            Command::new("prune")
-                .about("Prune archived states")
-                .arg(
-                    arg!(-k --keep "Keep this many states")
-                        .action(ArgAction::Set)
-                        .default_value("10")
-                        .value_parser(clap::value_parser!(u64).range(1..)),
-                )
-                .arg(
-                    arg!(--"include-newer" "Include states newer than the active state when pruning")
-                        .action(ArgAction::SetTrue),
-                ),
-        )
-        .subcommand(
-            Command::new("remove")
-                .about("Remove archived state(s)")
-                .arg(arg!(<ID> ... "State id(s) to be removed").value_parser(clap::value_parser!(String))),
-        )
-        .subcommand(
-            Command::new("verify")
-                .about("Verify and fix system states and assets")
-                .arg(arg!(--verbose "Vebose output").action(ArgAction::SetTrue)),
-        )
-        .subcommand(Export::command())
-        // For profiling only, hence hidden.
-        //
-        // Builds a VFS of the currently-active state, and throws it away again.
-        // Run this through hyperfine / valgrind / heaptrack to profile the VFS
-        // code.
-        .subcommand(Command::new("build-vfs").hide(true))
-}
+use crate::cli::{Confirmation, Global};
 
 #[derive(Debug, Parser)]
-#[command(name = "export", about = "Export a state as a system-model.kdl file")]
-struct Export {
-    /// State id to export or current state if omitted
-    id: Option<i32>,
-    /// Export to the provided path or stdout if not supplied
-    ///
-    /// If supplied without a path or path is a directory, outputs to "system-model-{hostname}-fstxn-{id}.kdl"
-    #[arg(short, long)]
-    output: Option<Option<PathBuf>>,
+#[command(
+    name = "state",
+    about = "Manage the available software repositories visible to the installed system"
+)]
+pub struct Command {
+    #[command(subcommand)]
+    subcommand: Subcommand,
 }
 
-pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
-    match args.subcommand() {
-        Some(("active", _)) => active(installation),
-        Some(("list", _)) => list(installation),
-        Some(("activate", args)) => activate(args, installation),
-        Some(("build-vfs", _)) => build_vfs(installation),
-        Some(("query", args)) => query(args, installation),
-        Some(("prune", args)) => prune(args, installation),
-        Some(("remove", args)) => remove(args, installation),
-        Some(("verify", args)) => verify(args, installation),
-        Some(("export", args)) => export(args, installation),
-        _ => unreachable!(),
-    }
-}
-
-pub fn parse_id_or_range(s: &str) -> Result<Vec<u64>, String> {
-    if let Some((start, end)) = s.split_once('-') {
-        let start = start.parse::<u64>().map_err(|_| "invalid start")?;
-        let end = end.parse::<u64>().map_err(|_| "invalid end")?;
-
-        if start > end {
-            return Err("range start must be <= end".into());
+impl Command {
+    pub fn handle(self, global: Global, installation: Installation) -> Result<(), Error> {
+        match self.subcommand {
+            Subcommand::Activate(args) => activate(args, installation)?,
+            Subcommand::List(args) => list(global, args, installation)?,
+            Subcommand::Search(args) => search(global, args, installation)?,
+            Subcommand::Info { id } => info(id, installation)?,
+            Subcommand::Verify => verify(global, installation)?,
+            Subcommand::Export { id, output } => export(id, output, installation)?,
+            Subcommand::Remove(args) => remove(global, args, installation)?,
+            Subcommand::BuildVfs => build_vfs(installation)?,
         }
+        Ok(())
+    }
+}
 
-        Ok((start..=end).collect())
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error("client")]
+    Client(#[from] client::Error),
+    #[error("db")]
+    DB(#[from] moss::db::Error),
+    #[error("io")]
+    Io(#[from] io::Error),
+    #[error("no active state")]
+    NoActiveState,
+    #[error("invalid state id or range: {0}")]
+    InvalidRange(String),
+}
+
+#[derive(Debug, clap::Subcommand)]
+enum Subcommand {
+    #[command(visible_alias("sac"), about = "Activate the given valid state")]
+    Activate(ActivateArgs),
+
+    #[command(visible_alias("stl"), about = "List all states")]
+    List(ListArgs),
+
+    #[command(visible_alias = "sts")]
+    Search(SearchArgs),
+
+    #[command(visible_alias = "sti", about = "Show information about a state")]
+    Info {
+        #[arg(help = "State ID. If \"active\" is passed, show the currently active state")]
+        id: String,
+    },
+
+    #[command(visible_alias("sve"), about = "Verify and fix system states and assets")]
+    Verify,
+
+    #[command(visible_alias("ste"), about = "Export a state as a system-model.kdl file")]
+    Export {
+        /// State id to export or current state if omitted.
+        id: Option<i32>,
+
+        /// Export to the provided path or stdout if not supplied.
+        ///
+        /// If supplied without a path or path is a directory,
+        /// outputs to "system-model-{hostname}-fstxn-{id}.kdl".
+        #[arg(short, long)]
+        output: Option<Option<PathBuf>>,
+    },
+
+    #[command(
+        visible_alias("srm"),
+        about = "Remove arbitrary states. Supports single states and inclusive ranges a-b"
+    )]
+    Remove(RemoveArgs),
+
+    // For profiling only, hence hidden.
+    //
+    // Builds a VFS of the currently-active state, and throws it away again.
+    // Run this through hyperfine / valgrind / heaptrack to profile the VFS
+    // code.
+    #[command(hide = true)]
+    BuildVfs,
+}
+
+#[derive(Debug, Clone, clap::Args)]
+struct ActivateArgs {
+    state: i32,
+
+    #[arg(long, help = "Do not run triggers on activation")]
+    skip_triggers: bool,
+
+    #[arg(long, help = "Do not sync boot on activation")]
+    skip_boot: bool,
+}
+
+#[derive(Debug, Clone, clap::Args)]
+struct ListArgs {
+    #[arg(short = 's', long = "sync", help = "Reduce the output to synced states")]
+    filter_synced: bool,
+
+    #[arg(short = 'a', long = "activate", help = "Reduce the output to activated states")]
+    filter_activated: bool,
+
+    #[arg(short = 'r', long = "remove", help = "Reduce the output to removed states")]
+    filter_removed: bool,
+}
+
+#[derive(Clone, Debug, clap::Args)]
+struct SearchArgs {
+    #[arg(help = "State ID to show. If \"active\" is passed, show the currently active state")]
+    id: Option<String>,
+
+    #[arg(
+        short = 's',
+        long = "sync",
+        conflicts_with = "id",
+        help = "Reduce the output to synced states"
+    )]
+    filter_synced: bool,
+
+    #[arg(
+        short = 'a',
+        long = "activate",
+        conflicts_with = "id",
+        help = "Reduce the output to activated states"
+    )]
+    filter_activated: bool,
+
+    #[arg(
+        short = 'r',
+        long = "remove",
+        conflicts_with = "id",
+        help = "Reduce the output to removed states"
+    )]
+    filter_removed: bool,
+}
+
+// These args are mutually exclusive. We would use a enum for that,
+// but clap does not support this feature: we must pass "exclusive=true"
+// to all args manually. See
+// https://users.rust-lang.org/t/mutually-exclusive-command-line-arguments-with-clap-or-another-library/134091
+#[derive(Debug, Clone, clap::Args)]
+struct RemoveArgs {
+    #[arg(num_args=1.., exclusive = true, value_parser = parse_state_list)]
+    states: Vec<RangeInclusive<i32>>,
+
+    #[arg(short, long, exclusive = true, help = "Remove all but the n latest states")]
+    keep: Option<u32>,
+
+    #[arg(short, long, exclusive = true, help = "Remove all but the currently bootable states")]
+    prune: bool,
+}
+
+fn parse_state_list(s: &str) -> Result<RangeInclusive<i32>, String> {
+    if let Some((start, end)) = s.split_once('-') {
+        let start = start.parse::<i32>().map_err(|_| "invalid start of range")?;
+        let end = end.parse::<i32>().map_err(|_| "invalid end of range")?;
+        let range = start..=end;
+        if range.is_empty() {
+            return Err("invalid range of IDs".to_owned());
+        }
+        Ok(range)
     } else {
-        Ok(vec![s.parse().map_err(|_| "invalid number")?])
+        let id = s.parse::<i32>().map_err(|_| "invalid number")?;
+        Ok(id..=id)
     }
 }
 
-/// List the active state
-pub fn active(installation: Installation) -> Result<(), Error> {
-    let client = Client::new(environment::NAME, installation)?;
-
-    if let Some(state) = client.get_active_state()? {
-        print_state(state);
-    }
-
-    Ok(())
-}
-
-/// List all known states, newest first
-pub fn list(installation: Installation) -> Result<(), Error> {
-    let client = Client::new(environment::NAME, installation)?;
-
-    for state in client.list_states()?.into_iter().rev() {
-        print_state(state);
-    }
-
-    Ok(())
-}
-
-pub fn activate(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
-    let new_id = *args.get_one::<u64>("ID").unwrap() as i32;
-    let skip_triggers = args.get_flag("skip-triggers");
-    let skip_boot = args.get_flag("skip-boot");
+fn activate(args: ActivateArgs, installation: Installation) -> Result<(), Error> {
+    let new_id = state::Id::from(args.state);
 
     let client = Client::new(environment::NAME, installation)?;
-    let old_id = client.activate_state(new_id.into(), skip_triggers, skip_boot)?;
+    let old_id = client.activate_state(new_id, args.skip_triggers, args.skip_boot)?;
 
     println!(
         "State {} activated {}",
@@ -157,77 +209,58 @@ pub fn activate(args: &ArgMatches, installation: Installation) -> Result<(), Err
     Ok(())
 }
 
-pub fn build_vfs(installation: Installation) -> Result<(), Error> {
+/// List all known states, newest first
+fn list(global: Global, args: ListArgs, installation: Installation) -> Result<(), Error> {
+    if args.filter_activated || args.filter_synced || args.filter_removed {
+        unimplemented!("Filtered arguments not yet implemented");
+    }
+
     let client = Client::new(environment::NAME, installation)?;
 
     if let Some(state) = client.get_active_state()? {
-        let fstree = client.vfs(state.selections.iter().map(|selection| &selection.package))?;
-
-        std::hint::black_box(fstree);
+        print_state(state.clone());
+        if global.verbose {
+            print_state_selections(state, &client)?;
+        }
+    }
+    for state in client.list_states()?.into_iter().rev() {
+        print_state(state.clone());
+        if global.verbose {
+            print_state_selections(state, &client)?;
+        }
     }
 
     Ok(())
 }
 
-pub fn query(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
-    let id = *args.get_one::<u64>("ID").unwrap() as i32;
+fn search(_global: Global, _args: SearchArgs, _installation: Installation) -> Result<(), Error> {
+    unimplemented!("searching states is not yet implemented");
+}
 
+fn info(id: String, installation: Installation) -> Result<(), Error> {
     let client = Client::new(environment::NAME, installation)?;
-
-    let state = client.get_state(id.into())?;
-
-    print_state(state.clone());
-    print_state_selections(state, &client)?;
-
+    if id.to_lowercase() == "active" {
+        if let Some(state) = client.get_active_state()? {
+            print_state(state.clone());
+            print_state_selections(state, &client)?;
+        }
+    } else {
+        let id = id.parse::<i32>().map_err(|_| Error::InvalidRange(id.to_owned()))?;
+        let state = client.get_state(id.into())?;
+        print_state(state.clone());
+        print_state_selections(state, &client)?;
+    }
     Ok(())
 }
 
-pub fn prune(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
-    let keep = *args.get_one::<u64>("keep").unwrap();
-    let include_newer = args.get_flag("include-newer");
-    let yes = args.get_flag("yes");
-
+fn verify(global: Global, installation: Installation) -> Result<(), Error> {
     let client = Client::new(environment::NAME, installation)?;
-    client.prune_states(prune::Strategy::KeepRecent { keep, include_newer }, yes)?;
-
+    client.verify(global.confirm == Confirmation::DoNotAsk, global.verbose)?;
     Ok(())
 }
 
-pub fn remove(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
-    let ids = args
-        .get_many::<String>("ID")
-        .into_iter()
-        .flatten()
-        .map(|s| parse_id_or_range(s))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(Error::InvalidRange)?
-        .into_iter()
-        .flatten()
-        .map(|id| state::Id::from(id as i32))
-        .collect::<Vec<state::Id>>();
-
-    let yes = args.get_flag("yes");
-
-    let client = Client::new(environment::NAME, installation)?;
-    client.prune_states(prune::Strategy::Remove(&ids), yes)?;
-
-    Ok(())
-}
-
-pub fn verify(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
-    let verbose = args.get_flag("verbose");
-    let yes = args.get_flag("yes");
-
-    let client = Client::new(environment::NAME, installation)?;
-    client.verify(yes, verbose)?;
-
-    Ok(())
-}
-
-fn export(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
-    let export = Export::from_arg_matches(args).expect("validate by clap");
-
-    let id = match export.id {
+fn export(id: Option<i32>, output: Option<Option<PathBuf>>, installation: Installation) -> Result<(), Error> {
+    let id = match id {
         Some(id) => state::Id::from(id),
         None => installation.active_state.ok_or(Error::NoActiveState)?,
     };
@@ -235,7 +268,7 @@ fn export(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
     let client = Client::new(environment::NAME, installation)?;
     let system_model = client.export_state(id)?;
 
-    match export.output {
+    match output {
         Some(maybe_path) => {
             let format_filename = || {
                 if let Some(hostname) = gethostname().ok().and_then(|s| s.into_string().ok()) {
@@ -263,6 +296,43 @@ fn export(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
         None => {
             println!("{}", system_model.encoded());
         }
+    }
+
+    Ok(())
+}
+
+fn remove(global: Global, args: RemoveArgs, installation: Installation) -> Result<(), Error> {
+    let client = Client::new(environment::NAME, installation)?;
+
+    if !args.states.is_empty() {
+        let mut ids = HashSet::new();
+        for range in args.states {
+            ids.extend(range.map(state::Id::from));
+        }
+        let ids = ids.into_iter().collect::<Vec<_>>();
+        client.prune_states(prune::Strategy::Remove(&ids), global.confirm == Confirmation::DoNotAsk)?;
+    } else if let Some(num) = args.keep {
+        client.prune_states(
+            prune::Strategy::KeepRecent {
+                keep: num as u64,
+                include_newer: false,
+            },
+            global.confirm == Confirmation::DoNotAsk,
+        )?;
+    } else if args.prune {
+        unimplemented!("Pruning all states but bootable ones is not yet implemented");
+    }
+
+    unreachable!();
+}
+
+fn build_vfs(installation: Installation) -> Result<(), Error> {
+    let client = Client::new(environment::NAME, installation)?;
+
+    if let Some(state) = client.get_active_state()? {
+        let fstree = client.vfs(state.selections.iter().map(|selection| &selection.package))?;
+
+        std::hint::black_box(fstree);
     }
 
     Ok(())
@@ -348,18 +418,4 @@ impl Revision {
     fn size(&self) -> usize {
         self.version.len() + self.release.to_string().len()
     }
-}
-
-#[derive(Debug, Error)]
-pub enum Error {
-    #[error("client")]
-    Client(#[from] client::Error),
-    #[error("db")]
-    DB(#[from] moss::db::Error),
-    #[error("io")]
-    Io(#[from] io::Error),
-    #[error("no active state")]
-    NoActiveState,
-    #[error("invalid state id or range: {0}")]
-    InvalidRange(String),
 }
