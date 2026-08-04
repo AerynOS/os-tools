@@ -20,7 +20,7 @@ use nix::{
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use stone::StonePayloadLayoutFile;
 use thiserror::Error;
-use tracing::{info, trace, warn};
+use tracing::{debug, info, trace, warn};
 use tui::{ProgressBar, ProgressStyle, Styled};
 use vfs::tree::{BlitFile, Element};
 
@@ -137,6 +137,29 @@ fn identify_blit_strategy(installation: &Installation, blit_target: &Path) -> Bl
     strategy
 }
 
+/// Queries the current hard limit for number of open files
+/// and sets it as the soft limit.
+fn set_nofile_ulimit_soft_to_hard() {
+    use nix::sys::resource::{Resource, getrlimit, setrlimit};
+
+    let (soft_limit, hard_limit) = match getrlimit(Resource::RLIMIT_NOFILE) {
+        Ok(limits) => limits,
+        Err(error) => {
+            warn!(%error,"Failed to call getrlimit(nofile)");
+            return;
+        }
+    };
+
+    debug!(%soft_limit, %hard_limit, "Queried current process nofile limits");
+
+    if let Err(error) = setrlimit(Resource::RLIMIT_NOFILE, hard_limit, hard_limit) {
+        warn!(%error, "Failed to call setrlimit(nofile, {hard_limit}, {hard_limit})");
+        return;
+    }
+
+    info!(%hard_limit, "Updated current process nofile soft limit to hard limit");
+}
+
 /// Blit the packages to a filesystem root
 ///
 /// This functionality is core to all moss filesystem transactions, forming the entire
@@ -150,6 +173,11 @@ fn identify_blit_strategy(installation: &Installation, blit_target: &Path) -> Bl
 /// This provides a very quick means to generate a hardlinked "snapshot" on-demand,
 /// which can then be activated via [`Self::promote_staging`]
 pub fn blit_root(installation: &Installation, tree: &vfs::Tree<PendingFile>, blit_target: &Path) -> Result<(), Error> {
+    // Up the process nofile soft limit to be equal
+    // to the allowed hard limit to minimize the risk
+    // of EMFILE during blit
+    set_nofile_ulimit_soft_to_hard();
+
     let is_user_root = Uid::effective().is_root();
 
     // Recreate dir

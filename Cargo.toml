@@ -55,6 +55,7 @@ nix = { version = "0.27.1", features = [
     "process",
     "mount",
     "hostname",
+    "resource",
     "signal",
     "term",
 ] }
