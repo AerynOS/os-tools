@@ -11,8 +11,8 @@ use std::sync::atomic::{AtomicI32, Ordering};
 use fs_err::{self as fs, PathExt as _};
 use nc::syscalls::syscall5;
 use nc::{
-    AT_EMPTY_PATH, AT_FDCWD, MOUNT_ATTR_RDONLY, MOVE_MOUNT_F_EMPTY_PATH, OPEN_TREE_CLOEXEC, OPEN_TREE_CLONE,
-    SYS_MOUNT_SETATTR, mount_attr_t, move_mount, open_tree,
+    AT_EMPTY_PATH, AT_FDCWD, AT_RECURSIVE, MOUNT_ATTR_RDONLY, MOVE_MOUNT_F_EMPTY_PATH, OPEN_TREE_CLOEXEC,
+    OPEN_TREE_CLONE, SYS_MOUNT_SETATTR, mount_attr_t, move_mount, open_tree,
 };
 use nix::errno::Errno;
 use nix::libc::SIGCHLD;
@@ -66,6 +66,18 @@ impl Container {
             source: host.into(),
             target: guest.into(),
             read_only: false,
+            recursive: false,
+        });
+        self
+    }
+
+    /// Create a read-write recursive bind mount
+    pub fn bind_rw_recursive(mut self, host: impl Into<PathBuf>, guest: impl Into<PathBuf>) -> Self {
+        self.binds.push(Bind {
+            source: host.into(),
+            target: guest.into(),
+            read_only: false,
+            recursive: true,
         });
         self
     }
@@ -76,6 +88,7 @@ impl Container {
             source: host.into(),
             target: guest.into(),
             read_only: true,
+            recursive: false,
         });
         self
     }
@@ -89,6 +102,7 @@ impl Container {
                 source,
                 target: guest.into(),
                 read_only: true,
+                recursive: false,
             });
         }
 
@@ -268,7 +282,7 @@ fn pivot(root: &Path, binds: &[Bind]) -> Result<(), ContainerError> {
         let source = bind.source.fs_err_canonicalize().context(FsErrSnafu)?;
         let target = root.join(bind.target.strip_prefix("/").unwrap_or(&bind.target));
 
-        bind_mount(&source, &target, bind.read_only)?;
+        bind_mount(&source, &target, bind.read_only, bind.recursive)?;
     }
 
     ensure_directory(&old_root)?;
@@ -332,7 +346,7 @@ fn ensure_empty_file(path: impl AsRef<Path>) -> Result<(), ContainerError> {
     Ok(())
 }
 
-fn bind_mount(source: &Path, target: &Path, read_only: bool) -> Result<(), ContainerError> {
+fn bind_mount(source: &Path, target: &Path, read_only: bool, recursive: bool) -> Result<(), ContainerError> {
     if source.is_dir() {
         ensure_directory(target)?;
     } else if source.is_file() {
@@ -345,8 +359,14 @@ fn bind_mount(source: &Path, target: &Path, read_only: bool) -> Result<(), Conta
 
     unsafe {
         let inner = || {
+            let mut flags = OPEN_TREE_CLONE | OPEN_TREE_CLOEXEC;
+
+            if recursive {
+                flags |= AT_RECURSIVE as u32;
+            }
+
             // Bind mount to fd
-            let fd = open_tree(AT_FDCWD, source, OPEN_TREE_CLONE | OPEN_TREE_CLOEXEC).map_err(Errno::from_i32)?;
+            let fd = open_tree(AT_FDCWD, source, flags).map_err(Errno::from_i32)?;
 
             // Set rd flag if applicable
             if read_only {
@@ -476,6 +496,7 @@ struct Bind {
     source: PathBuf,
     target: PathBuf,
     read_only: bool,
+    recursive: bool,
 }
 
 #[derive(Debug, Snafu)]

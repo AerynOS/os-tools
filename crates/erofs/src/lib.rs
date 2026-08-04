@@ -41,7 +41,7 @@ const ST_IFLNK: u16 = 0o120_000;
 /// a [`vfs::Tree`] of [`StonePayloadLayoutRecord`] entries.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct MetaImageWriter {
-    xattr_namespace: XattrNamespace,
+    pub xattr_namespace: XattrNamespace,
 }
 
 impl MetaImageWriter {
