@@ -1,63 +1,42 @@
 // SPDX-FileCopyrightText: 2023 AerynOS Developers
 // SPDX-License-Identifier: MPL-2.0
 
-use clap::{ArgMatches, Command, arg};
 use itertools::Itertools;
-use moss::{
-    Installation, Package, Provider,
-    client::{self, Client},
-    environment,
-    fstree::PendingFile,
-    package,
-};
+use moss::{Installation, Package, client::Client, environment, fstree::PendingFile, package};
 use stone::StonePayloadLayoutFile;
-use thiserror::Error;
 use tui::{Styled, TermSize};
 use vfs::tree::BlitFile;
 
-const COLUMN_WIDTH: usize = 20;
-
-pub fn command() -> Command {
-    Command::new("info")
-        .about("Query packages")
-        .long_about("List detailed package information from all available sources")
-        .arg(arg!(<NAME> ... "Packages to query").value_parser(clap::value_parser!(String)))
-        .arg(arg!(-f --files ... "Show files provided by package").action(clap::ArgAction::SetTrue))
-}
+use crate::cli::package::{Error, InfoArgs};
 
 /// For all arguments, try to match a package
-pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
-    let pkgs = args
-        .get_many::<String>("NAME")
-        .into_iter()
-        .flatten()
-        .cloned()
-        .collect::<Vec<_>>();
-    let show_files = args.get_flag("files");
+pub fn info(args: InfoArgs, installation: Installation) -> Result<(), Error> {
+    if !args.repositories.is_empty() {
+        unimplemented!("--repositories not yet supported")
+    }
 
     let client = Client::new(environment::NAME, installation)?;
 
-    for pkg in pkgs {
-        let lookup = Provider::from_name(&pkg).unwrap();
-        let resolved = client.lookup_packages_by_provider(&lookup, package::Flags::default());
+    let resolved = client.lookup_packages_by_provider(&args.provider, package::Flags::default());
 
-        if resolved.is_empty() {
-            return Err(Error::NotFound(pkg));
+    if resolved.is_empty() {
+        return Err(Error::NotFound(args.provider.to_string()));
+    }
+
+    for candidate in resolved {
+        print_package(&candidate);
+
+        if candidate.flags.installed && args.show_files {
+            let vfs = client.vfs([&candidate.id])?;
+            print_files(vfs);
         }
-
-        for candidate in resolved {
-            print_package(&candidate);
-
-            if candidate.flags.installed && show_files {
-                let vfs = client.vfs([&candidate.id])?;
-                print_files(vfs);
-            }
-            println!();
-        }
+        println!();
     }
 
     Ok(())
 }
+
+const COLUMN_WIDTH: usize = 20;
 
 /// Print the title for each metadata section
 fn print_titled(title: &'static str) {
@@ -195,12 +174,4 @@ fn print_files(vfs: vfs::Tree<PendingFile>) {
     for (path, meta) in files {
         println!("  {path}{}", meta.unwrap_or_default().dim());
     }
-}
-
-#[derive(Debug, Error)]
-pub enum Error {
-    #[error("No such package {0}")]
-    NotFound(String),
-    #[error("client")]
-    Client(#[from] client::Error),
 }

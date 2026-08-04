@@ -1,50 +1,23 @@
 // SPDX-FileCopyrightText: 2023 AerynOS Developers
 // SPDX-License-Identifier: MPL-2.0
 
-use clap::{ArgMatches, Command, arg};
 use fs_err::File;
 use std::io::{Read, Seek, sink};
 use std::path::PathBuf;
-use stone::{
-    StoneDecodedPayload, StonePayloadLayoutFile, StonePayloadMetaPrimitive, StonePayloadMetaTag, StoneReadError,
-};
-use thiserror::Error;
+use stone::{StoneDecodedPayload, StonePayloadLayoutFile, StonePayloadMetaPrimitive, StonePayloadMetaTag};
 
-const COLUMN_WIDTH: usize = 20;
+use crate::cli::package::{Error, InspectArgs};
 
-pub fn command() -> Command {
-    Command::new("inspect")
-        .about("Examine raw stone files")
-        .long_about("Show detailed (debug) information on a local `.stone` file")
-        .arg(arg!(<PATH> ... "files to inspect").value_parser(clap::value_parser!(PathBuf)))
-        .arg(arg!(--check "Check the integrity of the stone file(s)").action(clap::ArgAction::SetTrue))
-        .arg(
-            arg!(-q --quiet "Suppress output, only exit status indicates success or failure (requires --check)")
-                .action(clap::ArgAction::SetTrue)
-                .requires("check"),
-        )
-}
-
-///
 /// Inspect the given .stone files and print results
-///
-pub fn handle(args: &ArgMatches) -> Result<(), Error> {
-    let paths = args
-        .get_many::<PathBuf>("PATH")
-        .into_iter()
-        .flatten()
-        .cloned()
-        .collect::<Vec<_>>();
-
-    let check = args.get_flag("check");
-    let quiet = args.get_flag("quiet");
-
-    if check {
-        handle_check(paths, quiet)
+pub fn inspect(args: InspectArgs) -> Result<(), Error> {
+    if args.check {
+        handle_check(args.paths, args.quiet)
     } else {
-        handle_detailed(paths)
+        handle_detailed(args.paths)
     }
 }
+
+const COLUMN_WIDTH: usize = 20;
 
 fn handle_check(paths: Vec<PathBuf>, quiet: bool) -> Result<(), Error> {
     let mut had_error = false;
@@ -53,7 +26,7 @@ fn handle_check(paths: Vec<PathBuf>, quiet: bool) -> Result<(), Error> {
             println!("Checking: {:?}", path.display());
         }
 
-        match File::open(&path).map_err(Error::IO).and_then(check_stone_integrity) {
+        match File::open(&path).map_err(Error::Io).and_then(check_stone_integrity) {
             Ok(payload_kinds) => {
                 if !quiet {
                     for kind in payload_kinds {
@@ -204,24 +177,14 @@ fn check_stone_integrity(mut source: impl Read + Seek) -> Result<Vec<String>, Er
     Ok(found_payloads)
 }
 
-#[derive(Debug, Error)]
-pub enum Error {
-    #[error("io")]
-    IO(#[from] std::io::Error),
-
-    #[error("stone format")]
-    Format(#[from] StoneReadError),
-
-    #[error("One or more files failed the integrity check")]
-    ValidationFailed,
-}
-
 #[cfg(test)]
 mod tests {
+    use stone::StoneReadError;
+
     use super::*;
     use std::io::Cursor;
 
-    const VALID_STONE_BYTES: &[u8] = include_bytes!("../../../test/bash-completion-2.11-1-1-x86_64.stone");
+    const VALID_STONE_BYTES: &[u8] = include_bytes!("../../../../test/bash-completion-2.11-1-1-x86_64.stone");
 
     #[test]
     fn test_check_valid_stone() {
