@@ -12,24 +12,35 @@ pub struct Command {
     subcommand: Subcommand,
 }
 
-#[derive(Debug, clap::Subcommand)]
-pub enum Subcommand {
-    #[command(
-        about = "Prune cached artefacts",
-        long_about = "Prune cached artefacts
+impl Command {
+    pub fn handle(self, installation: Installation) -> Result<(), Error> {
+        match self.subcommand {
+            Subcommand::Prune => prune(installation),
+        }
+    }
+}
 
-This will remove all downloaded stones & unpacked asset data for packages not in any state or active repository."
+#[derive(Debug, Error)]
+pub enum Error {
+    #[error("failed to setup moss client")]
+    SetupClient(#[source] client::Error),
+    #[error("failed to prune cache")]
+    PruneCache(#[source] client::Error),
+}
+
+#[derive(Debug, clap::Subcommand)]
+
+enum Subcommand {
+    #[command(
+        about = concat!(
+            "Prune cached artefacts. ",
+            "This will remove all downloaded stones and unpacked asset data ",
+            "for packages not in any state or active repository")
     )]
     Prune,
 }
 
-pub fn handle(command: Command, installation: Installation) -> Result<(), Error> {
-    match command.subcommand {
-        Subcommand::Prune => handle_prune(installation),
-    }
-}
-
-fn handle_prune(installation: Installation) -> Result<(), Error> {
+fn prune(installation: Installation) -> Result<(), Error> {
     let client = Client::new(environment::NAME, installation).map_err(Error::SetupClient)?;
 
     let num_removed_files = client.prune_cache().map_err(Error::PruneCache)?;
@@ -43,12 +54,4 @@ fn handle_prune(installation: Installation) -> Result<(), Error> {
     }
 
     Ok(())
-}
-
-#[derive(Debug, Error)]
-pub enum Error {
-    #[error("failed to setup moss client")]
-    SetupClient(#[source] client::Error),
-    #[error("failed to prune cache")]
-    PruneCache(#[source] client::Error),
 }
