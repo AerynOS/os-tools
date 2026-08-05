@@ -3,20 +3,18 @@
 
 use std::path::PathBuf;
 
-use clap::{ArgMatches, CommandFactory, FromArgMatches, Parser};
+use clap::Parser;
 use moss::{Installation, client::Client, environment, runtime};
 use tracing::instrument;
 
 pub use moss::client::Error;
 
-pub fn command() -> clap::Command {
-    Command::command()
-}
+use crate::cli::{Confirmation, Global};
 
 #[derive(Debug, Parser)]
 #[command(
     name = "sync",
-    visible_alias = "up",
+    visible_aliases = ["sy", "up"],
     about = "Sync packages",
     long_about = "Sync package selections with candidates from the highest priority repository"
 )]
@@ -42,33 +40,29 @@ pub struct Command {
     import: Option<PathBuf>,
 }
 
-#[instrument(skip_all)]
-pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
-    let command = Command::from_arg_matches(args).expect("validated by clap");
+impl Command {
+    #[instrument(skip_all)]
+    pub fn handle(self, global: Global, installation: Installation) -> Result<(), Error> {
+        let mut client_builder = Client::builder(environment::NAME, installation);
 
-    let yes = *args.get_one::<bool>("yes").unwrap();
-    let simulate = command.dry_run;
-    let update = command.update;
+        if let Some(path) = self.import {
+            client_builder = client_builder.system_model_path(path);
+        }
 
-    let mut client_builder = Client::builder(environment::NAME, installation);
+        // Make ephemeral if a blit target was provided
+        if let Some(blit_target) = self.blit_target {
+            client_builder = client_builder.ephemeral(blit_target);
+        }
 
-    if let Some(path) = &command.import {
-        client_builder = client_builder.system_model_path(path);
+        let mut client = client_builder.build()?;
+
+        // Update repos if requested
+        if self.update {
+            runtime::block_on(client.refresh_repositories())?;
+        }
+
+        client.sync(global.confirm == Confirmation::DoNotAsk, self.dry_run)?;
+
+        Ok(())
     }
-
-    // Make ephemeral if a blit target was provided
-    if let Some(blit_target) = command.blit_target {
-        client_builder = client_builder.ephemeral(blit_target);
-    }
-
-    let mut client = client_builder.build()?;
-
-    // Update repos if requested
-    if update {
-        runtime::block_on(client.refresh_repositories())?;
-    }
-
-    client.sync(yes, simulate)?;
-
-    Ok(())
 }
