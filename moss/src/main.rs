@@ -3,6 +3,7 @@
 
 use std::{error::Error, sync::Arc};
 
+use clap::Parser;
 use moss::repository;
 use tracing::error;
 use tui::Styled;
@@ -11,7 +12,8 @@ mod cli;
 
 /// Main entry point
 fn main() {
-    if let Err(error) = cli::process() {
+    let cmd = cli::Command::parse();
+    if let Err(error) = cmd.run() {
         if let Some(error) = error_needs_manual_handling(&error) {
             match error {
                 ManuallyHandledError::UnsupportedRepos(_) => todo!("handle unsupported repo format"),
