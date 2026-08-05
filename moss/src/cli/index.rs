@@ -1,39 +1,35 @@
 // SPDX-FileCopyrightText: 2023 AerynOS Developers
 // SPDX-License-Identifier: MPL-2.0
+
 use std::path::PathBuf;
 
-use clap::Parser; // {ArgMatches, Command, arg, value_parser};
+use clap::Parser;
+use moss::client::index::Error;
 
 #[derive(Debug, Parser)]
 #[command(about = "Index a collection of .stone packages")]
 pub struct Command {
     #[arg(
         short,
-        long = "inputdir",
+        long = "input-dir",
         help = "The directory from which to start the index operation",
         default_value = ".",
         global = false
     )]
-    pub inputdir: Option<PathBuf>,
+    input_dir: PathBuf,
+
     #[arg(
         short,
-        long = "outputdir",
-        help = "The directory to which to write the stone.index (defaults to {index_dir})",
-        default_value = "{index_dir}",
+        long = "output-dir",
+        help = "The directory to which to write the stone.index (defaults to INPUT-DIR)",
         global = false
     )]
-    pub outputdir: Option<PathBuf>,
+    output_dir: Option<PathBuf>,
 }
 
-pub use moss::client::index::Error;
-
-pub fn handle(command: Command) -> Result<(), Error> {
-    let Command { inputdir, outputdir } = command;
-
-    let _inputdir = command.inputdir.clone();
-    let _outputdir = command.outputdir.clone();
-
-    moss::client::index(&_inputdir.unwrap(), _outputdir.as_deref())?;
-
-    Ok(())
+impl Command {
+    pub fn handle(self) -> Result<(), Error> {
+        moss::client::index(&self.input_dir, self.output_dir.as_deref())?;
+        Ok(())
+    }
 }
