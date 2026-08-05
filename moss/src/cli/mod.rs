@@ -28,10 +28,10 @@ mod version;
 /// Generate the new CLI command structure
 #[derive(Debug, Parser)]
 pub struct Command {
-    #[command(flatten)]
-    global: Global,
     #[command(subcommand)]
     subcommand: Option<Subcommand>,
+    #[command(flatten)]
+    global: Global,
 }
 
 impl Command {
@@ -122,7 +122,9 @@ pub struct Global {
     #[arg(
         short,
         long = "verbose",
+        global = true,
         help = "Prints additional information about what moss is doing",
+        help_heading = "Global Options",
         default_value = "false",
         global = true
     )]
@@ -130,7 +132,9 @@ pub struct Global {
     #[arg(
         short = 'V',
         long,
+        global = true,
         help = "Prints out version information and exits",
+        help_heading = "Global Options",
         default_value = "false",
         global = true
     )]
@@ -138,7 +142,9 @@ pub struct Global {
     #[arg(
         short = 'D',
         long = "directory",
+        global = true,
         help = "Root directory",
+        help_heading = "Global Options",
         default_value = "/",
         global = true
     )]
@@ -147,22 +153,35 @@ pub struct Global {
     pub cache_dir: Option<PathBuf>,
     #[arg(
         long,
+        global = true,
         help = "Logging configuration: <level>[:<format>][:<destination>]\nLevels: trace, debug, info, warn, error\nFormats: text, json\nDestinations: stderr, <file>",
+        help_heading = "Global Options",
         global = true
     )]
     log: Option<String>,
-    #[arg(short = 'y', long = "yes", action = clap::ArgAction::SetTrue, help = "Assume yes for all questions", global = true)]
+    #[arg(
+        short = 'y',
+        long = "yes",
+        global = true,
+        action = clap::ArgAction::SetTrue,
+        help = "Assume yes for all questions",
+        help_heading = "Global Options",
+    )]
     pub confirm: Confirmation,
     #[arg(
         long = "generate-manpages",
+        global = true,
         help = "Generate man pages in specified directory",
+        help_heading = "Global Options",
         value_name = "DIR",
         hide = true
     )]
     generate_manpages: Option<PathBuf>,
     #[arg(
         long = "generate-completions",
+        global = true,
         help = "Generate shell completions in specified directory",
+        help_heading = "Global Options",
         value_name = "DIR",
         hide = true
     )]
