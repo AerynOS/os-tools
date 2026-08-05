@@ -1,30 +1,30 @@
 // SPDX-FileCopyrightText: 2023 AerynOS Developers
 // SPDX-License-Identifier: MPL-2.0
 
-use clap::{ArgMatches, Command, arg};
+use clap::Parser;
 
-/// Construct the Version command
-pub fn command() -> Command {
-    Command::new("version")
-        .about("Display version and exit")
-        .arg(arg!(-f --"full" "Print the full build and version info").action(clap::ArgAction::SetTrue))
+#[derive(Debug, Parser)]
+#[command(name = "version", about = "Display version and exit")]
+pub struct Command {
+    #[arg(short, long, help = "Print the full build and version info")]
+    full: bool,
 }
 
-pub fn handle(args: &ArgMatches) {
-    let show_full = args.get_flag("full");
-    if show_full {
-        print_full();
-    } else {
-        print();
+impl Command {
+    /// Handles the "version" subcommand.
+    pub fn handle(self) {
+        if self.full {
+            print_full();
+        } else {
+            print();
+        }
     }
 }
 
-/// Print program version
 pub fn print() {
     println!("moss {}", tools_buildinfo::get_simple_version());
 }
 
-/// Print additional build information
-pub fn print_full() {
+fn print_full() {
     println!("moss {}", tools_buildinfo::get_full_version());
 }
