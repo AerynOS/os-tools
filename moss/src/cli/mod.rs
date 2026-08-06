@@ -1,7 +1,7 @@
 // SPDX-FileCopyrightText: 2023 AerynOS Developers
 // SPDX-License-Identifier: MPL-2.0
 
-use std::{io, path::PathBuf};
+use std::{io, ops::Deref, path::PathBuf};
 
 use clap::{Args, CommandFactory, Parser};
 use clap_complete::{
@@ -36,7 +36,7 @@ pub struct Command {
 
 impl Command {
     /// Run the CLI according to users' flags and arguments.
-    pub fn run(self) -> Result<(), Error> {
+    pub fn run(self) -> Result<(), BoxedError> {
         // Prints the cli's information about version at startup
         if self.global.version {
             println!("moss {}", tools_buildinfo::get_full_version());
@@ -281,6 +281,26 @@ pub enum Error {
 
     #[error("I/O error")]
     Io(#[from] io::Error),
+}
+
+pub struct BoxedError(Box<Error>);
+
+impl<E: std::error::Error> From<E> for BoxedError
+where
+    Error: From<E>,
+{
+    fn from(value: E) -> Self {
+        let error = Error::from(value);
+        Self(Box::new(error))
+    }
+}
+
+impl Deref for BoxedError {
+    type Target = Error;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
 }
 
 #[cfg(test)]
