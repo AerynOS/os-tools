@@ -12,7 +12,6 @@ pub fn list(args: ListArgs, installation: Installation) -> Result<(), package::E
     }
 
     let mut flags = Flags::new();
-    let mut sync = None;
     if args.available {
         flags = flags.with_available();
     }
@@ -21,14 +20,13 @@ pub fn list(args: ListArgs, installation: Installation) -> Result<(), package::E
     }
     if args.sync {
         flags = flags.with_installed();
-        sync = Some(Sync::All);
     }
 
     // Grab a client for the target, enumerate packages
     let client = Client::new(environment::NAME, installation)?;
     let pkgs = client.list_packages(flags).collect::<Vec<_>>();
 
-    let sync_available = if sync.is_some() {
+    let sync_available = if args.sync {
         client.list_packages(Flags::new().with_available()).collect::<Vec<_>>()
     } else {
         vec![]
@@ -46,15 +44,8 @@ pub fn list(args: ListArgs, installation: Installation) -> Result<(), package::E
                 .iter()
                 // Get first (priority based)
                 .find(|u| u.meta.name == p.meta.name)
-                // Ensure it's an upgrade (if `upgrades-only`)
-                // otherwise check if it's a change
-                .filter(|u| {
-                    if matches!(sync, Some(Sync::Upgrades)) {
-                        u.meta.source_release > p.meta.source_release
-                    } else {
-                        u.meta.source_release != p.meta.source_release
-                    }
-                })
+                // Find unsynced
+                .filter(|u| u.meta.source_release != p.meta.source_release)
                 .map(|u| Revision {
                     version: u.meta.version_identifier.clone(),
                     release: u.meta.source_release.to_string(),
@@ -75,7 +66,7 @@ pub fn list(args: ListArgs, installation: Installation) -> Result<(), package::E
                 sync,
             }
         })
-        .filter(|item| if sync.is_some() { item.sync.is_some() } else { true })
+        .filter(|item| if args.sync { item.sync.is_some() } else { true })
         .collect::<Vec<_>>();
 
     // Thanks to priorities, first in list is the winning candidate in list available.
@@ -118,11 +109,6 @@ pub fn list(args: ListArgs, installation: Installation) -> Result<(), package::E
     }
 
     Ok(())
-}
-
-enum Sync {
-    All,
-    Upgrades,
 }
 
 #[derive(Debug)]
