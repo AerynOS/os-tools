@@ -282,3 +282,16 @@ pub enum Error {
     #[error("I/O error")]
     Io(#[from] io::Error),
 }
+
+#[cfg(test)]
+mod tests {
+    use clap::CommandFactory;
+
+    use super::Command;
+
+    #[test]
+    fn cli_tree_is_valid() {
+        let cmd: clap::Command = Command::command();
+        cmd.debug_assert();
+    }
+}
