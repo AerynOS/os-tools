@@ -117,6 +117,7 @@ impl Database {
                 LEFT JOIN state_selections ss ON s.id = ss.state_id
                 WHERE s.id = ?1 OR ?1 IS NULL
                 GROUP BY s.id
+                ORDER BY s.id
             "})?;
             let rows = stmt
                 .query_and_then([id.map(i32::from)], |row: &Row<'_>| -> Result<State, Error> {
