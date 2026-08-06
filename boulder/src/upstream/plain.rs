@@ -12,7 +12,7 @@ use fs_err as fs;
 use moss::{request, util};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
-use tui::{ProgressBar, ProgressStyle};
+use tui::{ProgressBar, ProgressStyle, Styled};
 use url::Url;
 
 /// Downloads the source archive into the desired file path and returns
@@ -26,6 +26,7 @@ pub async fn fetch(url: Url, file_path: &Path, pb: &ProgressBar) -> Result<Hash,
             .unwrap()
             .tick_chars("--=≡■≡=--"),
     );
+    pb.set_message(format!("{} {}", "Downloading".blue(), url));
 
     let hash = request::download_with_progress_and_sha256(url.clone(), file_path, |progress| pb.inc(progress.delta))
         .await

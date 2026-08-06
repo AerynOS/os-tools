@@ -9,7 +9,7 @@ use std::{
 use fs_err as fs;
 use moss::util;
 use thiserror::Error;
-use tui::{ProgressBar, ProgressStyle};
+use tui::{ProgressBar, ProgressStyle, Styled};
 use url::Url;
 
 /// Downloads the Git repository inside the container directory.
@@ -19,6 +19,7 @@ pub async fn clone_mirror(
     pb: &ProgressBar,
 ) -> Result<gitwrap::Repository, gitwrap::Error> {
     let cb = set_progress_bar_style(pb);
+    pb.set_message(format!("{} {}", "Cloning".blue(), url));
 
     let result = gitwrap::Repository::clone_mirror_progress(container_dir, url, cb).await;
     pb.finish_and_clear();
@@ -187,6 +188,7 @@ pub enum Error {
 
 async fn fetch(repo: &gitwrap::Repository, pb: &ProgressBar) -> Result<(), gitwrap::Error> {
     let cb = set_progress_bar_style(pb);
+    pb.set_message("Fetching".blue().to_string());
 
     let result = repo.fetch_progress(cb).await;
     pb.finish_and_clear();
