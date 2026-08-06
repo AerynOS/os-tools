@@ -4,15 +4,15 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt, io,
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use astr::AStr;
 use fs_err as fs;
-use rayon::iter::{IntoParallelIterator as _, IntoParallelRefIterator as _, ParallelIterator as _};
+use rayon::iter::{IntoParallelIterator as _, ParallelBridge, ParallelIterator as _};
 use stone::{StoneDigestWriter, StoneDigestWriterHasher, StonePayloadLayoutFile};
 use tui::{
-    ProgressBar, ProgressStyle, Styled,
+    MultiProgress, ProgressBar, ProgressStyle, Styled,
     dialoguer::{Confirm, theme::ColorfulTheme},
 };
 use vfs::tree::BlitFile;
@@ -41,13 +41,16 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
             .push((package, file));
     }
 
-    let pb = ProgressBar::new(unique_assets.len() as u64)
-        .with_message("Verifying")
-        .with_style(
-            ProgressStyle::with_template("\n|{bar:20.red/blue}| {pos}/{len} {wide_msg}")
-                .unwrap()
-                .progress_chars("■≡=- "),
-        );
+    let mpb = MultiProgress::new();
+    let pb = mpb.add(
+        ProgressBar::new(unique_assets.len() as u64)
+            .with_message("Verifying")
+            .with_style(
+                ProgressStyle::with_template("\n|{bar:20.red/blue}| {pos}/{len} {wide_msg}")
+                    .unwrap()
+                    .progress_chars("■≡=- "),
+            ),
+    );
     pb.tick();
 
     // For each asset, ensure it exists in the content store and isn't corrupt (hash is correct)
@@ -61,14 +64,14 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
 
             let files = meta.iter().map(|(_, file)| file).cloned().collect::<BTreeSet<_>>();
 
+            pb.inc(1);
             pb.set_message(format!("Verifying {display_hash}"));
 
             if !path.exists() {
-                pb.inc(1);
                 if verbose {
-                    pb.suspend(|| println!(" {} {display_hash} - {files:?}", "×".yellow()));
+                    mpb.suspend(|| println!(" {} {display_hash} - {files:?}", "×".yellow()));
                 }
-                acc.push(Issue::MissingAsset {
+                acc.push(Issue::MissingCasAsset {
                     hash,
                     files,
                     packages: meta.into_iter().map(|(package, _)| package).collect(),
@@ -76,22 +79,13 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
                 return Ok(acc);
             }
 
-            let mut hasher = StoneDigestWriterHasher::new();
-            let mut digest_writer = StoneDigestWriter::new(io::sink(), &mut hasher);
-            let mut file = fs::File::open(&path)?;
-
-            // Copy bytes to null sink so we don't
-            // explode memory
-            io::copy(&mut file, &mut digest_writer)?;
-
-            let verified_hash = format!("{:02x}", hasher.digest128());
+            let verified_hash = xxh3_128_hash(&path)?;
 
             if verified_hash != hash {
-                pb.inc(1);
                 if verbose {
-                    pb.suspend(|| println!(" {} {display_hash} - {files:?}", "×".yellow()));
+                    mpb.suspend(|| println!(" {} {display_hash} - {files:?}", "×".yellow()));
                 }
-                acc.push(Issue::CorruptAsset {
+                acc.push(Issue::CorruptCasAsset {
                     hash,
                     files,
                     packages: meta.into_iter().map(|(package, _)| package).collect(),
@@ -99,9 +93,8 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
                 return Ok(acc);
             }
 
-            pb.inc(1);
             if verbose {
-                pb.suspend(|| println!(" {} {display_hash} - {files:?}", "»".green()));
+                mpb.suspend(|| println!(" {} {display_hash} - {files:?}", "»".green()));
             }
 
             Ok(acc)
@@ -113,61 +106,103 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
 
     pb.set_length(states.len() as u64);
     pb.set_position(0);
-    pb.suspend(|| {
+    pb.set_message("");
+
+    mpb.suspend(|| {
         println!("Verifying states");
     });
 
+    let vfs_pb = mpb.add(
+        ProgressBar::new(0).with_style(
+            ProgressStyle::with_template("|{bar:20.red/blue}| {pos}/{len} {wide_msg}")
+                .unwrap()
+                .progress_chars("■≡=- "),
+        ),
+    );
+
     // Check the VFS of each state exists properly on the FS
-    let states_issues = states
-        .par_iter()
-        .try_fold(Vec::new, |mut acc, state| {
-            pb.set_message(format!("Verifying state #{}", state.id));
+    let states_issues = states.iter().try_fold(Vec::new(), |mut acc, state| {
+        pb.inc(1);
+        pb.set_message(format!("Verifying state #{}", state.id));
+        vfs_pb.set_message("Calculating...");
+        vfs_pb.set_position(0);
+        vfs_pb.set_length(1);
+        vfs_pb.force_draw();
 
-            let is_active = client.installation.active_state == Some(state.id);
+        let is_active = client.installation.active_state == Some(state.id);
 
-            let vfs = client.vfs(state.selections.iter().map(|s| &s.package))?;
+        let base = if is_active {
+            client.installation.root.join("usr")
+        } else {
+            client.installation.root_path(state.id.to_string()).join("usr")
+        };
 
-            let base = if is_active {
-                client.installation.root.join("usr")
-            } else {
-                client.installation.root_path(state.id.to_string()).join("usr")
-            };
+        let vfs = client.vfs(state.selections.iter().map(|s| &s.package))?;
 
-            let state_issues: Vec<_> = vfs
-                .iter()
-                .filter_map(|file| {
-                    let path = base.join(file.path().strip_prefix("/usr/").unwrap_or_default());
+        vfs_pb.set_length(vfs.len());
 
-                    // All symlinks for non-active states are broken
-                    // since they resolve to the active state path
-                    //
-                    // Use try_exists to ensure we only check if symlink
-                    // itself is missing
-                    match path.try_exists() {
-                        Ok(true) => None,
-                        Ok(false) if path.is_symlink() => None,
-                        _ => Some(Issue::MissingVFSPath { path, state: state.id }),
-                    }
-                })
-                .collect();
+        let state_issues: Vec<_> = vfs
+            .iter()
+            .par_bridge()
+            .filter_map(|file| {
+                vfs_pb.inc(1);
+                vfs_pb.set_message(format!("{}", file.path()));
 
-            pb.inc(1);
-            if verbose {
-                let mark = if !state_issues.is_empty() {
-                    "×".yellow()
+                let hash = if let StonePayloadLayoutFile::Regular(hash, _) = file.layout.file {
+                    Some(format!("{hash:02x}"))
                 } else {
-                    "»".green()
+                    None
                 };
-                pb.suspend(|| println!(" {mark} state #{}", state.id));
-            }
 
-            acc.extend(state_issues);
-            Ok::<_, super::Error>(acc)
-        })
-        .try_reduce(Vec::new, try_reduce_vec_concat)?;
+                let path = base.join(file.path().strip_prefix("/usr/").unwrap_or_default());
+
+                // All symlinks for non-active states are broken
+                // since they resolve to the active state path
+                //
+                // Use try_exists to ensure we only check if symlink
+                // itself is missing
+                match path.try_exists() {
+                    Ok(true) => {
+                        // Validate regular file hash per state.
+                        // This can be different from the backing
+                        // CAS asset due to reflink / CoW.
+                        if let Some(hash) = hash {
+                            let verified_hash = match xxh3_128_hash(&path) {
+                                Ok(verified) => verified,
+                                Err(err) => return Some(Err(err)),
+                            };
+
+                            if verified_hash != hash {
+                                return Some(Ok(Issue::CorruptStateAsset { path, state: state.id }));
+                            }
+                        }
+
+                        None
+                    }
+                    Ok(false) if path.is_symlink() => None,
+                    _ => Some(Ok(Issue::MissingStateAsset { path, state: state.id })),
+                }
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        if verbose {
+            let mark = if !state_issues.is_empty() {
+                "×".yellow()
+            } else {
+                "»".green()
+            };
+            mpb.suspend(|| println!(" {mark} state #{}", state.id));
+        }
+
+        acc.extend(state_issues);
+        Ok::<_, super::Error>(acc)
+    })?;
     issues.extend(states_issues);
 
+    vfs_pb.finish_and_clear();
     pb.finish_and_clear();
+    mpb.remove(&vfs_pb);
+    mpb.remove(&pb);
 
     if issues.is_empty() {
         println!("No issues found");
@@ -215,7 +250,7 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
     // We had some corrupt or missing assets, let's resolve that!
     if !issue_packages.is_empty() {
         // Remove all corrupt assets
-        for corrupt_hash in issues.iter().filter_map(Issue::corrupt_hash) {
+        for corrupt_hash in issues.iter().filter_map(Issue::corrupt_cas_hash) {
             let path = cache::asset_path(&client.installation, corrupt_hash);
             fs::remove_file(&path)?;
         }
@@ -304,43 +339,47 @@ pub fn verify(client: &Client, yes: bool, verbose: bool) -> Result<(), client::E
 }
 
 #[derive(Debug)]
+#[allow(clippy::enum_variant_names)]
 enum Issue {
-    CorruptAsset {
+    CorruptCasAsset {
         hash: String,
         files: BTreeSet<AStr>,
         packages: BTreeSet<package::Id>,
     },
-    MissingAsset {
+    MissingCasAsset {
         hash: String,
         files: BTreeSet<AStr>,
         packages: BTreeSet<package::Id>,
     },
-    MissingVFSPath {
+    CorruptStateAsset {
+        path: PathBuf,
+        state: state::Id,
+    },
+    MissingStateAsset {
         path: PathBuf,
         state: state::Id,
     },
 }
 
 impl Issue {
-    fn corrupt_hash(&self) -> Option<&str> {
+    fn corrupt_cas_hash(&self) -> Option<&str> {
         match self {
-            Issue::CorruptAsset { hash, .. } => Some(hash),
-            Issue::MissingAsset { .. } => None,
-            Issue::MissingVFSPath { .. } => None,
+            Issue::CorruptCasAsset { hash, .. } => Some(hash),
+            Issue::MissingCasAsset { .. } | Issue::CorruptStateAsset { .. } | Issue::MissingStateAsset { .. } => None,
         }
     }
 
     fn packages(&self) -> Option<&BTreeSet<package::Id>> {
         match self {
-            Issue::CorruptAsset { packages, .. } | Issue::MissingAsset { packages, .. } => Some(packages),
-            Issue::MissingVFSPath { .. } => None,
+            Issue::CorruptCasAsset { packages, .. } | Issue::MissingCasAsset { packages, .. } => Some(packages),
+            Issue::CorruptStateAsset { .. } | Issue::MissingStateAsset { .. } => None,
         }
     }
 
     fn state(&self) -> Option<&state::Id> {
         match self {
-            Issue::CorruptAsset { .. } | Issue::MissingAsset { .. } => None,
-            Issue::MissingVFSPath { state, .. } => Some(state),
+            Issue::CorruptCasAsset { .. } | Issue::MissingCasAsset { .. } => None,
+            Issue::CorruptStateAsset { state, .. } | Issue::MissingStateAsset { state, .. } => Some(state),
         }
     }
 }
@@ -348,9 +387,10 @@ impl Issue {
 impl fmt::Display for Issue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Issue::CorruptAsset { hash, files, .. } => write!(f, "Corrupt asset {hash} - {files:?}"),
-            Issue::MissingAsset { hash, files, .. } => write!(f, "Missing asset {hash} - {files:?}"),
-            Issue::MissingVFSPath { path, state } => write!(f, "Missing path {} in state #{state}", path.display()),
+            Issue::CorruptCasAsset { hash, files, .. } => write!(f, "Corrupt asset {hash} - {files:?}"),
+            Issue::MissingCasAsset { hash, files, .. } => write!(f, "Missing asset {hash} - {files:?}"),
+            Issue::CorruptStateAsset { path, state } => write!(f, "Corrupt path {} in state #{state}", path.display()),
+            Issue::MissingStateAsset { path, state } => write!(f, "Missing path {} in state #{state}", path.display()),
         }
     }
 }
@@ -358,4 +398,16 @@ impl fmt::Display for Issue {
 fn try_reduce_vec_concat<T, E>(mut a: Vec<T>, mut b: Vec<T>) -> Result<Vec<T>, E> {
     a.append(&mut b);
     Ok(a)
+}
+
+fn xxh3_128_hash(path: &Path) -> io::Result<String> {
+    let mut hasher = StoneDigestWriterHasher::new();
+    let mut digest_writer = StoneDigestWriter::new(io::sink(), &mut hasher);
+    let mut file = fs::File::open(path)?;
+
+    // Copy bytes to null sink so we don't
+    // explode memory
+    io::copy(&mut file, &mut digest_writer)?;
+
+    Ok(format!("{:02x}", hasher.digest128()))
 }
