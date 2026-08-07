@@ -83,6 +83,11 @@ test: lint
   @echo "Running tests in all packages…"
   cargo test --all
 
+# Set the Minimum Supported Rust Version for the project
+set-msrv version:
+  sed -E -i 's|^channel *= *"[0-9.]*"$|channel = "{{version}}"|' rust-toolchain.toml
+  sed -E -i 's|^rust-version *= *"[0-9.]*"$|rust-version = "{{version}}"|' Cargo.toml
+
 # Run libstone example
 libstone example="read" *ARGS="./test/bash-completion-2.11-1-1-x86_64.stone":
   #!/bin/bash
