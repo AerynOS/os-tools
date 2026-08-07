@@ -115,7 +115,7 @@ pub struct Pattern {
 /// variables, as determined by the [Pattern]
 ///
 /// Generate a Match by calling [`Pattern::match_path()`]
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Match {
     pub path: String,
 

@@ -14,20 +14,23 @@ pub mod format;
 pub struct Collection<'a> {
     handlers: Vec<ExtractedHandler<'a>>,
     triggers: BTreeMap<String, &'a Trigger>,
-    hits: BTreeMap<String, BTreeSet<format::CompiledHandler>>,
+    hits: BTreeMap<String, BTreeMap<String, BTreeSet<fnmatch::Match>>>,
 }
 
 #[derive(Debug)]
 struct ExtractedHandler<'a> {
     id: &'a str,
+    handler_id: &'a str,
     pattern: &'a fnmatch::Pattern,
-    handler: &'a format::Handler,
 }
 
 #[derive(Debug, Error)]
 pub enum Error {
     #[error("missing handler reference in {0}: {1}")]
     MissingHandler(String, String),
+
+    #[error("unknown argument variable mode {0} (expected 'each' or 'all')")]
+    UnknownArgMode(String),
 }
 
 impl<'a> Collection<'a> {
@@ -40,14 +43,14 @@ impl<'a> Collection<'a> {
             for (p, def) in trigger.paths.iter() {
                 for used_handler in def.handlers.iter() {
                     // Ensure we have a corresponding handler
-                    let handler = trigger
+                    trigger
                         .handlers
                         .get(used_handler)
                         .ok_or(Error::MissingHandler(trigger.name.clone(), used_handler.clone()))?;
                     handlers.push(ExtractedHandler {
                         id: &trigger.name,
+                        handler_id: used_handler,
                         pattern: p,
-                        handler,
                     });
                 }
             }
@@ -62,17 +65,16 @@ impl<'a> Collection<'a> {
 
     /// Process a batch set of paths and record the "hit"
     pub fn process_paths(&mut self, paths: impl Iterator<Item = String>) {
-        let results = paths.into_iter().flat_map(|p| {
-            self.handlers
-                .iter()
-                .filter_map(move |h| h.pattern.match_path(&p).map(|m| (h.id, h.handler.compiled(&m))))
-        });
-
-        for (id, handler) in results {
-            if let Some(map) = self.hits.get_mut(id) {
-                map.insert(handler);
-            } else {
-                self.hits.insert(id.into(), BTreeSet::from_iter([handler]));
+        for p in paths {
+            for h in &self.handlers {
+                if let Some(m) = h.pattern.match_path(&p) {
+                    self.hits
+                        .entry(h.id.to_owned())
+                        .or_default()
+                        .entry(h.handler_id.to_owned())
+                        .or_default()
+                        .insert(m);
+                }
             }
         }
     }
@@ -116,12 +118,24 @@ impl<'a> Collection<'a> {
             }
         }
 
-        // Recollect in dependency order
-        let results = graph
-            .topo()
-            .filter_map(|i| self.hits.remove(i))
-            .flatten()
-            .collect::<Vec<_>>();
+        let mut results = Vec::new();
+        for id in graph.topo() {
+            let Some(trigger) = self.triggers.get(id) else {
+                continue;
+            };
+            let Some(hits) = self.hits.get(id) else {
+                continue;
+            };
+
+            let mut stage_handlers = Vec::new();
+            for (handler_id, matches) in hits {
+                let Some(handler) = trigger.handlers.get(handler_id) else {
+                    continue;
+                };
+                stage_handlers.extend(handler.coalesced(matches)?);
+            }
+            results.extend(stage_handlers);
+        }
         Ok(results)
     }
 }
