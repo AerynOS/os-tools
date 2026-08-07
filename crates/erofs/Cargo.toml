@@ -1,0 +1,17 @@
+# SPDX-FileCopyrightText: 2026 AerynOS Developers
+# SPDX-License-Identifier: MPL-2.0
+
+[package]
+name = "erofs"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+astr.workspace = true
+crc.workspace = true
+stone.workspace = true
+vfs.workspace = true
+
+[lints]
+workspace = true

@@ -55,8 +55,11 @@ struct File<T> {
     inner: T,
 }
 
-impl<T: BlitFile> File<T> {
-    pub fn new(inner: T) -> Self {
+impl<T> File<T> {
+    pub fn new(inner: T) -> Self
+    where
+        T: BlitFile,
+    {
         let path = VfsPath::new(inner.path());
 
         Self {
@@ -80,13 +83,13 @@ impl<T: BlitFile> File<T> {
 
 /// Actual tree implementation, encapsulating indextree
 #[derive(Debug)]
-pub struct Tree<T: BlitFile> {
+pub struct Tree<T> {
     arena: Arena<File<T>>,
     map: HashMap<AStr, NodeId>,
     length: u64,
 }
 
-impl<T: BlitFile> Tree<T> {
+impl<T> Tree<T> {
     /// Construct a new Tree with specified capacity
     fn with_capacity(capacity: usize) -> Self {
         Tree {
@@ -159,6 +162,38 @@ impl<T: BlitFile> Tree<T> {
         Ok(())
     }
 
+    /// Iterate using a TreeIterator, starting at the `/` node
+    pub fn iter(&self) -> TreeIterator<'_, T> {
+        TreeIterator {
+            parent: self,
+            enume: self.resolve_node("/").map(|n| n.descendants(&self.arena)),
+        }
+    }
+
+    /// Return structured view beginning at `/`
+    pub fn structured(&self) -> Option<Element<'_, T>> {
+        self.resolve_node("/").map(|root| self.structured_children(root))
+    }
+
+    /// For the given node, recursively convert to Element::Directory of Child
+    fn structured_children(&self, start: &NodeId) -> Element<'_, T> {
+        let node = &self.arena[*start];
+        let item = node.get();
+        let partial = item.file_name();
+
+        if item.kind.is_directory() {
+            let children = start
+                .children(&self.arena)
+                .map(|c| self.structured_children(&c))
+                .collect::<Vec<_>>();
+            Element::Directory(partial, &item.inner, children)
+        } else {
+            Element::Child(partial, &item.inner)
+        }
+    }
+}
+
+impl<T: BlitFile> Tree<T> {
     pub fn print(&self) {
         let root = self.resolve_node("/").unwrap();
         eprintln!("{:#?}", root.debug_pretty_print(&self.arena));
@@ -203,50 +238,43 @@ impl<T: BlitFile> Tree<T> {
 
         Ok(())
     }
-
-    /// Iterate using a TreeIterator, starting at the `/` node
-    pub fn iter(&self) -> TreeIterator<'_, T> {
-        TreeIterator {
-            parent: self,
-            enume: self.resolve_node("/").map(|n| n.descendants(&self.arena)),
-        }
-    }
-
-    /// Return structured view beginning at `/`
-    pub fn structured(&self) -> Option<Element<'_, T>> {
-        self.resolve_node("/").map(|root| self.structured_children(root))
-    }
-
-    /// For the given node, recursively convert to Element::Directory of Child
-    fn structured_children(&self, start: &NodeId) -> Element<'_, T> {
-        let node = &self.arena[*start];
-        let item = node.get();
-        let partial = item.file_name();
-
-        if item.kind.is_directory() {
-            let children = start
-                .children(&self.arena)
-                .map(|c| self.structured_children(&c))
-                .collect::<Vec<_>>();
-            Element::Directory(partial, &item.inner, children)
-        } else {
-            Element::Child(partial, &item.inner)
-        }
-    }
 }
 
-pub enum Element<'a, T: BlitFile> {
+pub enum Element<'a, T> {
     Directory(&'a str, &'a T, Vec<Element<'a, T>>),
     Child(&'a str, &'a T),
 }
 
+impl<'a, T> Element<'a, T> {
+    pub fn file_name(&self) -> &str {
+        match self {
+            Element::Directory(name, _, _) => name,
+            Element::Child(name, _) => name,
+        }
+    }
+
+    pub fn item(&self) -> &T {
+        match self {
+            Element::Directory(_, file, _) => file,
+            Element::Child(_, file) => file,
+        }
+    }
+
+    pub fn children(&self) -> &[Element<'a, T>] {
+        match self {
+            Element::Directory(_, _, elements) => elements,
+            Element::Child(_, _) => &[],
+        }
+    }
+}
+
 /// Simple DFS iterator for a Tree
-pub struct TreeIterator<'a, T: BlitFile> {
+pub struct TreeIterator<'a, T> {
     parent: &'a Tree<T>,
     enume: Option<Descendants<'a, File<T>>>,
 }
 
-impl<'a, T: BlitFile> Iterator for TreeIterator<'a, T> {
+impl<'a, T> Iterator for TreeIterator<'a, T> {
     type Item = &'a T;
 
     fn next(&mut self) -> Option<Self::Item> {
