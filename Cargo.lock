@@ -1033,6 +1033,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
 
 [[package]]
+name = "fanotify"
+version = "0.26.6"
+dependencies = [
+ "fs-err",
+ "libc",
+ "nix 0.29.0",
+ "snafu",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2028,6 +2038,17 @@ checksum = "2eb04e9c688eff1c89d72b407f168cf79bb9e867a9d3323ed6c01519eb9cc053"
 dependencies = [
  "bitflags",
  "cfg-if",
+ "libc",
+]
+
+[[package]]
+name = "nix"
+version = "0.29.0"
+source = "git+https://github.com/carlvoller/nix.git?rev=8be3098ab6a7de81231d05146d952ebe24ac687f#8be3098ab6a7de81231d05146d952ebe24ac687f"
+dependencies = [
+ "bitflags",
+ "cfg-if",
+ "cfg_aliases",
  "libc",
 ]
 
