@@ -3,6 +3,7 @@
 
 use std::io;
 
+use chrono::{Datelike, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -234,7 +235,16 @@ impl<'a> Monitoring<'a> {
             security: Security { cpe: cpes },
         };
 
-        let mut yaml_string = serde_yaml::to_string(&monitoring_template).expect("Failed to serialize to YAML");
+        // REUSE-IgnoreStart
+        let mut yaml_string = format!(
+            concat!(
+                "# SPDX-FileCopyrightText: {} aerynOS Developers\n",
+                "# SPDX-License-Identifier: MPL-2.0\n\n",
+            ),
+            Utc::now().year()
+        );
+        // REUSE-IgnoreEnd
+        yaml_string.push_str(&serde_yaml::to_string(&monitoring_template).expect("Failed to serialize to YAML"));
 
         // We may not have matched any ID or CPE which is fine
         // Unwrap the default value then mangle it into a YAML ~ (null) value
