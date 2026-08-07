@@ -120,13 +120,12 @@ impl Dependency {
     ///     let dep = Dependency::from_name("pkgconfig(zlib)").unwrap();
     /// ```
     pub fn from_name(name: &str) -> Result<Self, ParseError> {
-        if name.contains('(') {
-            Dependency::from_str(name)
-        } else {
-            Ok(Dependency {
+        match name.split_once('(') {
+            Some((prefix, _)) if prefix.parse::<Kind>().is_ok() => Dependency::from_str(name),
+            _ => Ok(Dependency {
                 kind: Kind::PackageName,
                 name: name.to_owned(),
-            })
+            }),
         }
     }
 }
@@ -189,13 +188,12 @@ impl Provider {
     ///
     /// Identical in behaviour to [`Dependency::from_name`]
     pub fn from_name(name: &str) -> Result<Self, ParseError> {
-        if name.contains('(') {
-            Provider::from_str(name)
-        } else {
-            Ok(Provider {
+        match name.split_once('(') {
+            Some((prefix, _)) if prefix.parse::<Kind>().is_ok() => Provider::from_str(name),
+            _ => Ok(Provider {
                 kind: Kind::PackageName,
                 name: name.to_owned(),
-            })
+            }),
         }
     }
 
