@@ -315,13 +315,13 @@ mod test {
         let mut env = ScriptEnv::new();
         env.add_builtin("kaboom", Expr::parse("%(_kaboom)").unwrap());
         let expr = Expr::parse("%(_kaboom)").unwrap();
-        std::assert_matches!(
+        assert!(matches!(
             ctx.eval(&env, &expr),
             Err(Error::Eval {
                 source: EvalError::TooDeep,
                 ..
             })
-        );
+        ));
     }
 
     #[test]
@@ -336,13 +336,13 @@ mod test {
             },
         );
         let expr = Expr::parse("%(kaboom)").unwrap();
-        std::assert_matches!(
+        assert!(matches!(
             ctx.eval(&env, &expr),
             Err(Error::Eval {
                 source: EvalError::TooDeep,
                 ..
             })
-        );
+        ));
     }
 
     #[test]
@@ -359,13 +359,13 @@ mod test {
             },
         );
         let expr = Expr::parse("%kaboom").unwrap();
-        std::assert_matches!(
+        assert!(matches!(
             ctx.eval(&env, &expr),
             Err(Error::Eval {
                 source: EvalError::TooDeep,
                 ..
             })
-        );
+        ));
     }
 
     #[test]
@@ -390,13 +390,13 @@ mod test {
             },
         );
         let expr = Expr::parse("%rock").unwrap();
-        std::assert_matches!(
+        assert!(matches!(
             ctx.eval(&env, &expr),
             Err(Error::Eval {
                 source: EvalError::TooDeep,
                 ..
             })
-        );
+        ));
     }
 
     #[test]
