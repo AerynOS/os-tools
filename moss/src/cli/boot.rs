@@ -1,38 +1,42 @@
 // SPDX-FileCopyrightText: 2024 AerynOS Developers
 // SPDX-License-Identifier: MPL-2.0
 
-use clap::{ArgMatches, Command};
-use thiserror::Error;
-
+use clap::Parser;
 use moss::{Client, Installation, client, environment};
 
-pub fn command() -> Command {
-    Command::new("boot")
-        .about("Boot management")
-        .long_about("Manage boot configuration")
-        .subcommand_required(true)
-        .subcommand(Command::new("status").about("Status of boot configuration"))
-        .subcommand(Command::new("sync").about("Synchronize boot configuration"))
+#[derive(Debug, Parser)]
+#[command(about = "Manage boot configuration via blsforme")]
+pub struct Command {
+    #[command(subcommand)]
+    subcommand: Subcommand,
 }
 
-/// Handle status for now
-pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
-    match args.subcommand() {
-        Some(("status", args)) => status(args, installation),
-        Some(("sync", args)) => sync(args, installation),
-        _ => unreachable!(),
+impl Command {
+    pub fn handle(self, installation: Installation) -> Result<(), client::Error> {
+        match self.subcommand {
+            Subcommand::Status => status(installation),
+            Subcommand::Sync => sync(installation),
+        }
     }
 }
 
-fn status(_args: &ArgMatches, installation: Installation) -> Result<(), Error> {
-    let client = Client::new(environment::NAME, installation).map_err(Error::Client)?;
+#[derive(Debug, clap::Subcommand)]
+enum Subcommand {
+    #[command(about = "Show boot configuration status")]
+    Status,
+    #[command(about = "Synchronize boot configuration")]
+    Sync,
+}
+
+fn status(installation: Installation) -> Result<(), client::Error> {
+    let client = Client::new(environment::NAME, installation)?;
 
     client.print_boot_status()?;
 
     Ok(())
 }
 
-fn sync(_args: &ArgMatches, installation: Installation) -> Result<(), Error> {
+fn sync(installation: Installation) -> Result<(), client::Error> {
     let client = Client::new(environment::NAME, installation)?;
 
     client.synchronize_boot()?;
@@ -42,10 +46,4 @@ fn sync(_args: &ArgMatches, installation: Installation) -> Result<(), Error> {
     client.print_boot_status()?;
 
     Ok(())
-}
-
-#[derive(Debug, Error)]
-pub enum Error {
-    #[error("client")]
-    Client(#[from] client::Error),
 }

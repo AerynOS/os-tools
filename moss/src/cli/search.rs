@@ -3,8 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use clap::builder::NonEmptyStringValueParser;
-use clap::{Arg, ArgMatches, Command};
+use clap::Parser;
 
 use moss::client;
 use moss::dependency;
@@ -14,50 +13,72 @@ use strum::Display;
 use tui::Styled;
 use tui::pretty::{ColumnDisplay, print_columns};
 
-const ARG_KEYWORD: &str = "KEYWORD";
-const FLAG_INSTALLED: &str = "installed";
-const FLAG_PROVIDES: &str = "provides";
+#[derive(Debug, Parser)]
+#[command(
+    name = "search",
+    visible_alias = "sr",
+    about = "Search providers (including packages) by name and summary"
+)]
+pub struct Command {
+    #[arg(help = "Keyword to search for in package names and summaries")]
+    keyword: String,
 
-/// Returns the Clap struct for this command.
-pub fn command() -> Command {
-    Command::new("search")
-        .visible_alias("sr")
-        .about("Search packages")
-        .long_about("Search packages by looking into package names and summaries.")
-        .arg(
-            Arg::new(ARG_KEYWORD)
-                .required(true)
-                .num_args(1)
-                .value_parser(NonEmptyStringValueParser::new()),
-        )
-        .arg(
-            Arg::new(FLAG_INSTALLED)
-                .short('i')
-                .long("installed")
-                .num_args(0)
-                .help("Search among installed packages only"),
-        )
-        .arg(
-            Arg::new(FLAG_PROVIDES)
-                .short('p')
-                .long("provides")
-                .num_args(0..=1)
-                .require_equals(true)
-                .default_missing_value("binary")
-                .value_parser([
-                    "library",
-                    "name",
-                    "soname",
-                    "pkgconfig",
-                    "interpreter",
-                    "cmake",
-                    "python",
-                    "binary",
-                    "sysbinary",
-                    "pkgconfig32",
-                ])
-                .help("Search for packages by provider"),
-        )
+    #[arg(short, long, help = "Filter the type of provider (e.g. binary, soname)")]
+    provides: Option<dependency::Kind>,
+
+    #[arg(short = 'i', long = "installed", help = "Search only among installed packages")]
+    installed_only: bool,
+
+    #[arg(short, long, help = "Filter search to specific repositories (comma-separated list)")]
+    repositories: Vec<String>,
+}
+
+impl Command {
+    /// Handles the "search" command.
+    pub fn handle(self, installation: Installation) -> Result<(), Error> {
+        let provider = self.determine_provider()?;
+
+        let client = Client::new(environment::NAME, installation)?;
+        let flags = if self.installed_only {
+            package::Flags::new().with_installed()
+        } else {
+            package::Flags::new().with_available()
+        };
+
+        let output = query_packages(&client, flags, provider);
+
+        if output.values().all(Vec::is_empty) {
+            return Ok(());
+        }
+
+        for mut value in output.into_values() {
+            value.sort();
+            print_columns(&value, 1);
+        }
+
+        Ok(())
+    }
+
+    fn determine_provider(&self) -> Result<Provider, Error> {
+        let provides_flag = self.provides;
+        if let Some(kind) = provides_flag {
+            Ok(Provider {
+                kind,
+                name: self.keyword.to_owned(),
+            })
+        } else {
+            Provider::from_name(&self.keyword).map_err(|_| Error::ParseError(self.keyword.to_owned()))
+        }
+    }
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("client")]
+    Client(#[from] client::Error),
+
+    #[error("Invalid dependency type: {0}")]
+    ParseError(String),
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Display)]
@@ -65,29 +86,6 @@ pub fn command() -> Command {
 enum MatchKind {
     Name,
     Summary,
-}
-
-fn map_aliases(value: &str) -> &str {
-    match value {
-        "library" => "soname",
-        _ => value,
-    }
-}
-
-fn determine_provider(args: &ArgMatches) -> Result<Provider, Error> {
-    let keyword = args.get_one::<String>(ARG_KEYWORD).unwrap();
-    let provides_flag = args
-        .get_one::<String>(FLAG_PROVIDES)
-        .map(|s| map_aliases(s))
-        .map(|s| s.parse::<dependency::Kind>().expect("clap should restrict input"));
-    if let Some(kind) = provides_flag {
-        Ok(Provider {
-            kind,
-            name: keyword.to_owned(),
-        })
-    } else {
-        Provider::from_name(keyword).map_err(|_| Error::ParseError(keyword.to_owned()))
-    }
 }
 
 fn query_packages(client: &Client, flags: package::Flags, provider: Provider) -> BTreeMap<MatchKind, Vec<Output>> {
@@ -98,31 +96,6 @@ fn query_packages(client: &Client, flags: package::Flags, provider: Provider) ->
         } => search_packages(client, flags, &name),
         _ => search_by_provider(client, flags, provider),
     }
-}
-
-pub fn handle(args: &ArgMatches, installation: Installation) -> Result<(), Error> {
-    let only_installed = args.get_flag(FLAG_INSTALLED);
-    let provider = determine_provider(args)?;
-
-    let client = Client::new(environment::NAME, installation)?;
-    let flags = if only_installed {
-        package::Flags::new().with_installed()
-    } else {
-        package::Flags::new().with_available()
-    };
-
-    let output = query_packages(&client, flags, provider);
-
-    if output.values().all(Vec::is_empty) {
-        return Ok(());
-    }
-
-    for mut value in output.into_values() {
-        value.sort();
-        print_columns(&value, 1);
-    }
-
-    Ok(())
 }
 
 fn search_packages(client: &Client, flags: package::Flags, keyword: &str) -> BTreeMap<MatchKind, Vec<Output>> {
@@ -148,15 +121,6 @@ fn search_packages(client: &Client, flags: package::Flags, keyword: &str) -> BTr
 fn search_by_provider(client: &Client, flags: package::Flags, provider: Provider) -> BTreeMap<MatchKind, Vec<Output>> {
     let packages = client.lookup_packages_by_provider(&provider, flags);
     BTreeMap::from([(MatchKind::Name, packages.into_iter().map(Output::from).collect())])
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum Error {
-    #[error("client")]
-    Client(#[from] client::Error),
-
-    #[error("Invalid dependency type: {0}")]
-    ParseError(String),
 }
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -334,14 +298,14 @@ mod tests {
         names
     }
 
-    fn moss(args: &str) -> ArgMatches {
-        command().get_matches_from(args.split_whitespace())
+    fn moss(args: &str) -> Command {
+        Command::parse_from(args.split_ascii_whitespace())
     }
 
     /// Test helper function that approximates the behavior of `handle()`
     fn test_handle(query: &str) -> BTreeMap<MatchKind, Vec<Output>> {
-        let args = moss(query);
-        let provider = determine_provider(&args).unwrap();
+        let cmd = moss(query);
+        let provider = cmd.determine_provider().unwrap();
         query_packages(client(), flags_available(), provider)
     }
 
