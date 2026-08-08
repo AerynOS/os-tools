@@ -68,7 +68,7 @@ impl Drafter {
             }
         }
 
-        runtime::block_on(upstream::extract(&self.env, &upstreams.first().unwrap(), extract_root))?;
+        upstream::extract(&self.env, upstreams.first().unwrap(), extract_root)?;
 
         // Build metadata from extracted upstreams
         let metadata = Metadata::new(upstreams);

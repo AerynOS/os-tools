@@ -27,7 +27,7 @@ pub fn source(upstream: &SourceUri) -> Option<Source> {
         )
         .unwrap(),
         upstream::Kind::Git => {
-            path = upstream.url.path().strip_suffix(".git").unwrap_or(&upstream.url.path());
+            path = upstream.url.path().strip_suffix(".git").unwrap_or(upstream.url.path());
             Regex::new(r"([\w-]+)\/([\w.-]+(?:\/[\w.-]+)?)").unwrap()
         }
     };

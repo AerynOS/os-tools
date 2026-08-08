@@ -27,7 +27,7 @@ pub async fn fetch(url: Url, file_path: &Path, pb: &ProgressBar) -> Result<Hash,
             .unwrap()
             .tick_chars("--=≡■≡=--"),
     );
-    pb.set_message(format!("{} {}", "Downloading".blue(), url));
+    pb.set_message(format!("{} {url}", "Downloading".blue()));
 
     let hash = request::download_with_progress_and_sha256(url.clone(), file_path, |progress| pb.inc(progress.delta))
         .await

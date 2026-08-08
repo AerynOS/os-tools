@@ -19,7 +19,7 @@ pub async fn clone_mirror(
     pb: &ProgressBar,
 ) -> Result<gitwrap::Repository, gitwrap::Error> {
     let cb = set_progress_bar_style(pb);
-    pb.set_message(format!("{} {}", "Cloning".blue(), url));
+    pb.set_message(format!("{} {url}", "Cloning".blue()));
 
     let result = gitwrap::Repository::clone_mirror_progress(container_dir, url, cb).await;
     pb.finish_and_clear();
