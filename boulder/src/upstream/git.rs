@@ -19,12 +19,22 @@ pub async fn clone_mirror(
     pb: &ProgressBar,
 ) -> Result<gitwrap::Repository, gitwrap::Error> {
     let cb = set_progress_bar_style(pb);
-    pb.set_message(format!("{} {}", "Cloning".blue(), url));
+    pb.set_message(format!("{} {url}", "Cloning".blue()));
 
     let result = gitwrap::Repository::clone_mirror_progress(container_dir, url, cb).await;
     pb.finish_and_clear();
 
     result
+}
+
+/// Clones a mirrored Git repository into a destination directory.
+/// The destination directory must be empty.
+/// Contrary to the original mirror, the cloned repository will
+/// contain actual source files in the filesystem.
+pub async fn clone_to(repo_dir: &Path, dest_dir: &Path) -> Result<(), gitwrap::Error> {
+    let repo = gitwrap::Repository::open_bare(repo_dir).await?;
+    repo.clone_to(dest_dir).await?;
+    Ok(())
 }
 
 /// Upstream based on a Git repository.

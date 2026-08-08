@@ -26,7 +26,7 @@ pub fn source(upstream: &SourceUri) -> Option<Source> {
     };
 
     for matcher in path_matchers {
-        let Some(captures) = matcher.captures(&upstream.url.path()) else {
+        let Some(captures) = matcher.captures(upstream.url.path()) else {
             continue;
         };
 

@@ -12,6 +12,7 @@ use fs_err as fs;
 use moss::{request, util};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
+use tokio::process::Command;
 use tui::{ProgressBar, ProgressStyle, Styled};
 use url::Url;
 
@@ -26,7 +27,7 @@ pub async fn fetch(url: Url, file_path: &Path, pb: &ProgressBar) -> Result<Hash,
             .unwrap()
             .tick_chars("--=≡■≡=--"),
     );
-    pb.set_message(format!("{} {}", "Downloading".blue(), url));
+    pb.set_message(format!("{} {url}", "Downloading".blue()));
 
     let hash = request::download_with_progress_and_sha256(url.clone(), file_path, |progress| pb.inc(progress.delta))
         .await
@@ -35,6 +36,19 @@ pub async fn fetch(url: Url, file_path: &Path, pb: &ProgressBar) -> Result<Hash,
         .map_err(Error::from)?;
 
     Ok(hash)
+}
+
+/// Extracts the source archive into the destination directory.
+/// The destination directory must exist.
+pub async fn extract(archive_path: &Path, dest_dir: &Path) -> Result<(), Error> {
+    Command::new("bsdtar")
+        .arg("xf")
+        .arg(archive_path)
+        .arg("-C")
+        .arg(dest_dir)
+        .output()
+        .await?;
+    Ok(())
 }
 
 /// Upstream based on an archive (typically a tarball).

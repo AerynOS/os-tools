@@ -10,13 +10,15 @@ use licenses::match_licences;
 use moss::{Dependency, util};
 use stone_recipe::upstream::SourceUri;
 use thiserror::Error;
-use tui::Styled;
+use tui::{
+    Styled,
+    dialoguer::{Confirm, theme::ColorfulTheme},
+};
 
 use crate::Env;
 
 use self::metadata::Metadata;
 use self::monitoring::Monitoring;
-use self::upstream::Upstream;
 
 mod build;
 mod licenses;
@@ -26,7 +28,12 @@ pub mod upstream;
 
 pub struct Drafter {
     env: Env,
-    upstreams: Vec<SourceUri>,
+    source_uris: Vec<SourceUri>,
+}
+
+pub enum Confirmation {
+    Ask,
+    DoNotAsk,
 }
 
 pub struct Draft {
@@ -35,19 +42,36 @@ pub struct Draft {
 }
 
 impl Drafter {
-    pub fn new(env: Env, upstreams: Vec<SourceUri>) -> Self {
-        Self { env, upstreams }
+    pub fn new(env: Env, source_uris: Vec<SourceUri>) -> Self {
+        Self { env, source_uris }
     }
 
-    pub fn run(&self) -> Result<Draft, Error> {
+    pub fn run(&self, confirm: Confirmation) -> Result<Draft, Error> {
         let temp_dir = tempfile::tempdir()?;
         let extract_root = temp_dir.as_ref();
 
-        // Fetch and extract all upstreams
-        let extracted = upstream::fetch_and_extract(&self.env, &self.upstreams, extract_root)?;
+        // Fetch upstreams and extract the first one.
+        let upstreams = upstream::fetch(&self.env, &self.source_uris)?;
+
+        if upstreams.len() > 1 {
+            let proceed = matches!(confirm, Confirmation::DoNotAsk)
+                || Confirm::with_theme(&ColorfulTheme::default())
+                    .with_prompt(
+                        "Multiple upstreams passed, only the first one will be extracted and analyzed. Continue?",
+                    )
+                    .default(false)
+                    .wait_for_newline(true)
+                    .interact()
+                    .map_err(|e| Error::Io(e.into()))?;
+            if !proceed {
+                return Err(Error::Aborted);
+            }
+        }
+
+        upstream::extract(&self.env, upstreams.first().unwrap(), extract_root)?;
 
         // Build metadata from extracted upstreams
-        let metadata = Metadata::new(extracted);
+        let metadata = Metadata::new(upstreams);
 
         let monitoring = Monitoring::new(&metadata.source.name, &metadata.source.homepage);
         let monitoring_result = monitoring.run()?;
@@ -173,7 +197,7 @@ pub enum Error {
     #[error("analyzing build system")]
     AnalyzeBuildSystem(#[source] build::Error),
     #[error("upstream")]
-    Upstream(#[from] upstream::Error),
+    Upstream(#[from] crate::upstream::Error),
     #[error("monitoring")]
     Monitoring(#[from] monitoring::Error),
     #[error("licensing")]
@@ -182,6 +206,8 @@ pub enum Error {
     Io(#[from] io::Error),
     #[error("walkdir")]
     WalkDir(#[from] walkdir::Error),
+    #[error("operation aborted by user")]
+    Aborted,
 }
 
 #[cfg(test)]
